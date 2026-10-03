@@ -1,0 +1,12 @@
+[package]
+name = "gracil-core"
+description = "Gracil compression engine. Must stay independent from any UI framework."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
