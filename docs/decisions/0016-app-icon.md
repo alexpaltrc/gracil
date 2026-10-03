@@ -14,8 +14,8 @@ for that size.
 2. When the window opens, and again whenever its scale changes, `gracil_windows::set_window_icon`
    loads that same icon at the small and large sizes the window's DPI calls for and gives both to
    the window. Windows picks the best-drawn picture in the file for each size.
-3. The neutral Piedra icon is used, not the light or dark tray versions, because it reads on both
-   light and dark title bars and taskbars.
+3. The neutral marble icon ("la canica") is used, not the light or dark tray versions, because
+   it reads on both light and dark title bars and taskbars.
 4. Icons are loaded with `LoadImageW` at an explicit size. `LR_SHARED` is not used because the
    shared copy ignores the size asked for; `LoadIconMetric` is not used because it needs version 6
    of the common controls, which Gracil does not otherwise load. The previous pair is released

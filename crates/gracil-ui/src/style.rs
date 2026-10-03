@@ -1,6 +1,6 @@
 //! Design tokens and the few reusable styles every screen is built from (spec §50).
 //!
-//! The colors are the Piedra identity (ADR 0015); type and spacing are still temporary (§78).
+//! The colors are the Piedra palette (ADR 0015); type and spacing are still temporary (§78).
 //! Screens only ever refer to these names, so restyling Gracil happens here.
 
 use std::time::Duration;

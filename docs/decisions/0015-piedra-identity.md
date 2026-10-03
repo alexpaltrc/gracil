@@ -1,4 +1,4 @@
-# 0015 — The Piedra identity: icon, palette and following Windows' theme
+# 0015 — The marble identity: icon, Piedra palette and following Windows' theme
 
 **Status:** Accepted. Replaces the temporary icon and colors of spec §3 and §78.
 
@@ -6,6 +6,10 @@
 (the video) resting on a support (Gracil, which prepares the way). Its philosophy is "letting go is
 enough": the power stays in the system, the calm in the experience. It comes with a palette, the
 icon in every Windows size, tray versions for light and dark taskbars, and MSIX assets.
+
+Naming: the icon is the marble ("la canica"); "Piedra" is the name of the palette only. The
+delivered files are named after the palette (`piedra-app.ico`, `docs/design/piedra/`), and keep
+those names so they match the delivery's checksums.
 
 **Decision.**
 
