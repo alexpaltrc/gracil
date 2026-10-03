@@ -26,6 +26,13 @@ are only installed locally and are replaced with `Add-AppxPackage -ForceUpdateFr
 this never reaches users. The packaging script derives the MSIX version from `Cargo.toml`; it is
 never typed by hand.
 
+**Pending, before the first Microsoft Store release.** The product owner wants to evaluate a
+different-looking version scheme, such as `0.0.01` or `01.00`, instead of `0.0.1`. Not decided
+and not to be worked on yet. Whatever is chosen has to fit the constraints above: MSIX parts are
+plain numbers (a leading zero is not kept, so `01` is `1`), there are four of them, and the Store
+wants the last one to be `0`. Decide it, with an ADR, before anything is uploaded to the Store,
+since a published version can never go back down.
+
 ## Changelog
 
 `CHANGELOG.md` is for people who use Gracil, not for developers:
