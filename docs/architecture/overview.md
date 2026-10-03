@@ -89,7 +89,8 @@ finished result can be decided in it as in the main window.
 white until its first WGPU frame is presented, and cloaking doesn't help (presents to a cloaked
 window are discarded). Both windows therefore open hidden and are shown parked at -20000
 (`gracil_windows::park`). `listen_raw` counts their `RedrawRequested` events; after three frames,
-or 3 s at the latest (logged when it happens), the main window returns to where Windows put it and the mini-window is
+50 ms after the first one (a window with nothing moving draws only one), or 3 s at the latest
+(logged when it happens), the main window returns to where Windows put it and the mini-window is
 placed by the tray (`App::reveal`, `App::bring_into_view`). The system font list, which Iced
 reads on its first text, is loaded on a thread at start-up so a cold first frame is quicker.
 

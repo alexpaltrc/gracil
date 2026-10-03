@@ -78,6 +78,11 @@ pub struct Gracil {
 /// Frames a new window starts before it comes into view: by the last, the first ones are drawn.
 const FRAMES_BEFORE_REVEAL: u8 = 3;
 
+/// How long after its first frame a new window comes into view, if it draws no more frames
+/// meanwhile. A window with nothing moving in it draws only one frame; this leaves Windows a few
+/// screen refreshes to put that frame on screen.
+const SETTLE_AFTER_FIRST_FRAME: Duration = Duration::from_millis(50);
+
 /// If a new window draws no frames, it comes into view anyway after this long. Generous, since the
 /// very first frame after starting the computer can take a while, and a white window is worse
 /// than one that appears a moment later.
@@ -124,7 +129,9 @@ pub enum Message {
     WindowReady(u64),
     /// A window is about to draw a frame; counted while it is being revealed.
     Frame(window::Id),
-    /// A new window has drawn itself, or waited long enough: it comes into view.
+    /// A new window drew its first frame a moment ago: it comes into view.
+    Drawn(window::Id),
+    /// A new window drew nothing for too long: it comes into view anyway.
     Reveal(window::Id),
     /// A window moved to a screen with another scale, so its icon is picked again.
     Rescaled(window::Id),
@@ -402,9 +409,17 @@ impl Gracil {
                     return Task::none();
                 };
                 *frames += 1;
-                if *frames >= FRAMES_BEFORE_REVEAL {
-                    self.bring_into_view(id);
+                match *frames {
+                    1 => after(SETTLE_AFTER_FIRST_FRAME, Message::Drawn(id)),
+                    FRAMES_BEFORE_REVEAL.. => {
+                        self.bring_into_view(id);
+                        Task::none()
+                    }
+                    _ => Task::none(),
                 }
+            }
+            Message::Drawn(id) => {
+                self.bring_into_view(id);
                 Task::none()
             }
             Message::Reveal(id) => {
@@ -627,14 +642,7 @@ impl Gracil {
             }
         };
         self.revealing.insert(id, (handle, 0, home));
-        // Waited for on a thread of its own, so none of Iced's workers is held up.
-        let (done, waited) = iced::futures::channel::oneshot::channel();
-        std::thread::spawn(move || {
-            std::thread::sleep(REVEAL_AT_THE_LATEST);
-            let _ = done.send(());
-        });
-        let at_the_latest = Task::perform(waited, move |_| Message::Reveal(id));
-        Task::batch([show, at_the_latest])
+        Task::batch([show, after(REVEAL_AT_THE_LATEST, Message::Reveal(id))])
     }
 
     fn bring_into_view(&mut self, id: window::Id) {
@@ -982,6 +990,17 @@ async fn choose_files(text: &'static Text) -> Vec<PathBuf> {
 /// Slow at both ends, so the change of theme settles in rather than snapping.
 fn ease_in_out(t: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
+}
+
+/// Delivers `message` after `delay`, waited out on a thread of its own so none of Iced's workers
+/// is held up.
+fn after(delay: Duration, message: Message) -> Task<Message> {
+    let (done, waited) = iced::futures::channel::oneshot::channel();
+    std::thread::spawn(move || {
+        std::thread::sleep(delay);
+        let _ = done.send(());
+    });
+    Task::perform(waited, move |_| message.clone())
 }
 
 /// Closes a window without a white flash: Windows animates a closing window, and once its surface
