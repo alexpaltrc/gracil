@@ -9,6 +9,7 @@ use iced::{Center, Element, Fill, window};
 
 use crate::app::{EngineState, Gracil, Message};
 use crate::dial::{self, Dial};
+use crate::pill::pill;
 use crate::style::{self, size, space};
 use crate::work::{Choice, Failure, Outcome};
 
@@ -42,7 +43,37 @@ pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     if state.drawer_open && !state.queue.is_empty() {
         content = content.push(drawer(state));
     }
+    content = content.push(always(state));
     container(content).padding(space::M).into()
+}
+
+/// "Always (Replace / Or / Save a copy)": what to do with every finished video, or, in the
+/// middle, ask each time (ADR 0025).
+fn always(state: &Gracil) -> Element<'_, Message> {
+    let selected = match state.always() {
+        Some(Choice::Replace) => 0,
+        None => 1,
+        Some(Choice::SaveCopy) => 2,
+    };
+    let pill = pill(state.text.always_choices, selected, |index| {
+        Message::Always(match index {
+            0 => Some(Choice::Replace),
+            2 => Some(Choice::SaveCopy),
+            _ => None,
+        })
+    });
+    container(
+        row![
+            text(state.text.always)
+                .size(size::CAPTION)
+                .style(style::muted),
+            pill,
+        ]
+        .spacing(space::S)
+        .align_y(Center),
+    )
+    .center_x(Fill)
+    .into()
 }
 
 fn focus(state: &Gracil, hovering: bool) -> Element<'_, Message> {

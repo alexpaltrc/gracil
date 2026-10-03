@@ -1,24 +1,32 @@
-//! Gracil's one setting (spec §66): whether the mini-window appears when compressing from File
-//! Explorer. It is kept in `%LOCALAPPDATA%\Gracil\settings.txt` as `name=value` lines, so a later
-//! setting only adds a line.
+//! Gracil's two settings (spec §66, ADR 0025): whether the mini-window appears when compressing
+//! from File Explorer, and whether finished videos are always replaced or always saved as copies
+//! instead of asking. They are kept in `%LOCALAPPDATA%\Gracil\settings.txt` as `name=value`
+//! lines, so a later setting only adds a line.
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::work::Choice;
+
 const FILE: &str = "settings.txt";
 const EXPLORER_MINI_WINDOW: &str = "explorer_mini_window";
+const ALWAYS: &str = "always";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Settings {
     /// Show the mini-window when compressing from File Explorer (spec §56). On unless turned off.
     pub explorer_mini_window: bool,
+    /// What to do with every finished video without asking (ADR 0025). `None`, the default,
+    /// asks after each one.
+    pub always: Option<Choice>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             explorer_mini_window: true,
+            always: None,
         }
     }
 }
@@ -46,6 +54,9 @@ impl Settings {
             {
                 Some((EXPLORER_MINI_WINDOW, "on")) => settings.explorer_mini_window = true,
                 Some((EXPLORER_MINI_WINDOW, "off")) => settings.explorer_mini_window = false,
+                Some((ALWAYS, "replace")) => settings.always = Some(Choice::Replace),
+                Some((ALWAYS, "copy")) => settings.always = Some(Choice::SaveCopy),
+                Some((ALWAYS, "ask")) => settings.always = None,
                 _ => {}
             }
         }
@@ -56,12 +67,20 @@ impl Settings {
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir)?;
         }
-        let value = if self.explorer_mini_window {
+        let mini_window = if self.explorer_mini_window {
             "on"
         } else {
             "off"
         };
-        fs::write(path, format!("{EXPLORER_MINI_WINDOW}={value}\n"))
+        let always = match self.always {
+            Some(Choice::Replace) => "replace",
+            Some(Choice::SaveCopy) => "copy",
+            None => "ask",
+        };
+        fs::write(
+            path,
+            format!("{EXPLORER_MINI_WINDOW}={mini_window}\n{ALWAYS}={always}\n"),
+        )
     }
 }
 
@@ -84,21 +103,26 @@ mod tests {
     }
 
     #[test]
-    fn the_mini_window_is_on_until_turned_off() {
+    fn defaults_show_the_mini_window_and_ask() {
         let dir = fresh_dir("default");
-        assert!(Settings::read(&dir.join(FILE)).explorer_mini_window);
+        let settings = Settings::read(&dir.join(FILE));
+        assert!(settings.explorer_mini_window);
+        assert_eq!(settings.always, None);
         fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn a_saved_setting_comes_back() {
+    fn saved_settings_come_back() {
         let dir = fresh_dir("saved");
         let path = dir.join("nested").join(FILE);
-        let off = Settings {
-            explorer_mini_window: false,
-        };
-        off.write(&path).unwrap();
-        assert_eq!(Settings::read(&path), off);
+        for always in [Some(Choice::Replace), Some(Choice::SaveCopy), None] {
+            let saved = Settings {
+                explorer_mini_window: false,
+                always,
+            };
+            saved.write(&path).unwrap();
+            assert_eq!(Settings::read(&path), saved);
+        }
         Settings::default().write(&path).unwrap();
         assert_eq!(Settings::read(&path), Settings::default());
         fs::remove_dir_all(dir).unwrap();
@@ -108,8 +132,23 @@ mod tests {
     fn unknown_lines_are_ignored() {
         let dir = fresh_dir("unknown");
         let path = dir.join(FILE);
-        fs::write(&path, "something=else\nexplorer_mini_window = off\ngarbage").unwrap();
-        assert!(!Settings::read(&path).explorer_mini_window);
+        fs::write(
+            &path,
+            "something=else\nexplorer_mini_window = off\nalways=sometimes\ngarbage",
+        )
+        .unwrap();
+        let settings = Settings::read(&path);
+        assert!(!settings.explorer_mini_window);
+        assert_eq!(settings.always, None);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_settings_file_from_before_always_still_reads() {
+        let dir = fresh_dir("older");
+        let path = dir.join(FILE);
+        fs::write(&path, "explorer_mini_window=on\n").unwrap();
+        assert_eq!(Settings::read(&path), Settings::default());
         fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -60,6 +60,14 @@ When a video is done, Gracil shows how much smaller it became and two buttons:
 You decide after seeing the result, so you never trade your original for a video that didn't
 shrink. With several videos done, **View files** offers **Replace all** and **Save all copies**.
 
+If you always answer the same way, use the line at the foot of the window: **Always**, followed
+by **Replace**, **Or** and **Save a copy**. Pick **Replace** or **Save a copy** and Gracil does
+that with every video that finishes from then on, without asking. In the middle, **Or**, the
+setting is off and Gracil asks each time; that is how it starts. Videos already waiting for you
+keep waiting, and if Gracil can't do what you picked for a video (for example replacing would
+overwrite another file), that video waits for you with a **!** that explains why. When you
+compress from File Explorer, the command you clicked decides instead.
+
 A finished video waits until you choose. If you take it off the list or exit Gracil without
 choosing, the smaller version is deleted and your original stays exactly as it was.
 
@@ -211,9 +219,9 @@ Pointing at the marble says the same in words. Right-click it for **Open Gracil*
 Click the marble and a small window opens right next to it, wherever your taskbar is. It shows
 the video being compressed and how far along it is; click its circle to pause or carry on, just
 like in the big window. When a video is done, it shows how much smaller it became with
-**Replace** and **Save copy**, so you can choose right there without opening the big window. If
-more videos finish while another is compressing, it says how many are ready and shows them one by
-one when the work is done. It also tells you how many videos are waiting and, once one is placed,
+**Replace** and **Save copy**, so you can choose right there without opening the big window
+(unless **Always** already chose for you). If more videos finish while another is compressing, it
+says how many are ready and shows them one by one when the work is done. It also tells you how many videos are waiting and, once one is placed,
 where it went. You can drop more videos on it. It stays open while you do other things; close it
 with its **×** or by clicking the marble again, and use **Open Gracil** in it to get the big
 window.

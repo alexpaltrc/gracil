@@ -8,6 +8,7 @@ mod app;
 mod dial;
 mod logging;
 mod outside;
+mod pill;
 mod request;
 mod settings;
 mod style;

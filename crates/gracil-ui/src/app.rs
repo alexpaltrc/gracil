@@ -97,6 +97,8 @@ pub enum Message {
     Resume,
     Choose(JobId, Choice),
     ChooseAll(Choice),
+    /// The "Always" pill: replace, ask (`None`) or save a copy for every video that finishes.
+    Always(Option<Choice>),
     Placed(JobId, Choice, Result<PathBuf, Failure>),
     Select(JobId),
     Remove(JobId),
@@ -302,6 +304,13 @@ impl Gracil {
                 Task::none()
             }
             Message::Choose(id, choice) => self.choose(id, choice),
+            Message::Always(always) => {
+                self.settings.always = always;
+                if let Err(error) = self.settings.save() {
+                    warn!(%error, "could not save the settings");
+                }
+                Task::none()
+            }
             Message::ChooseAll(choice) => {
                 let waiting: Vec<JobId> = self
                     .queue
@@ -626,6 +635,11 @@ impl Gracil {
             .or_else(|| self.focused())
     }
 
+    /// What happens to every finished video without asking; `None` asks (ADR 0025).
+    pub fn always(&self) -> Option<Choice> {
+        self.settings.always
+    }
+
     pub fn waiting_count(&self) -> usize {
         self.outcomes.values().filter(|o| o.is_waiting()).count()
     }
@@ -777,7 +791,9 @@ impl Gracil {
                 }
                 self.outcomes.insert(id, outcome);
                 self.running = None;
-                let place = match self.intents.remove(&id) {
+                // File Explorer's choice first; otherwise the "Always" setting (ADR 0025).
+                let intent = self.intents.remove(&id).or(self.settings.always);
+                let place = match intent {
                     Some(choice) => self.choose(id, choice),
                     None => Task::none(),
                 };

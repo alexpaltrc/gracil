@@ -29,3 +29,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0022](0022-explorer-command.md) | File Explorer's menu is one Rust `IExplorerCommand` with two subcommands |
 | [0023](0023-package-build.md) | One script builds the package from a manifest template |
 | [0024](0024-start-with-windows.md) | Gracil starts with Windows, always |
+| [0025](0025-always-replace-or-copy.md) | "Always": replace or save a copy without being asked |
