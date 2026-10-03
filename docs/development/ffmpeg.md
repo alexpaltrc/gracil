@@ -42,9 +42,9 @@ Detected once per process (`Capabilities::detect`):
 - **NVENC**: `hevc_nvenc` is listed *and* a three-frame test encode succeeds. A listed encoder
   says nothing about the GPU or the driver.
 - **NVENC tier** (`standard::NvencLevel`, ADR 0028): the test encode is run with each tier's
-  options, best first, and the first that succeeds is used. `Full` is 10-bit with spatial and
-  temporal AQ, lookahead, B-frame references, multipass and the temporal filter; `Basic` drops
-  temporal AQ, B-references and the temporal filter; `Legacy` is the original 8-bit p6 setting.
+  options, best first, and the first that succeeds is used. `Full` is 10-bit with lookahead,
+  B-frame references and multipass; `Basic` drops the B-frame settings; `Legacy` is the original
+  8-bit p6 setting. No tier uses adaptive quantization or the temporal filter (ADR 0029).
 - **CUDA decoding**: NVENC works and `-hwaccels` lists `cuda`.
 - **Filters**: `-filters` lists `scale_cuda` (resizing frames left on the GPU) and `libvmaf` (the
   quality search). The essentials build has both.
@@ -77,8 +77,8 @@ missing.
 
 - NVENC: `hevc_nvenc` with the detected tier's options (`standard::NvencLevel::options`) and
   `-cq <level>`. With `Full`:
-  `-preset p7 -tune hq -rc vbr -b 0 -profile main10 -highbitdepth 1 -spatial-aq 1 -temporal-aq 1
-  -rc-lookahead 32 -bf 4 -b_ref_mode middle -multipass fullres -tf_level 4`.
+  `-preset p7 -tune hq -rc vbr -b 0 -profile main10 -highbitdepth 1 -rc-lookahead 32 -bf 4
+  -b_ref_mode middle -multipass fullres`.
 - x265: `-preset medium -x265-params log-level=error -crf <level>`, 10-bit when supported.
 - HEVC is tagged `hvc1` so Apple devices and Windows players accept it.
 - **Size and frame rate** (`standard::Shape`): a short side above 1080 is scaled to 1080 (Lanczos,

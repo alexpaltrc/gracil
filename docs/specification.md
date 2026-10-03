@@ -320,8 +320,8 @@ This was the starting point. Gracil's own quality standard replaces its fixed va
 (ADR 0028):
 
 - HEVC / H.265, always 10-bit; NVENC when available and appropriate, with the best settings the
-  GPU accepts (preset P7, high-quality tune, VBR with no target bitrate, adaptive quantization,
-  lookahead, multipass, temporal filtering).
+  GPU accepts (preset P7, high-quality tune, VBR with no target bitrate, lookahead,
+  multipass; no adaptive quantization, which made files larger, ADR 0029).
 - Each video finds its own quality level: short samples are encoded and measured against the
   source (VMAF), and the smallest level that still scores at least 95 is used. CQ 27 remains the
   fallback when no measurement is possible.

@@ -393,8 +393,8 @@ mod tests {
         let args = joined(&plan(&info, nvenc_full()));
         assert!(args.contains(
             "-c:0 hevc_nvenc -preset:0 p7 -tune:0 hq -rc:0 vbr -b:0 0 -profile:0 main10 \
-             -highbitdepth:0 1 -spatial-aq:0 1 -temporal-aq:0 1 -rc-lookahead:0 32 -bf:0 4 \
-             -b_ref_mode:0 middle -multipass:0 fullres -tf_level:0 4 -cq:0 27 -tag:0 hvc1"
+             -highbitdepth:0 1 -rc-lookahead:0 32 -bf:0 4 -b_ref_mode:0 middle \
+             -multipass:0 fullres -cq:0 27 -tag:0 hvc1"
         ));
         assert!(args.contains("-c:1 copy"));
         assert!(args.contains("-noautorotate -hwaccel cuda -hwaccel_output_format cuda -i file:"));

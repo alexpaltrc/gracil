@@ -28,10 +28,10 @@ pub fn fallback_level(encoder: VideoEncoder) -> u8 {
 /// How much of the NVENC feature set this GPU and driver accept. Detected once, best first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum NvencLevel {
-    /// 10-bit with adaptive quantization, lookahead, B-frame references, multipass and the
-    /// temporal filter.
+    /// 10-bit with lookahead, B-frame references and multipass. No adaptive quantization: it made
+    /// files larger at the same measured quality (ADR 0029).
     Full,
-    /// 10-bit with spatial adaptive quantization, lookahead and multipass.
+    /// 10-bit with lookahead and multipass.
     Basic,
     /// The original reference settings, 8-bit.
     #[default]
@@ -51,13 +51,10 @@ impl NvencLevel {
                 ("b", "0"),
                 ("profile", "main10"),
                 ("highbitdepth", "1"),
-                ("spatial-aq", "1"),
-                ("temporal-aq", "1"),
                 ("rc-lookahead", "32"),
                 ("bf", "4"),
                 ("b_ref_mode", "middle"),
                 ("multipass", "fullres"),
-                ("tf_level", "4"),
             ],
             Self::Basic => &[
                 ("preset", "p7"),
@@ -66,7 +63,6 @@ impl NvencLevel {
                 ("b", "0"),
                 ("profile", "main10"),
                 ("highbitdepth", "1"),
-                ("spatial-aq", "1"),
                 ("rc-lookahead", "32"),
                 ("multipass", "fullres"),
             ],
