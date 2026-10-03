@@ -44,6 +44,33 @@ technical step they can see, and never meets a dialog that exists only because o
 inside. The bar is high and applies everywhere: subtle but elegant design and animation, and code
 and directories that are just as elegant, optimized, organized and functional.
 
+# 2.2 Free, private, no account, no internet
+
+*Added after the original specification.*
+
+Gracil is always free and private. It never asks for an account and never needs an internet
+connection to work.
+
+The one exception is FFmpeg. If the computer does not have FFmpeg, Gracil downloads and installs
+it once, automatically and without being seen (§20.1). Gracil cannot compress anything without
+it, and FFmpeg is the gold standard for this kind of tool. Wherever Gracil explains what it does
+(store listing, About, documentation), it says this plainly. Once FFmpeg is present, Gracil never
+connects to the internet again.
+
+# 2.3 Quiet signals instead of dialogs
+
+*Added after the original specification.*
+
+When something does not go as expected, Gracil does not open a dialog to explain it. It tells the
+user inside the interface, in a way that feels natural: a control turns off, a small mark
+appears, and hovering it gives a short, plain explanation. The user stays in their flow, and the
+interface keeps its calm, minimal look. Dialogs are only for decisions with real consequences,
+such as exiting while a compression is running (§54.1).
+
+Example: when the compressed video is not smaller than the original, the save buttons are turned
+off and a small "!" appears next to them. Hovering it says that Gracil does not save the result
+because it could not make the file smaller than the original (§40.1).
+
 # 3. Product identity
 
 Application name: **Gracil** — always written without an accent.
@@ -424,9 +451,21 @@ The source must remain recoverable if final replacement fails. This is a hard re
 
 # 40. Compress and save as new
 
-Create a new file in the same directory with the `Gracil_` prefix (`Vacation.mp4` →
-`Gracil_Vacation.mp4`). Do not silently overwrite an existing file; if the name exists, create a
-non-conflicting name using a simple predictable strategy.
+Create a new file in the same directory with the `Gracil-` prefix (`Vacation.mp4` →
+`Gracil-Vacation.mp4`). Do not silently overwrite an existing file; if the name exists, create a
+non-conflicting name using a simple predictable strategy (`Gracil-Vacation (2).mp4`).
+
+*Amended after the original specification: the prefix is `Gracil-`, with a hyphen, not
+`Gracil_`.*
+
+# 40.1 Results that are not smaller
+
+*Added after the original specification.*
+
+If the compressed file is not smaller than the original, Gracil neither replaces the original nor
+saves a copy. Following §2.3, there is no error dialog. The save actions are turned off for that
+video and a small "!" sits beside them; hovering it explains that the file could not be made
+smaller than the original, so it is not saved. The original is never touched.
 
 # 41. Metadata preservation
 
@@ -754,7 +793,7 @@ If a requirement becomes technically problematic, explain the conflict before ch
 
 All video processing is local. Do not upload videos, metadata, filenames or paths. No telemetry,
 no analytics, no crash reporting that sends user data without explicit future approval. Gracil
-works offline after installation.
+works offline after installation, apart from the one-time FFmpeg download described in §2.2.
 
 # 84. Definition of success
 
