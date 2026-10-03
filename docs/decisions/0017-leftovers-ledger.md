@@ -30,8 +30,8 @@ because their names look like Gracil's.
 **Consequences.**
 
 - Temporary files from before this change are not in any ledger and are left alone.
-- Until processes are tied to Gracil with a job object (M5), FFmpeg can outlive a killed Gracil
-  and keep its `.part` in use; it is then settled at a later start.
+- FFmpeg could once outlive a killed Gracil and keep its `.part` in use until a later start.
+  Since ADR 0018 it ends with Gracil, so the file is free at the next start.
 - A changed-format replacement interrupted after `Clip.mp4` was created but before `Clip.mov` was
   removed leaves both: the new file is a complete, validated video, so nothing is lost.
 - If the ledger can't be created, compressing still works; only the cleanup is lost, and it is

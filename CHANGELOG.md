@@ -28,8 +28,9 @@ Gracil is still being built, but you can already compress videos with it.
   videos done, **Replace all** and **Save all copies** handle them in one go.
 - Replacing is done safely: if anything goes wrong, your original is put back. No other file is
   ever overwritten.
-- If Gracil is closed suddenly, for example when the computer loses power, it tidies away what it
-  left half done the next time it starts. If it was replacing a video at that moment, it puts
+- If Gracil is closed suddenly, for example when the computer loses power or it is forced to
+  quit, the compression it was doing stops with it instead of carrying on unseen. Gracil tidies
+  away what it left half done the next time it starts. If it was replacing a video at that moment, it puts
   your original back. It only ever removes files it made itself.
 - If you take a finished video off the list or close Gracil without choosing, the smaller version
   is deleted and your original stays as it was.

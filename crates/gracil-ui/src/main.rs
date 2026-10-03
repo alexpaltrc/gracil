@@ -17,6 +17,10 @@ use app::Gracil;
 fn main() -> iced::Result {
     let _logs = logging::init();
     tracing::info!(version = gracil_core::VERSION, "Gracil started");
+    // FFmpeg must never outlive Gracil, even if Gracil is killed (ADR 0018).
+    if let Err(error) = gracil_windows::end_children_with_this_process() {
+        tracing::warn!(%error, "FFmpeg may outlive a sudden close");
+    }
 
     iced::daemon(Gracil::boot, Gracil::update, view::view)
         .title(Gracil::title)

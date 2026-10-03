@@ -4,9 +4,11 @@
 //! Every call explains why it is sound.
 
 mod icon;
+mod lifetime;
 mod process;
 
 pub use icon::set_window_icon;
+pub use lifetime::end_children_with_this_process;
 pub use process::set_suspended;
 
 use std::ffi::OsStr;

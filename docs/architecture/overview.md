@@ -41,7 +41,8 @@ that is not smaller than the original is discarded (spec §40.1).
 ledger in `%LOCALAPPDATA%\Gracil\temporary\`, held open exclusively while the process runs. At
 startup, before the engine starts, `gracil_core::leftovers::sweep` settles the ledgers no running
 process holds: temporary files are deleted, a parked original goes back if its place is empty,
-and anything on an absent drive or in use waits for the next start (ADR 0017).
+and anything on an absent drive or in use waits for the next start (ADR 0017). Gracil puts itself
+in a kill-on-close job object at startup, so FFmpeg never outlives it (ADR 0018).
 
 **Finding FFmpeg.** At startup, in the background: use an FFmpeg on `PATH` that has `ffprobe.exe`
 beside it and the `libx265` encoder; otherwise Gracil's private copy; otherwise download the pinned
