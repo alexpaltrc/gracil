@@ -427,6 +427,15 @@ Transitions are deterministic. The UI derives from state. Avoid scattered boolea
 Two output intentions: **Compress and replace** and **Compress and save as new**. Do not expose
 codec choices. Do not require technical setup before starting.
 
+# 37.1 Choosing after compressing
+
+*Added after the original specification (ADR 0009).*
+
+In the main window, videos are compressed as soon as they are added. When a result is ready, the
+window shows how much smaller it is and offers **Replace** and **Save copy** for it; with several
+results waiting, both are offered for all of them at once. A result the user never chooses for is
+discarded, and the original stays as it was. File Explorer's two commands choose up front instead.
+
 # 38. Compress and replace
 
 Keep the exact same folder and filename; preserve metadata where technically meaningful; never
