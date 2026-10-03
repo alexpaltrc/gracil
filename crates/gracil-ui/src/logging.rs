@@ -25,5 +25,9 @@ pub fn init() -> Option<WorkerGuard> {
         .with_max_level(Level::INFO)
         .try_init()
         .ok()?;
+    // There is no console to print a crash to, so it goes to the log.
+    std::panic::set_hook(Box::new(
+        |info| tracing::error!(%info, "Gracil stopped unexpectedly"),
+    ));
     Some(guard)
 }

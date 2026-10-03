@@ -8,15 +8,17 @@ Gracil is still being built, but you can already compress videos with it.
 
 ### New
 
+- Gracil is in English and Spanish. It uses the language Windows is shown in, so there is nothing
+  to set.
 - Drop videos onto the window, or choose them, and Gracil compresses them one after another. You
   can keep adding videos while it works.
 - The video being compressed is shown large, with its progress and a **Cancel** button.
   **View files** shows every other video and how much smaller each one became. Click one to show
   it large, or take it off the list with **×** or **Clear**.
 - When a video is done, you see how much smaller it became and choose: **Replace** puts it in
-  place of the original, keeping the same name and dates; **Save copy** keeps your original and
-  saves the smaller one next to it as `Gracil-` followed by its name. With several videos done,
-  **Replace all** and **Save all copies** handle them in one go.
+  place of the original, keeping its name and the date it was created; **Save copy** keeps your
+  original and saves the smaller one next to it as `Gracil-` followed by its name. With several
+  videos done, **Replace all** and **Save all copies** handle them in one go.
 - Replacing is done safely: if anything goes wrong, your original is put back. No other file is
   ever overwritten.
 - If you take a finished video off the list or close Gracil without choosing, the smaller version

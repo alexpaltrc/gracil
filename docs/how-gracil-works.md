@@ -12,6 +12,11 @@ Gracil is free and private. You don't need an account, and Gracil doesn't need t
 work. Your videos never leave your computer: Gracil sends no videos, file names or usage data
 anywhere.
 
+## English and Spanish
+
+Gracil speaks English and Spanish. It uses the language Windows is shown in, so there's nothing
+to set: if Windows is in Spanish, Gracil is too; otherwise it's in English.
+
 ## Adding videos
 
 Drop videos onto the window, or choose them with **or choose files**. You can add more at any
@@ -29,7 +34,8 @@ time, even while Gracil is working.
 When a video is done, Gracil shows how much smaller it became and two buttons:
 
 - **Replace** puts the smaller video in place of the original. It keeps the same name and the
-  same dates, so it sorts and looks like the same video in your folders.
+  date it was created, so it still looks like the same video in your folders. Its "date modified"
+  becomes the moment you replaced it.
 - **Save copy** keeps your original and saves the smaller video next to it (see "Saving a copy"
   below).
 

@@ -549,6 +549,13 @@ Build reusable visual primitives and design tokens (spacing, corner radius, typo
 surface behavior, progress treatment, focus states, animation timing). Do not prematurely lock the
 visual identity. The interaction architecture stays independent from visual choices.
 
+# 50.1 Languages
+
+*Added after the original specification (ADR 0011).*
+
+Gracil is available in English and Spanish and follows the Windows display language, with no
+language setting. All interface wording lives in one place, so each language stays complete.
+
 # 51. WGPU optimization
 
 No unnecessary continuous redraws. Measure idle GPU, idle CPU, idle memory and active UI overhead

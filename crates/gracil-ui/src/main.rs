@@ -1,11 +1,13 @@
 //! Gracil: compress videos without thinking about it.
 
-// Release builds are a windowed app; debug builds keep a console for logs and panics.
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Always a windowed app, never a console window, even in development builds, so what is tested
+// is what users see. Logs and panics go to the log files instead (see `logging`).
+#![windows_subsystem = "windows"]
 
 mod app;
 mod logging;
 mod style;
+mod text;
 mod view;
 mod work;
 

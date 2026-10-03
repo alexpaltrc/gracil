@@ -10,6 +10,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
 
+use windows_sys::Win32::Globalization::GetUserDefaultUILanguage;
 use windows_sys::Win32::Storage::FileSystem::{
     REPLACEFILE_IGNORE_ACL_ERRORS, REPLACEFILE_IGNORE_MERGE_ERRORS, REPLACEFILE_WRITE_THROUGH,
     ReplaceFileW,
@@ -41,6 +42,17 @@ pub fn replace_file(original: &Path, replacement: &Path, backup: &Path) -> io::R
         return Err(io::Error::last_os_error());
     }
     Ok(())
+}
+
+/// Whether the user's Windows display language is Spanish (any region). Gracil's interface follows
+/// it; everything else is shown in English (ADR 0011).
+pub fn display_language_is_spanish() -> bool {
+    const LANG_SPANISH: u16 = 0x0A;
+    const PRIMARY_LANGUAGE_MASK: u16 = 0x3FF;
+    // SAFETY: takes no arguments and only reads the current user's settings.
+    #[allow(unsafe_code)]
+    let language = unsafe { GetUserDefaultUILanguage() };
+    language & PRIMARY_LANGUAGE_MASK == LANG_SPANISH
 }
 
 /// A path as Windows expects it: UTF-16, NUL-terminated, with the long-path prefix when needed.

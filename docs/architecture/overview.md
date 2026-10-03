@@ -48,10 +48,10 @@ attempts, from fastest to most forgiving: NVENC with CUDA decoding → NVENC wit
 
 **The window.** `gracil-ui` is an Iced daemon. `app` holds the state and reacts to messages,
 `view` draws Focus + Drawer from that state alone, `work` runs the engine and each compression on
-their own threads and reports back as messages, and `style` holds every design token. Paths given
-on the command line are queued like dropped files. A finished result waits in its temporary file
-until the user chooses Replace or Save copy; `work::place` then calls `gracil_core::output` on its
-own thread, with `gracil_windows::replace_file` (`ReplaceFileW`) for the swap (ADR 0009).
+their own threads and reports back as messages, `style` holds every design token, and `text` every
+word shown, in English and Spanish (ADR 0011). Paths given on the command line are queued like
+dropped files. A finished result waits in its temporary file until the user chooses Replace or
+Save copy; `work::place` then calls `gracil_core::output` on its own thread, with `gracil_windows::replace_file` (`ReplaceFileW`) for the swap (ADR 0009).
 
 **Closing and exiting.** Closing a window hides it; the process keeps running in the tray. Only
 the tray menu's Exit quits. A process started from Explorer that never showed a window exits by

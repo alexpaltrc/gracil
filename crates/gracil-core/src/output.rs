@@ -4,6 +4,7 @@
 use std::fs::{self, File, FileTimes};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use crate::naming::save_as_new_candidate;
 use crate::plan::Container;
@@ -48,13 +49,13 @@ pub type Swap = fn(original: &Path, replacement: &Path, backup: &Path) -> io::Re
 /// The original is never destroyed before the compressed file is in place, and a failure at any
 /// step leaves it recoverable: it is either untouched or moved back.
 ///
-/// - Same format: the file is swapped in place and keeps its name, creation date and last-modified
-///   date, so it feels like the same video, compressed.
+/// - Same format: the file is swapped in place and keeps its name and creation date, so it feels
+///   like the same video, compressed. Its modified date becomes the moment it was replaced (ADR 0010).
 /// - Changed format (`Clip.avi` becomes MP4): `Clip.mp4` is created first, never over an existing
 ///   file, and only then is `Clip.avi` deleted.
 pub fn replace_original(temp: &Path, source: &Path, swap: Swap) -> io::Result<PathBuf> {
     let target = source.with_extension(Container::output_extension(source));
-    let times = file_times(&fs::metadata(source)?);
+    let times = replaced_times(&fs::metadata(source)?);
 
     if target == source {
         let backup = temp.with_extension("bak");
@@ -64,7 +65,7 @@ pub fn replace_original(temp: &Path, source: &Path, swap: Swap) -> io::Result<Pa
             }
             return Err(error);
         }
-        restore_times(source, times);
+        set_times(source, times);
         tidy(&backup);
         return Ok(target);
     }
@@ -96,20 +97,20 @@ pub fn replace_original(temp: &Path, source: &Path, swap: Swap) -> io::Result<Pa
     if linked {
         tidy(temp);
     }
-    restore_times(&target, times);
+    set_times(&target, times);
     Ok(target)
 }
 
 // Once the compressed video is in place the replacement has succeeded; the steps below only
 // polish it, so their failures are logged rather than reported.
 
-fn restore_times(path: &Path, times: FileTimes) {
+fn set_times(path: &Path, times: FileTimes) {
     let restored = File::options()
         .write(true)
         .open(path)
-        .and_then(|file| file.set_times(times));
+        .and_then(|file| file.set_times(times.set_modified(SystemTime::now())));
     if let Err(error) = restored {
-        warn!(%error, "could not restore the original dates");
+        warn!(%error, "could not set the dates of the replaced video");
     }
 }
 
@@ -119,12 +120,10 @@ fn tidy(leftover: &Path) {
     }
 }
 
-/// The dates that make a replaced file still read as the original video.
-fn file_times(metadata: &fs::Metadata) -> FileTimes {
+/// The original's creation date, so the video keeps its place. The modified date is set to the
+/// moment of replacing, by [`set_times`].
+fn replaced_times(metadata: &fs::Metadata) -> FileTimes {
     let mut times = FileTimes::new();
-    if let Ok(modified) = metadata.modified() {
-        times = times.set_modified(modified);
-    }
     #[cfg(windows)]
     if let Ok(created) = metadata.created() {
         use std::os::windows::fs::FileTimesExt;
@@ -182,7 +181,7 @@ mod tests {
     }
 
     #[test]
-    fn replacing_keeps_name_and_dates() {
+    fn replacing_keeps_the_name_and_records_when_it_changed() {
         let dir = fresh_dir("same");
         let source = dir.join("Vacación 🎂.MP4");
         let temp = dir.join("Vacación 🎂.MP4.gracil-1.part");
@@ -196,6 +195,7 @@ mod tests {
             .unwrap();
         fs::write(&temp, b"compressed").unwrap();
 
+        let replacing = std::time::SystemTime::now();
         let placed = replace_original(&temp, &source, rename_swap).unwrap();
         let content = fs::read(&placed).unwrap();
         let modified = fs::metadata(&placed).unwrap().modified().unwrap();
@@ -204,7 +204,11 @@ mod tests {
 
         assert_eq!(placed, source);
         assert_eq!(content, b"compressed");
-        assert_eq!(modified, recorded);
+        assert!(
+            modified >= replacing,
+            "the modified date is when it was replaced"
+        );
+        assert_ne!(modified, recorded);
         assert_eq!(entries, 1, "no temporary or backup file is left");
     }
 

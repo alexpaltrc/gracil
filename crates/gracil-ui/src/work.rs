@@ -17,7 +17,8 @@ use iced::futures::channel::mpsc::{self, Sender};
 use iced::futures::executor::block_on;
 use tracing::{error, info, warn};
 
-/// Why a video could not be compressed or placed, in the terms the user sees.
+/// Why a video could not be compressed or placed, in the terms the user sees (worded in
+/// [`crate::text`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Failure {
     NoVideo,
@@ -26,23 +27,6 @@ pub enum Failure {
     NotSmaller,
     CouldNotSave,
     NameTaken,
-}
-
-impl Failure {
-    pub fn explanation(self) -> &'static str {
-        match self {
-            Self::NoVideo => "This file has no video",
-            Self::Unreadable => "This file can't be opened as a video",
-            Self::CouldNotCompress => "This video couldn't be compressed",
-            Self::NotSmaller => {
-                "This video couldn't be made smaller than the original, so it isn't saved"
-            }
-            Self::CouldNotSave => "The compressed video couldn't be saved in this folder",
-            Self::NameTaken => {
-                "Another file already has this video's new name, so the original was kept"
-            }
-        }
-    }
 }
 
 /// What the user chooses to do with a finished result (spec §37.1).

@@ -13,6 +13,7 @@ use iced::{Event, Size, Subscription, Task, Theme, event, system, window};
 use tracing::warn;
 
 use crate::style;
+use crate::text::{Language, Text};
 use crate::work::{self, Choice, Failure, Outcome, Report};
 
 pub struct Gracil {
@@ -23,6 +24,8 @@ pub struct Gracil {
     pub drawer_open: bool,
     /// The video the user picked in the drawer to look at, if any.
     pub selected: Option<JobId>,
+    /// The interface's words, in the Windows display language.
+    pub text: &'static Text,
     theme: Theme,
     running: Option<(JobId, JobControl)>,
 }
@@ -72,6 +75,7 @@ impl Gracil {
             hovering_files: false,
             drawer_open: false,
             selected: None,
+            text: Text::get(Language::detect()),
             theme: style::theme(Mode::Light),
             running: None,
         };
@@ -130,7 +134,7 @@ impl Gracil {
                 self.hovering_files = false;
                 self.add(vec![path])
             }
-            Message::ChooseFiles => Task::perform(choose_files(), Message::FilesChosen),
+            Message::ChooseFiles => Task::perform(choose_files(self.text), Message::FilesChosen),
             Message::FilesChosen(paths) => self.add(paths),
             Message::Job(id, report) => self.on_report(id, report),
             Message::Cancel => {
@@ -363,11 +367,11 @@ const VIDEO_EXTENSIONS: &[&str] = &[
     "mpeg",
 ];
 
-async fn choose_files() -> Vec<PathBuf> {
+async fn choose_files(text: &'static Text) -> Vec<PathBuf> {
     rfd::AsyncFileDialog::new()
-        .set_title("Choose videos")
-        .add_filter("Videos", VIDEO_EXTENSIONS)
-        .add_filter("All files", &["*"])
+        .set_title(text.choose_videos)
+        .add_filter(text.videos_filter, VIDEO_EXTENSIONS)
+        .add_filter(text.all_files_filter, &["*"])
         .pick_files()
         .await
         .unwrap_or_default()

@@ -36,13 +36,13 @@ pub fn view(state: &Gracil, _window: window::Id) -> Element<'_, Message> {
 
 fn focus(state: &Gracil) -> Element<'_, Message> {
     if state.hovering_files {
-        return text("Release to add").size(size::TITLE).into();
+        return text(state.text.release_to_add).size(size::TITLE).into();
     }
     match state.focused() {
         Some(job) => focused(state, job),
         None => column![
-            text("Drop videos here").size(size::TITLE),
-            button(text("or choose files").size(size::BODY))
+            text(state.text.drop_videos_here).size(size::TITLE),
+            button(text(state.text.or_choose_files).size(size::BODY))
                 .style(style::quiet_button)
                 .on_press(Message::ChooseFiles),
         ]
@@ -71,21 +71,21 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         .align_x(Center);
     if job.state.is_active() {
         details = details.push(
-            button(text("Cancel").size(size::CAPTION))
+            button(text(state.text.cancel).size(size::CAPTION))
                 .style(style::quiet_button)
                 .on_press(Message::Cancel),
         );
     }
     match state.outcomes.get(&job.id) {
         Some(Outcome::Ready { placing, .. }) => {
-            details = details.push(choices(job, !placing));
+            details = details.push(choices(state, job, !placing));
         }
         Some(Outcome::Failed(Failure::NotSmaller)) => {
             // Shown turned off, so it is clear there was nothing worth keeping (spec §40.1).
-            details = details.push(choices(job, false));
+            details = details.push(choices(state, job, false));
         }
         Some(Outcome::Placed { choice, path, .. }) => {
-            details = details.push(caption(placed_caption(job, *choice, path)));
+            details = details.push(caption(placed_caption(state, job, *choice, path)));
         }
         _ => {}
     }
@@ -93,7 +93,7 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
 }
 
 /// Replace and Save copy, the two things to do with a finished result (ADR 0009).
-fn choices(job: &Job, enabled: bool) -> Element<'static, Message> {
+fn choices(state: &Gracil, job: &Job, enabled: bool) -> Element<'static, Message> {
     let action = |label: &'static str, choice: Choice| {
         button(text(label).size(size::BODY))
             .padding([space::XS, space::M])
@@ -101,19 +101,25 @@ fn choices(job: &Job, enabled: bool) -> Element<'static, Message> {
             .on_press_maybe(enabled.then_some(Message::Choose(job.id, choice)))
     };
     row![
-        action("Replace", Choice::Replace),
-        action("Save copy", Choice::SaveCopy)
+        action(state.text.replace, Choice::Replace),
+        action(state.text.save_copy, Choice::SaveCopy)
     ]
     .spacing(space::S)
     .into()
 }
 
-fn placed_caption(job: &Job, choice: Choice, path: &std::path::Path) -> String {
+fn placed_caption(state: &Gracil, job: &Job, choice: Choice, path: &std::path::Path) -> String {
     let placed_name = path.file_name().unwrap_or_default().to_string_lossy();
     match choice {
-        Choice::SaveCopy => format!("Saved as {}", shorten(&placed_name, FOCUS_NAME_CHARS)),
-        Choice::Replace if placed_name == job.file_name() => "Replaced the original".to_owned(),
-        Choice::Replace => format!("Replaced by {}", shorten(&placed_name, FOCUS_NAME_CHARS)),
+        Choice::SaveCopy => state
+            .text
+            .saved_as(&shorten(&placed_name, FOCUS_NAME_CHARS)),
+        Choice::Replace if placed_name == job.file_name() => {
+            state.text.replaced_the_original.to_owned()
+        }
+        Choice::Replace => state
+            .text
+            .replaced_by(&shorten(&placed_name, FOCUS_NAME_CHARS)),
     }
 }
 
@@ -143,50 +149,46 @@ impl Status {
 fn status(state: &Gracil, job: &Job) -> Status {
     match job.state {
         JobState::Pending => match state.engine {
-            EngineState::Starting => Status::plain("Getting ready"),
-            EngineState::Ready(_) => Status::plain("Waiting"),
+            EngineState::Starting => Status::plain(state.text.getting_ready),
+            EngineState::Ready(_) => Status::plain(state.text.waiting),
             EngineState::Unavailable => Status {
-                label: "Waiting".into(),
-                notice: Some(
-                    "Gracil needs an internet connection once, to set up its video engine",
-                ),
+                label: state.text.waiting.into(),
+                notice: Some(state.text.needs_internet_once),
             },
         },
-        JobState::Preparing => Status::plain("Getting ready"),
+        JobState::Preparing => Status::plain(state.text.getting_ready),
         JobState::Compressing => match job.fraction {
             Some(fraction) => Status::plain(format!("{:.0}%", fraction * 100.0)),
-            None => Status::plain("Compressing"),
+            None => Status::plain(state.text.compressing),
         },
-        JobState::Paused => Status::plain("Paused"),
-        JobState::Finalizing => Status::plain("Saving"),
+        JobState::Paused => Status::plain(state.text.paused),
+        JobState::Finalizing => Status::plain(state.text.saving),
         JobState::Completed | JobState::Failed | JobState::Cancelled => {
             match state.outcomes.get(&job.id) {
-                Some(Outcome::Ready { placing: true, .. }) => Status::plain("Saving"),
+                Some(Outcome::Ready { placing: true, .. }) => Status::plain(state.text.saving),
                 Some(Outcome::Ready {
                     smaller_by,
                     problem,
                     ..
                 }) => Status {
-                    label: smaller(*smaller_by),
-                    notice: problem.map(Failure::explanation),
+                    label: state.text.smaller(*smaller_by),
+                    notice: problem.map(|failure| state.text.failure(failure)),
                 },
-                Some(Outcome::Placed { smaller_by, .. }) => Status::plain(smaller(*smaller_by)),
+                Some(Outcome::Placed { smaller_by, .. }) => {
+                    Status::plain(state.text.smaller(*smaller_by))
+                }
                 Some(Outcome::Failed(Failure::NotSmaller)) => Status {
-                    label: "Not smaller".into(),
-                    notice: Some(Failure::NotSmaller.explanation()),
+                    label: state.text.not_smaller.into(),
+                    notice: Some(state.text.failure(Failure::NotSmaller)),
                 },
                 Some(Outcome::Failed(failure)) => Status {
-                    label: "Not compressed".into(),
-                    notice: Some(failure.explanation()),
+                    label: state.text.not_compressed.into(),
+                    notice: Some(state.text.failure(*failure)),
                 },
-                _ => Status::plain("Cancelled"),
+                _ => Status::plain(state.text.cancelled),
             }
         }
     }
-}
-
-fn smaller(smaller_by: f64) -> String {
-    format!("{:.0}% smaller", smaller_by * 100.0)
 }
 
 /// The drawer says what happened to a result in one word, since the focus shows the details.
@@ -195,11 +197,11 @@ fn drawer_status(state: &Gracil, job: &Job) -> Status {
         Some(Outcome::Placed {
             choice: Choice::Replace,
             ..
-        }) => Status::plain("Replaced"),
+        }) => Status::plain(state.text.replaced),
         Some(Outcome::Placed {
             choice: Choice::SaveCopy,
             ..
-        }) => Status::plain("Copy saved"),
+        }) => Status::plain(state.text.copy_saved),
         _ => status(state, job),
     }
 }
@@ -227,25 +229,22 @@ fn name(job: &Job, max_chars: usize, text_size: f32) -> Element<'static, Message
 }
 
 fn footer(state: &Gracil) -> Element<'_, Message> {
-    let mut summary = match state.queue.len() {
-        1 => "1 video".to_owned(),
-        n => format!("{n} videos"),
-    };
+    let mut summary = state.text.videos(state.queue.len());
     match state.waiting_count() {
         0 => {}
-        n => summary.push_str(&format!("  ·  {n} ready")),
+        n => summary.push_str(&format!("  ·  {}", state.text.ready(n))),
     }
     let toggle = if state.drawer_open {
-        "Hide files"
+        state.text.hide_files
     } else {
-        "View files"
+        state.text.view_files
     };
     row![
         button(text(format!("{summary}  ·  {toggle}")).size(size::CAPTION))
             .style(style::quiet_button)
             .on_press(Message::ToggleDrawer),
         Space::new().width(Fill),
-        button(text("Add videos").size(size::CAPTION))
+        button(text(state.text.add_videos).size(size::CAPTION))
             .style(style::quiet_button)
             .on_press(Message::ChooseFiles),
     ]
@@ -265,18 +264,19 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
     if state.waiting_count() >= 2 {
         header = header
             .push(quiet(
-                "Replace all",
+                state.text.replace_all,
                 Some(Message::ChooseAll(Choice::Replace)),
             ))
             .push(quiet(
-                "Save all copies",
+                state.text.save_all_copies,
                 Some(Message::ChooseAll(Choice::SaveCopy)),
             ));
     }
     let any_removable = state.queue.jobs().iter().any(|job| state.can_remove(job));
-    header = header
-        .push(Space::new().width(Fill))
-        .push(quiet("Clear", any_removable.then_some(Message::Clear)));
+    header = header.push(Space::new().width(Fill)).push(quiet(
+        state.text.clear,
+        any_removable.then_some(Message::Clear),
+    ));
 
     let rows = state.queue.jobs().iter().map(|job| {
         let line = row![

@@ -17,8 +17,9 @@ smaller (§40.1), which implies the actions are offered once the result is known
    "!" that explains why (§40.1).
 4. A result the user never chose for (removed from the list, cleared, or left when Gracil exits)
    is deleted. The original is untouched in every case.
-5. Replacing keeps the file's name, creation date and last-modified date, so it still reads as the
-   same video. `ReplaceFileW` swaps the files in one step through a backup that is deleted only
+5. Replacing keeps the file's name and creation date, so it still reads as the same video; its
+   modified date becomes the moment of replacing ([0010](0010-replacing-updates-modified-date.md)).
+   `ReplaceFileW` swaps the files in one step through a backup that is deleted only
    after the swap succeeded, and is moved back if it failed (§39).
 6. When the format changes (`Clip.avi` becomes MP4), replacing creates `Clip.mp4` without
    overwriting anything and only then deletes `Clip.avi`. If `Clip.mp4` already exists, nothing is
