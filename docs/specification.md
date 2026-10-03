@@ -316,9 +316,21 @@ video arrives. Videos added before it finishes simply wait in their normal waiti
 ffmpeg -i "video.mp4" -c:v hevc_nvenc -preset p6 -tune hq -rc vbr -cq 27 -b:v 0 -c:a copy "video_comprimido.mp4"
 ```
 
-Intended behavior: HEVC / H.265; NVENC when available and appropriate; preset P6; high-quality
-tune; VBR; CQ 27; no fixed target video bitrate; preserve audio without recompression where
-compatible. These parameters must not appear in the normal user interface.
+This was the starting point. Gracil's own quality standard replaces its fixed values
+(ADR 0028):
+
+- HEVC / H.265, always 10-bit; NVENC when available and appropriate, with the best settings the
+  GPU accepts (preset P7, high-quality tune, VBR with no target bitrate, adaptive quantization,
+  lookahead, multipass, temporal filtering).
+- Each video finds its own quality level: short samples are encoded and measured against the
+  source (VMAF), and the smallest level that still scores at least 95 is used. CQ 27 remains the
+  fallback when no measurement is possible.
+- A video whose short side is above 1080 pixels becomes 1080; smaller ones keep their size.
+- Above 30 frames per second becomes 30; 30 or fewer is kept.
+- Audio is copied where compatible, except heavy audio (lossless, or a very high bitrate), which
+  becomes AAC.
+
+These parameters must not appear in the normal user interface.
 
 # 22. Automatic encoder selection
 

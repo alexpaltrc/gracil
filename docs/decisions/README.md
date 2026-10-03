@@ -32,3 +32,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0025](0025-always-replace-or-copy.md) | "Always": replace or save a copy without being asked |
 | [0026](0026-icon-tile.md) | The app icon sits on its own Piedra tile, light or dark with the taskbar |
 | [0027](0027-version-scheme.md) | Versions stay small: 1.0 at the Store, then slowly |
+| [0028](0028-quality-standard.md) | Gracil's quality standard: each video finds its own level |
