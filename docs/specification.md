@@ -626,6 +626,11 @@ pause/resume, drag additional videos into Gracil. It stays open when the user cl
 the user intentionally closes/toggles it. Position it relative to the taskbar/tray without
 assuming the taskbar is bottom-right. Support multiple monitors correctly.
 
+*Update (2026-10-03, product owner):* a finished result can be decided in the mini-window itself,
+with the same **Replace** and **Save copy** choices (§37.1), so opening the main window is never
+required. It shows the running video first; results that wait meanwhile are counted, then offered
+one at a time.
+
 # 56. Explorer-triggered mini-window
 
 By default, when compression starts from the File Explorer context menu: Gracil receives the

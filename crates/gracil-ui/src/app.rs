@@ -612,6 +612,20 @@ impl Gracil {
     }
 
     /// How many results are waiting for the user to choose replace or copy.
+    /// What the mini-window shows: the video being compressed, else the first result waiting for
+    /// a choice, else what the big window shows.
+    pub fn mini_job(&self) -> Option<&Job> {
+        self.queue
+            .active()
+            .or_else(|| {
+                self.queue
+                    .jobs()
+                    .iter()
+                    .find(|job| self.outcomes.get(&job.id).is_some_and(Outcome::is_waiting))
+            })
+            .or_else(|| self.focused())
+    }
+
     pub fn waiting_count(&self) -> usize {
         self.outcomes.values().filter(|o| o.is_waiting()).count()
     }

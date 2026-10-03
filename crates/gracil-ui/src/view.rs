@@ -109,7 +109,7 @@ fn mini(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     let body: Element<'_, Message> = if hovering {
         text(state.text.release_to_add).size(size::BODY).into()
     } else {
-        match state.queue.active().or_else(|| state.focused()) {
+        match state.mini_job() {
             Some(job) => mini_job(state, job),
             None => text(state.text.drop_videos_here).size(size::BODY).into(),
         }
@@ -140,12 +140,29 @@ fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         status_line(&status(state, job), size::CAPTION),
     ]
     .spacing(space::XS);
-    if let Some(Outcome::Placed { choice, path, .. }) = state.outcomes.get(&job.id) {
-        details = details.push(caption(placed_caption(state, job, *choice, path)));
+    match state.outcomes.get(&job.id) {
+        // The choice is made right here, without opening the big window.
+        Some(Outcome::Ready { placing, .. }) => {
+            details = details.push(mini_choices(state, job, !placing));
+        }
+        Some(Outcome::Placed { choice, path, .. }) => {
+            details = details.push(caption(placed_caption(state, job, *choice, path)));
+        }
+        _ => {}
+    }
+    // Results that finish while another video compresses come up here, one by one, after it.
+    let shown_waiting = state.outcomes.get(&job.id).is_some_and(Outcome::is_waiting);
+    let mut later = Vec::new();
+    match state.waiting_count() - usize::from(shown_waiting) {
+        0 => {}
+        n => later.push(state.text.ready(n)),
     }
     match state.waiting_to_compress() {
         0 => {}
-        n => details = details.push(caption(state.text.in_line(n))),
+        n => later.push(state.text.in_line(n)),
+    }
+    if !later.is_empty() {
+        details = details.push(caption(later.join("  ·  ")));
     }
     let mut line = row![].spacing(space::M).align_y(Center);
     if job.state.is_active() {
@@ -203,6 +220,22 @@ fn choices(state: &Gracil, job: &Job, enabled: bool) -> Element<'static, Message
         action(state.text.save_copy, Choice::SaveCopy)
     ]
     .spacing(space::S)
+    .into()
+}
+
+/// The same two choices, smaller, for the mini-window.
+fn mini_choices(state: &Gracil, job: &Job, enabled: bool) -> Element<'static, Message> {
+    let action = |label: &'static str, choice: Choice| {
+        button(text(label).size(size::CAPTION))
+            .padding([2.0, space::S])
+            .style(style::action_button)
+            .on_press_maybe(enabled.then_some(Message::Choose(job.id, choice)))
+    };
+    row![
+        action(state.text.replace, Choice::Replace),
+        action(state.text.save_copy, Choice::SaveCopy)
+    ]
+    .spacing(space::XS)
     .into()
 }
 

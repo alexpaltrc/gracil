@@ -210,7 +210,10 @@ Pointing at the marble says the same in words. Right-click it for **Open Gracil*
 
 Click the marble and a small window opens right next to it, wherever your taskbar is. It shows
 the video being compressed and how far along it is; click its circle to pause or carry on, just
-like in the big window. It also tells you how many videos are waiting and, once one is done,
+like in the big window. When a video is done, it shows how much smaller it became with
+**Replace** and **Save copy**, so you can choose right there without opening the big window. If
+more videos finish while another is compressing, it says how many are ready and shows them one by
+one when the work is done. It also tells you how many videos are waiting and, once one is placed,
 where it went. You can drop more videos on it. It stays open while you do other things; close it
 with its **×** or by clicking the marble again, and use **Open Gracil** in it to get the big
 window.
