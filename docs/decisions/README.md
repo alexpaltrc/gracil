@@ -21,3 +21,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0014](0014-progress-dial.md) | Progress is a dial that holds the controls |
 | [0015](0015-piedra-identity.md) | The marble identity: icon, Piedra palette and following Windows' theme |
 | [0016](0016-app-icon.md) | The app icon lives in gracil.exe |
+| [0017](0017-leftovers-ledger.md) | Leftover temporary files are tracked in a ledger, not recognized by name |

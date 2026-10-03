@@ -158,6 +158,11 @@ Gracil never writes over your video while it works.
 - When you replace the original, the swap is done with Windows' own safe replacement, which
   keeps your original aside until the new file is fully in place. If anything goes wrong, your
   original is put back.
+- If Gracil is closed suddenly (the computer loses power, or Gracil is forced to quit), it may
+  leave its temporary files behind. The next time Gracil starts, it tidies them away. If it was
+  in the middle of replacing a video, it puts your original back. Gracil keeps a note of each
+  temporary file it makes and only ever removes those, never a file just because its name looks
+  similar. Files on a drive that isn't connected are tidied once it is.
 - If the compressed video isn't smaller than the original, Gracil doesn't keep it. Its buttons
   are shown turned off, and a small "!" explains why when you point at it.
 

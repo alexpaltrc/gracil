@@ -6,6 +6,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use crate::leftovers;
 use crate::naming::save_as_new_candidate;
 use crate::plan::output_extension;
 use tracing::warn;
@@ -59,6 +60,7 @@ pub fn replace_original(temp: &Path, source: &Path, swap: Swap) -> io::Result<Pa
 
     if target == source {
         let backup = temp.with_extension("bak");
+        leftovers::record_backup(&backup, source);
         if let Err(error) = swap(source, temp, &backup) {
             if !source.exists() && backup.exists() {
                 fs::rename(&backup, source)?;

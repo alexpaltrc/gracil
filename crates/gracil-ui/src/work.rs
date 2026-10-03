@@ -9,6 +9,7 @@ use std::thread;
 
 use gracil_core::compress::{CompressError, Compressed, Engine, compress};
 use gracil_core::encode::JobControl;
+use gracil_core::leftovers;
 use gracil_core::output::{replace_original, save_as_new};
 use gracil_core::toolchain;
 use iced::Task;
@@ -72,12 +73,25 @@ pub enum Report {
 pub fn start_engine() -> Task<Option<Arc<Engine>>> {
     on_thread(|mut sender: Sender<Option<Arc<Engine>>>| {
         let engine = toolchain::default_private_dir().and_then(|dir| {
+            tidy_leftovers(&dir);
             Engine::start(&dir)
                 .inspect_err(|e| error!(error = %e, "engine unavailable"))
                 .ok()
         });
         let _ = block_on(sender.send(engine.map(Arc::new)));
     })
+}
+
+/// Starts noting this run's temporary files, and settles those an earlier run left behind
+/// (ADR 0017). Runs before any compression can start.
+fn tidy_leftovers(private_dir: &Path) {
+    if let Err(e) = leftovers::track(private_dir) {
+        warn!(error = %e, "temporary files will not be tracked");
+    }
+    let swept = leftovers::sweep(private_dir);
+    if swept != leftovers::Swept::default() {
+        info!(?swept, "files left by an earlier run");
+    }
 }
 
 /// Compresses `source`, leaving the result beside it for the user to place.

@@ -37,6 +37,12 @@ spawn FFmpeg writing to a reserved temporary sibling (`<name>.gracil-<id>.part`)
 ADR 0013) → validate the output with FFprobe (HEVC, same duration) → finalize. A result
 that is not smaller than the original is discarded (spec §40.1).
 
+**Leftovers.** Every `.part` and parked `.bak` a process creates is written down in its own
+ledger in `%LOCALAPPDATA%\Gracil\temporary\`, held open exclusively while the process runs. At
+startup, before the engine starts, `gracil_core::leftovers::sweep` settles the ledgers no running
+process holds: temporary files are deleted, a parked original goes back if its place is empty,
+and anything on an absent drive or in use waits for the next start (ADR 0017).
+
 **Finding FFmpeg.** At startup, in the background: use an FFmpeg on `PATH` that has `ffprobe.exe`
 beside it and the `libx265` encoder; otherwise Gracil's private copy; otherwise download the pinned
 build, verify it and install it privately (ADR 0008).

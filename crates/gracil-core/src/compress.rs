@@ -13,6 +13,7 @@ use tracing::{info, warn};
 
 use crate::capabilities::Capabilities;
 use crate::encode::{self, EncodeOutcome, JobControl};
+use crate::leftovers;
 use crate::plan::{self, Attempt, EncodePlan};
 use crate::probe::{self, MediaInfo, ProbeError, StreamKind};
 use crate::progress::fraction;
@@ -195,7 +196,10 @@ fn reserve_temp(source: &Path) -> io::Result<PathBuf> {
         name.push(format!(".gracil-{id}.part"));
         let path = source.with_file_name(name);
         match OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(_) => return Ok(path),
+            Ok(_) => {
+                leftovers::record_temp(&path);
+                return Ok(path);
+            }
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error),
         }

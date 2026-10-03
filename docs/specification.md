@@ -792,8 +792,8 @@ Intentionally unfinished: final icon, colors, typography, animation language, de
 marketing copy, final localized wording. Use clean temporary solutions; do not couple core logic
 to them.
 
-*Update (ADR 0015):* the icon (the marble) and the colors (the Piedra palette) are now decided, and Gracil follows Windows'
-light or dark theme with a soft fade.
+*Update (ADR 0015):* the icon (the marble) and the colors (the Piedra palette) are now decided,
+and Gracil follows Windows' light or dark theme with a soft fade.
 
 # 79. Focus + Drawer is not temporary
 
