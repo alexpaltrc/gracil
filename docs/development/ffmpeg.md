@@ -41,7 +41,14 @@ Detected once per process (`Capabilities::detect`):
 
 - **NVENC**: `hevc_nvenc` is listed *and* a three-frame test encode succeeds. A listed encoder
   says nothing about the GPU or the driver.
+- **NVENC tier** (`standard::NvencLevel`, ADR 0028): the test encode is run with each tier's
+  options, best first, and the first that succeeds is used. `Full` is 10-bit with spatial and
+  temporal AQ, lookahead, B-frame references, multipass and the temporal filter; `Basic` drops
+  temporal AQ, B-references and the temporal filter; `Legacy` is the original 8-bit p6 setting.
 - **CUDA decoding**: NVENC works and `-hwaccels` lists `cuda`.
+- **Filters**: `-filters` lists `scale_cuda` (resizing frames left on the GPU) and `libvmaf` (the
+  quality search). The essentials build has both.
+- **x265 10-bit**: `-h encoder=libx265` lists `yuv420p10le`.
 - Without NVENC, `libx265` on the CPU does the encoding.
 
 ## One compression
@@ -63,11 +70,46 @@ the source is damaged at that point, and the next attempt would stop there too.
 The output is accepted when FFprobe reads it, it holds HEVC video, and its length matches the
 source within 1% or one second.
 
-### Settings
+An attempt that decodes on the GPU is skipped when the video must be resized and `scale_cuda` is
+missing.
 
-- NVENC (spec §21): `hevc_nvenc -preset p6 -tune hq -rc vbr -cq 27 -b:v 0`.
-- x265: `-preset medium -crf 26`.
+### Settings (ADR 0028)
+
+- NVENC: `hevc_nvenc` with the detected tier's options (`standard::NvencLevel::options`) and
+  `-cq <level>`. With `Full`:
+  `-preset p7 -tune hq -rc vbr -b 0 -profile main10 -highbitdepth 1 -spatial-aq 1 -temporal-aq 1
+  -rc-lookahead 32 -bf 4 -b_ref_mode middle -multipass fullres -tf_level 4`.
+- x265: `-preset medium -x265-params log-level=error -crf <level>`, 10-bit when supported.
 - HEVC is tagged `hvc1` so Apple devices and Windows players accept it.
+- **Size and frame rate** (`standard::Shape`): a short side above 1080 is scaled to 1080 (Lanczos,
+  even dimensions); an average above 30.5 fps becomes 30, or 30000/1001 for the NTSC family.
+  Smaller or slower videos are left as they are. Filters go per stream (`-filter:<out>`):
+  `fps`, then `scale_cuda` on GPU frames or `scale` plus `format=p010le`/`yuv420p10le`/`yuv420p`
+  on CPU frames. GPU frames need no format filter; `-highbitdepth 1` handles 10-bit.
+
+### Quality search (`search.rs`)
+
+Before the first attempt, Gracil looks for the highest level (smallest file) whose VMAF reaches
+95: NVENC CQ 24–38, x265 CRF 20–34, by binary search (about four steps). Each step encodes 4 s
+samples, one per 15 s of video up to four, centred in equal shares of the video, and averages
+their scores. One FFmpeg process per sample does both jobs, writing nothing to disk:
+
+```text
+-ss START -t 4 -i file:SRC
+-filter_complex "[0:N]fps…,scale…,split[source][reference];[source]format=…[encode];[reference]format=yuv420p[ref]"
+-map [encode] <encoder options at level> -f null -
+-dec 0:0 -filter_complex "[dec:0]format=yuv420p[encoded];[encoded][ref]libvmaf=n_threads=…:pool=harmonic_mean[vmaf]"
+-map [vmaf] -f null -
+```
+
+The loopback decoder (`-dec 0:0`) decodes what the encoder just produced. GPU decoding is used
+without `-hwaccel_output_format`, so both branches get ordinary frames; if it fails, the sample is
+retried on the CPU. The last `VMAF score:` line in the error output is the score.
+
+The search is skipped (fixed level: CQ 27, CRF 26) for videos under 6 s, of unknown length, under
+60 s with x265, or without `libvmaf`, and whenever a measurement fails. If no level reaches 95, the
+best quality in the range is used. Attempts with a different encoder than the first use their
+fixed level. Cancelling stops the search. The chosen level and every score are logged.
 
 ### Keeping what matters (spec §41)
 
@@ -80,7 +122,8 @@ source within 1% or one second.
 - **iPhone keys** (`com.apple.*`) need `-movflags +use_metadata_tags`. That flag also writes
   junk keys and can hide the title from Explorer, so it is only used when such keys exist.
 - **Streams**: audio is copied when the container accepts it, otherwise converted to AAC
-  (64 kbps per channel, 128–512). Text subtitles (SRT, ASS, WebVTT) become `mov_text`. Cover art
+  (64 kbps per channel, 128–512). Lossless audio (PCM, FLAC, ALAC) and tracks above twice that
+  AAC bitrate are converted too (ADR 0028). Text subtitles (SRT, ASS, WebVTT) become `mov_text`. Cover art
   is copied. Anything MP4 cannot hold (bitmap subtitles, data tracks, fonts) is left out and
   logged, never refused.
 

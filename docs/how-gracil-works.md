@@ -111,7 +111,39 @@ exists: it runs a tiny test compression to be sure.
   faster than the processor, and the computer stays responsive.
 - **Without one**, Gracil uses the processor. It is slower but just as good.
 
-You never choose between these. Gracil picks the best one available.
+You never choose between these. Gracil picks the best one available. The test also tells Gracil
+which of the graphics card's quality features work, and it uses every one that does.
+
+## Each video gets its own amount of compression
+
+Videos differ: a still interview compresses far more than a football match before anyone can
+see a difference. So instead of squeezing every video the same amount, Gracil measures.
+
+- Before compressing, it tries a few short moments from different parts of the video at
+  different strengths, and compares each attempt with the original using a well-known measure of
+  how people see picture quality.
+- It picks the strongest compression that still looks the same as the original when you watch
+  it normally. Easy videos come out much smaller; demanding ones keep the detail they need.
+- This takes a few seconds to a minute, while Gracil shows that it's getting ready. Stop works
+  the whole time.
+- Very short videos, and videos the measurement can't handle, use a safe standard amount
+  instead.
+
+The picture is stored in a finer format than most phones use (10-bit), which keeps skies and
+shadows smooth instead of banded.
+
+## Size and smoothness
+
+- Videos larger than Full HD (1080p), such as 4K, become Full HD. That keeps them sharp on
+  phones, laptops and most TVs, and makes them much smaller. Full HD and smaller videos keep their
+  size: a 480p video stays 480p.
+- Videos with more than 30 frames per second (60 fps, or slow motion recorded at 120 or 240)
+  become 30 frames per second. Videos at 30 or fewer keep exactly the rate they had. Slow-motion
+  clips that your phone plays slowed down lose that effect, because the extra frames that made it
+  possible are gone.
+- Sound that takes much more room than it needs to (for example uncompressed sound from
+  cameras) is converted to a compact format that sounds the same for normal listening. Other
+  sound is kept as it is.
 
 ## Never giving up on a video
 
@@ -152,7 +184,7 @@ kept:
   subtitles are kept, though fancy styling such as colors and fonts becomes plain text;
 - fonts packed inside the file are left out;
 - a few kinds of sound MP4 can't hold are converted to a format it can, and still sound the same
-  for normal listening.
+  for normal listening (see "Size and smoothness" above).
 
 A video that was already an MP4 keeps its name. Any other video gets `.mp4` at the end of its
 name.

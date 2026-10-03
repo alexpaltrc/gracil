@@ -49,7 +49,10 @@ beside it and the `libx265` encoder; otherwise Gracil's private copy; otherwise 
 build, verify it and install it privately (ADR 0008).
 
 **Choosing how to encode.** Capabilities are detected once per process: `ffmpeg -encoders` must
-list `hevc_nvenc`, then a sub-second test encode must succeed. Each job then walks a ladder of
+list `hevc_nvenc`, then a sub-second test encode must succeed; the richest NVENC settings tier
+that passes is kept. Before encoding, `gracil_core::search` measures short samples with VMAF to
+pick the video's quality level (ADR 0028), and `gracil_core::standard` decides resizing (short
+side to 1080), frame rate (to 30) and audio conversion. Each job then walks a ladder of
 attempts, from fastest to most forgiving: NVENC with CUDA decoding → NVENC with software decoding
 → NVENC keeping only essential streams → `libx265` keeping only essential streams (without NVENC:
 `libx265` full, then essential). See [`../development/ffmpeg.md`](../development/ffmpeg.md).

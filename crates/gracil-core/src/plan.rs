@@ -1,15 +1,17 @@
 //! Turning a probed source into FFmpeg arguments.
 //!
-//! Everything here is pure, so the exact command Gracil runs is covered by unit tests. The
-//! reference behavior (spec §21) is HEVC NVENC, preset P6, HQ tune, VBR at CQ 27 with no bitrate
-//! target, audio copied. The rest of the decisions keep as much of the source as the output can
-//! hold, and drop the rest instead of rejecting the video (spec §41, §44).
+//! Everything here is pure, so the exact command Gracil runs is covered by unit tests. Encoder
+//! settings and the size, frame-rate and audio rules come from Gracil's quality standard
+//! ([`crate::standard`], ADR 0028); each video's level comes from the quality search. The rest of
+//! the decisions keep as much of the source as the output can hold, and drop the rest instead of
+//! rejecting the video (spec §41, §44).
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::capabilities::{Capabilities, VideoEncoder};
 use crate::probe::{MediaInfo, Stream, StreamKind, file_url};
+use crate::standard::{self, Shape};
 
 /// Every compressed video is an MP4, whatever it was before (ADR 0012).
 ///
@@ -76,7 +78,7 @@ pub fn attempts(capabilities: Capabilities) -> Vec<Attempt> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StreamAction {
-    EncodeVideo,
+    EncodeVideo(Shape),
     Copy,
     ToMovText,
     ToAac { kbps: u32 },
@@ -98,10 +100,21 @@ pub struct EncodePlan {
     pub dropped: Vec<u32>,
     /// iPhone-style `com.apple.*` keys only survive when written as `mdta` metadata.
     pub keep_apple_metadata: bool,
+    /// What the encoders support on this computer.
+    pub capabilities: Capabilities,
+    /// CQ for NVENC, CRF for x265.
+    pub level: u8,
 }
 
 impl EncodePlan {
-    pub fn new(input: &Path, output: &Path, info: &MediaInfo, attempt: Attempt) -> Self {
+    pub fn new(
+        input: &Path,
+        output: &Path,
+        info: &MediaInfo,
+        attempt: Attempt,
+        capabilities: Capabilities,
+        level: u8,
+    ) -> Self {
         let mut streams = Vec::with_capacity(info.streams.len());
         let mut dropped = Vec::new();
         for stream in &info.streams {
@@ -120,7 +133,17 @@ impl EncodePlan {
             streams,
             dropped,
             keep_apple_metadata: info.tag_keys.iter().any(|k| k.starts_with("com.apple.")),
+            capabilities,
+            level,
         }
+    }
+
+    /// The first video that is encoded, with what happens to its size and frame rate.
+    pub fn main_video(&self) -> Option<(u32, Shape)> {
+        self.streams.iter().find_map(|s| match s.action {
+            StreamAction::EncodeVideo(shape) => Some((s.source_index, shape)),
+            _ => None,
+        })
     }
 
     /// The complete FFmpeg argument list. The output file must already exist (Gracil reserves it),
@@ -164,39 +187,77 @@ impl EncodePlan {
     }
 
     fn push_codec_args(&self, args: &mut Vec<OsString>, out: usize, action: StreamAction) {
-        let mut option = |name: &str, value: &str| {
+        let option = |args: &mut Vec<OsString>, name: &str, value: &str| {
             args.push(format!("-{name}:{out}").into());
             args.push(value.into());
         };
         match action {
-            StreamAction::EncodeVideo => {
-                match self.attempt.encoder {
-                    VideoEncoder::Nvenc => {
-                        option("c", "hevc_nvenc");
-                        option("preset", "p6");
-                        option("tune", "hq");
-                        option("rc", "vbr");
-                        option("cq", "27");
-                        option("b", "0");
-                    }
-                    VideoEncoder::X265 => {
-                        option("c", "libx265");
-                        option("preset", "medium");
-                        option("crf", "26");
-                        option("x265-params", "log-level=error");
-                    }
+            StreamAction::EncodeVideo(shape) => {
+                let (encoder, capabilities) = (self.attempt.encoder, &self.capabilities);
+                let filters = video_filters(shape, self.attempt.hw_decode, encoder, capabilities);
+                if !filters.is_empty() {
+                    option(args, "filter", &filters.join(","));
                 }
-                // `hvc1` is the HEVC tag Apple devices and Windows players expect.
-                option("tag", "hvc1");
+                args.extend(video_codec_args(encoder, capabilities, self.level, out));
             }
-            StreamAction::Copy => option("c", "copy"),
-            StreamAction::ToMovText => option("c", "mov_text"),
+            StreamAction::Copy => option(args, "c", "copy"),
+            StreamAction::ToMovText => option(args, "c", "mov_text"),
             StreamAction::ToAac { kbps } => {
-                option("c", "aac");
-                option("b", &format!("{kbps}k"));
+                option(args, "c", "aac");
+                option(args, "b", &format!("{kbps}k"));
             }
         }
     }
+}
+
+/// Resizing, frame rate and pixel format for one encoded video, as FFmpeg filters in order.
+/// `gpu_frames` means the frames are still on the GPU, where NVENC reads them as they are.
+pub(crate) fn video_filters(
+    shape: Shape,
+    gpu_frames: bool,
+    encoder: VideoEncoder,
+    capabilities: &Capabilities,
+) -> Vec<String> {
+    let mut filters = Vec::new();
+    if let Some(rate) = shape.rate {
+        filters.push(format!("fps={}/{}", rate.num, rate.den));
+    }
+    if let Some((width, height)) = shape.size {
+        filters.push(if gpu_frames {
+            format!("scale_cuda=w={width}:h={height}:interp_algo=lanczos")
+        } else {
+            format!("scale=w={width}:h={height}:flags=lanczos")
+        });
+    }
+    if !gpu_frames {
+        let ten_bit = capabilities.ten_bit(encoder);
+        filters.push(format!(
+            "format={}",
+            standard::pixel_format(ten_bit, encoder)
+        ));
+    }
+    filters
+}
+
+/// The video encoder and its options for output stream `out`, at `level`.
+pub(crate) fn video_codec_args(
+    encoder: VideoEncoder,
+    capabilities: &Capabilities,
+    level: u8,
+    out: usize,
+) -> Vec<OsString> {
+    let (codec, options, level_name): (_, &[(&str, &str)], _) = match encoder {
+        VideoEncoder::Nvenc => ("hevc_nvenc", capabilities.nvenc.options(), "cq"),
+        VideoEncoder::X265 => ("libx265", &standard::X265_OPTIONS, "crf"),
+    };
+    let level = level.to_string();
+    // `hvc1` is the HEVC tag Apple devices and Windows players expect.
+    [("c", codec)]
+        .iter()
+        .chain(options)
+        .chain(&[(level_name, level.as_str()), ("tag", "hvc1")])
+        .flat_map(|(name, value)| [format!("-{name}:{out}").into(), (*value).into()])
+        .collect()
 }
 
 const TEXT_SUBTITLES: [&str; 6] = ["mov_text", "subrip", "srt", "ass", "ssa", "webvtt"];
@@ -205,11 +266,16 @@ const TEXT_SUBTITLES: [&str; 6] = ["mov_text", "subrip", "srt", "ass", "ssa", "w
 fn stream_action(stream: &Stream, preservation: Preservation) -> Option<StreamAction> {
     let codec = stream.codec.as_str();
     let essential = preservation == Preservation::Essential;
+    let to_aac = || StreamAction::ToAac {
+        kbps: standard::aac_kbps(stream.channels),
+    };
     match stream.kind {
-        StreamKind::Video if !stream.attached_pic => Some(StreamAction::EncodeVideo),
-        StreamKind::Audio if essential => Some(aac_for(stream)),
+        StreamKind::Video if !stream.attached_pic => {
+            Some(StreamAction::EncodeVideo(Shape::of(stream)))
+        }
+        StreamKind::Audio if essential || standard::audio_is_heavy(stream) => Some(to_aac()),
         StreamKind::Audio if mp4_can_copy_audio(codec) => Some(StreamAction::Copy),
-        StreamKind::Audio => Some(aac_for(stream)),
+        StreamKind::Audio => Some(to_aac()),
         _ if essential => None,
         StreamKind::Video => matches!(codec, "mjpeg" | "png").then_some(StreamAction::Copy),
         StreamKind::Subtitle if codec == "mov_text" => Some(StreamAction::Copy),
@@ -221,26 +287,24 @@ fn stream_action(stream: &Stream, preservation: Preservation) -> Option<StreamAc
     }
 }
 
-/// AAC at 64 kbps per channel, between 128 and 512 kbps: transparent for normal listening.
-fn aac_for(stream: &Stream) -> StreamAction {
-    let channels = stream.channels.unwrap_or(2);
-    StreamAction::ToAac {
-        kbps: (64 * channels).clamp(128, 512),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::probe::Rate;
+    use crate::standard::NvencLevel;
     use StreamAction::*;
+
+    const SAME: StreamAction = EncodeVideo(Shape {
+        size: None,
+        rate: None,
+    });
 
     fn stream(index: u32, kind: StreamKind, codec: &str) -> Stream {
         Stream {
             index,
             kind,
             codec: codec.into(),
-            attached_pic: false,
-            channels: None,
+            ..Stream::default()
         }
     }
 
@@ -267,12 +331,25 @@ mod tests {
         }
     }
 
+    fn capabilities(nvenc: NvencLevel) -> Capabilities {
+        Capabilities {
+            encoder: VideoEncoder::Nvenc,
+            cuda_decode: true,
+            nvenc,
+            x265_10bit: true,
+            scale_cuda: true,
+            vmaf: true,
+        }
+    }
+
     fn plan(info: &MediaInfo, attempt: Attempt) -> EncodePlan {
         EncodePlan::new(
             Path::new(r"C:\in\a.mov"),
             Path::new(r"C:\in\a.part"),
             info,
             attempt,
+            capabilities(NvencLevel::Full),
+            standard::fallback_level(attempt.encoder),
         )
     }
 
@@ -308,18 +385,59 @@ mod tests {
     }
 
     #[test]
-    fn reference_nvenc_settings() {
+    fn standard_nvenc_settings() {
         let info = info(vec![
             stream(0, StreamKind::Video, "h264"),
             stream(1, StreamKind::Audio, "aac"),
         ]);
         let args = joined(&plan(&info, nvenc_full()));
         assert!(args.contains(
-            "-c:0 hevc_nvenc -preset:0 p6 -tune:0 hq -rc:0 vbr -cq:0 27 -b:0 0 -tag:0 hvc1"
+            "-c:0 hevc_nvenc -preset:0 p7 -tune:0 hq -rc:0 vbr -b:0 0 -profile:0 main10 \
+             -highbitdepth:0 1 -spatial-aq:0 1 -temporal-aq:0 1 -rc-lookahead:0 32 -bf:0 4 \
+             -b_ref_mode:0 middle -multipass:0 fullres -tf_level:0 4 -cq:0 27 -tag:0 hvc1"
         ));
         assert!(args.contains("-c:1 copy"));
         assert!(args.contains("-noautorotate -hwaccel cuda -hwaccel_output_format cuda -i file:"));
+        assert!(
+            !args.contains("-filter"),
+            "frames on the GPU need no conversion"
+        );
         assert!(args.ends_with(r"-f mp4 file:C:\in\a.part"));
+    }
+
+    #[test]
+    fn older_gpus_get_the_reference_settings() {
+        let info = info(vec![stream(0, StreamKind::Video, "h264")]);
+        let mut plan = plan(&info, nvenc_full());
+        plan.capabilities = capabilities(NvencLevel::Legacy);
+        plan.level = 31;
+        let args = joined(&plan);
+        assert!(args.contains(
+            "-c:0 hevc_nvenc -preset:0 p6 -tune:0 hq -rc:0 vbr -b:0 0 -cq:0 31 -tag:0 hvc1"
+        ));
+    }
+
+    #[test]
+    fn large_fast_videos_shrink_on_the_gpu_or_the_cpu() {
+        let mut source = stream(0, StreamKind::Video, "h264");
+        source.width = Some(3840);
+        source.height = Some(2160);
+        source.frame_rate = Some(Rate { num: 60, den: 1 });
+        let info = info(vec![source]);
+
+        let on_gpu = joined(&plan(&info, nvenc_full()));
+        assert!(
+            on_gpu.contains("-filter:0 fps=30/1,scale_cuda=w=1920:h=1080:interp_algo=lanczos -c:0")
+        );
+
+        let software = Attempt {
+            hw_decode: false,
+            ..nvenc_full()
+        };
+        let on_cpu = joined(&plan(&info, software));
+        assert!(
+            on_cpu.contains("-filter:0 fps=30/1,scale=w=1920:h=1080:flags=lanczos,format=p010le")
+        );
     }
 
     #[test]
@@ -344,8 +462,8 @@ mod tests {
         };
         let info = info(vec![stream(0, StreamKind::Video, "h264")]);
         let args = joined(&plan(&info, attempt));
-        assert!(args.contains("-c:0 libx265 -preset:0 medium -crf:0 26"));
-        assert!(args.contains("-tag:0 hvc1"));
+        assert!(args.contains("-filter:0 format=yuv420p10le -c:0 libx265 -preset:0 medium"));
+        assert!(args.contains("-crf:0 26 -tag:0 hvc1"));
         assert!(!args.contains("hwaccel"));
     }
 
@@ -369,10 +487,10 @@ mod tests {
         assert_eq!(
             actions(&plan),
             [
-                (0, EncodeVideo),
+                (0, SAME),
                 (1, Copy),
                 (2, ToAac { kbps: 128 }),
-                (3, Copy),
+                (3, ToAac { kbps: 384 }),
                 (4, ToMovText),
                 (7, Copy),
             ]
@@ -394,7 +512,7 @@ mod tests {
         assert_eq!(
             actions(&plan),
             [
-                (0, EncodeVideo),
+                (0, SAME),
                 (1, ToAac { kbps: 128 }),
                 (3, ToMovText),
                 (4, Copy)
@@ -418,7 +536,7 @@ mod tests {
             ..nvenc_full()
         };
         let plan = plan(&info, attempt);
-        assert_eq!(actions(&plan), [(0, EncodeVideo), (1, ToAac { kbps: 384 })]);
+        assert_eq!(actions(&plan), [(0, SAME), (1, ToAac { kbps: 384 })]);
         assert_eq!(plan.dropped, [2, 3]);
         assert!(joined(&plan).contains("-c:1 aac -b:1 384k"));
     }
@@ -442,6 +560,8 @@ mod tests {
             Path::new(r"C:\日本語\out.part"),
             &info,
             nvenc_full(),
+            capabilities(NvencLevel::Full),
+            27,
         );
         let args = plan.args();
         assert!(args.contains(&OsString::from(
@@ -451,10 +571,7 @@ mod tests {
 
     #[test]
     fn attempt_order_with_full_nvidia_support() {
-        let caps = Capabilities {
-            encoder: VideoEncoder::Nvenc,
-            cuda_decode: true,
-        };
+        let caps = capabilities(NvencLevel::Full);
         let list = attempts(caps);
         assert_eq!(list.len(), 4);
         assert_eq!(list[0], nvenc_full());
@@ -468,6 +585,7 @@ mod tests {
         let caps = Capabilities {
             encoder: VideoEncoder::X265,
             cuda_decode: false,
+            ..capabilities(NvencLevel::Legacy)
         };
         let list = attempts(caps);
         assert!(

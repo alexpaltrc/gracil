@@ -10,6 +10,7 @@ use std::process::Stdio;
 
 use tracing::info;
 
+use crate::standard::NvencLevel;
 use crate::toolchain::Toolchain;
 
 /// Encoder names reported by `ffmpeg -encoders`.
@@ -60,41 +61,84 @@ pub struct Capabilities {
     pub encoder: VideoEncoder,
     /// NVDEC decoding through CUDA. Only used together with NVENC.
     pub cuda_decode: bool,
+    /// The NVENC settings this GPU and driver accept (ADR 0028); `Legacy` without NVENC.
+    pub nvenc: NvencLevel,
+    /// x265 can encode 10-bit video.
+    pub x265_10bit: bool,
+    /// Resizing on the GPU, for videos decoded there.
+    pub scale_cuda: bool,
+    /// VMAF, to measure each video's quality level.
+    pub vmaf: bool,
 }
 
 impl Capabilities {
     pub fn detect(toolchain: &Toolchain, encoders: &Encoders) -> Self {
-        let nvenc = encoders.contains("hevc_nvenc") && nvenc_works(toolchain);
-        let cuda_decode = nvenc
+        let nvenc = encoders
+            .contains("hevc_nvenc")
+            .then(|| {
+                NvencLevel::BEST_FIRST
+                    .into_iter()
+                    .find(|&level| nvenc_works(toolchain, level))
+            })
+            .flatten();
+        let cuda_decode = nvenc.is_some()
             && capture(toolchain, &["-hide_banner", "-hwaccels"])
                 .is_ok_and(|listing| listing.lines().any(|line| line.trim() == "cuda"));
+        let filters = capture(toolchain, &["-hide_banner", "-filters"]).unwrap_or_default();
+        let x265_10bit = capture(toolchain, &["-hide_banner", "-h", "encoder=libx265"])
+            .is_ok_and(|help| help.contains("yuv420p10le"));
 
         let capabilities = Self {
-            encoder: if nvenc {
+            encoder: if nvenc.is_some() {
                 VideoEncoder::Nvenc
             } else {
                 VideoEncoder::X265
             },
             cuda_decode,
+            nvenc: nvenc.unwrap_or_default(),
+            x265_10bit,
+            scale_cuda: lists_filter(&filters, "scale_cuda"),
+            vmaf: lists_filter(&filters, "libvmaf"),
         };
         info!(?capabilities, "detected encoding capabilities");
         capabilities
     }
+
+    /// Whether `encoder` will write 10-bit video here.
+    pub fn ten_bit(&self, encoder: VideoEncoder) -> bool {
+        match encoder {
+            VideoEncoder::Nvenc => self.nvenc.ten_bit(),
+            VideoEncoder::X265 => self.x265_10bit,
+        }
+    }
 }
 
-/// Encodes three frames of a synthetic image with NVENC. Fails without a capable GPU and driver.
-fn nvenc_works(toolchain: &Toolchain) -> bool {
-    let status = toolchain
-        .ffmpeg()
+/// Encodes three frames of a synthetic image with NVENC and `level`'s settings. Fails without a
+/// capable GPU and driver, or when they do not accept those settings.
+fn nvenc_works(toolchain: &Toolchain, level: NvencLevel) -> bool {
+    let mut command = toolchain.ffmpeg();
+    command
         .args(["-hide_banner", "-v", "error", "-f", "lavfi", "-i"])
         .arg("color=c=black:s=256x256:r=30")
-        .args(["-frames:v", "3", "-c:v", "hevc_nvenc", "-f", "null", "-"])
+        .args(["-frames:v", "3", "-c:v", "hevc_nvenc"]);
+    for (name, value) in level.options() {
+        command.arg(format!("-{name}:v")).arg(value);
+    }
+    let status = command
+        .args(["-f", "null", "-"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
     let works = status.as_ref().is_ok_and(|s| s.success());
-    info!(works, ?status, "NVENC test encode");
+    info!(works, ?level, ?status, "NVENC test encode");
     works
+}
+
+/// Whether an `ffmpeg -filters` listing has `name`, in lines like ` .. libvmaf  VV->V  ...`.
+fn lists_filter(listing: &str, name: &str) -> bool {
+    listing
+        .lines()
+        .any(|line| line.split_whitespace().nth(1) == Some(name))
 }
 
 fn capture(toolchain: &Toolchain, args: &[&str]) -> io::Result<String> {
@@ -139,6 +183,15 @@ Encoders:
         for not_a_name in ["=", "Video", "------", "Encoders:", "H.265"] {
             assert!(!encoders.contains(not_a_name), "{not_a_name}");
         }
+    }
+
+    #[test]
+    fn finds_filters_by_name() {
+        let listing = "Filters:\n  T.. = Timeline support\n ... libvmaf           VV->V      Calculate the VMAF\n ... scale             V->V       Scale the input video\n";
+        assert!(lists_filter(listing, "libvmaf"));
+        assert!(lists_filter(listing, "scale"));
+        assert!(!lists_filter(listing, "scale_cuda"));
+        assert!(!lists_filter(listing, "Timeline"));
     }
 
     #[test]

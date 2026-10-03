@@ -1,5 +1,6 @@
 //! Running one FFmpeg encode and reporting its progress.
 
+use std::ffi::OsString;
 use std::io::{self, BufRead, BufReader, Read};
 use std::process::{Child, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -101,14 +102,28 @@ pub fn run(
     control: &JobControl,
     on_progress: &mut dyn FnMut(Progress),
 ) -> EncodeOutcome {
-    let failed = |error: String| EncodeOutcome::Failed {
-        error,
-        made_progress: false,
+    run_ffmpeg(toolchain, plan.args(), control, on_progress).0
+}
+
+/// Runs FFmpeg with `args` under `control`, like [`run`]. Also returns the end of its error
+/// output, where FFmpeg writes measurements as well as errors.
+pub(crate) fn run_ffmpeg(
+    toolchain: &Toolchain,
+    args: Vec<OsString>,
+    control: &JobControl,
+    on_progress: &mut dyn FnMut(Progress),
+) -> (EncodeOutcome, String) {
+    let failed = |error: String| {
+        let outcome = EncodeOutcome::Failed {
+            error,
+            made_progress: false,
+        };
+        (outcome, String::new())
     };
 
     let mut child = match toolchain
         .ffmpeg()
-        .args(plan.args())
+        .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -128,7 +143,7 @@ pub fn run(
             drop(slot);
             let _ = child.kill();
             let _ = child.wait();
-            return EncodeOutcome::Cancelled;
+            return (EncodeOutcome::Cancelled, String::new());
         }
         // Paused between attempts: the next one starts paused too.
         if let Some(suspend) = slot.paused
@@ -158,25 +173,26 @@ pub fn run(
         let status = slot.child.take().map(|mut child| child.wait());
         (status, slot.cancelled)
     };
-    let error = stderr_reader.join().unwrap_or_default();
+    let log = stderr_reader.join().unwrap_or_default();
 
-    match status {
+    let outcome = match status {
         _ if cancelled => EncodeOutcome::Cancelled,
         Some(Ok(status)) if status.success() => EncodeOutcome::Finished,
         Some(Ok(status)) => {
-            warn!(%status, %error, "FFmpeg failed");
+            warn!(%status, error = %log, "FFmpeg failed");
             EncodeOutcome::Failed {
-                error: if error.is_empty() {
+                error: if log.is_empty() {
                     format!("FFmpeg exited with {status}")
                 } else {
-                    error
+                    log.clone()
                 },
                 made_progress,
             }
         }
-        Some(Err(error)) => failed(format!("waiting for FFmpeg failed: {error}")),
-        None => failed("FFmpeg process lost".into()),
-    }
+        Some(Err(error)) => return failed(format!("waiting for FFmpeg failed: {error}")),
+        None => return failed("FFmpeg process lost".into()),
+    };
+    (outcome, log)
 }
 
 /// Reads `reader` to the end and returns its last `limit` bytes as text.

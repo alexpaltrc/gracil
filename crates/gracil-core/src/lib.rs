@@ -12,6 +12,8 @@ pub mod plan;
 pub mod probe;
 pub mod progress;
 pub mod queue;
+pub mod search;
+pub mod standard;
 pub mod toolchain;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

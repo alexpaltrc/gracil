@@ -10,17 +10,18 @@ use serde::Deserialize;
 
 use crate::toolchain::Toolchain;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StreamKind {
     Video,
     Audio,
     Subtitle,
     Data,
     Attachment,
+    #[default]
     Other,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Stream {
     /// Index of the stream in the source file.
     pub index: u32,
@@ -30,6 +31,36 @@ pub struct Stream {
     /// Cover art stored as a one-frame video stream.
     pub attached_pic: bool,
     pub channels: Option<u32>,
+    /// Picture size as stored, before any rotation.
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    /// Average frames per second.
+    pub frame_rate: Option<Rate>,
+    /// Bits per second, when the file records it.
+    pub bit_rate: Option<u64>,
+}
+
+/// A frame rate as FFmpeg writes it, such as `30000/1001`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rate {
+    pub num: u32,
+    pub den: u32,
+}
+
+impl Rate {
+    pub fn per_second(self) -> f64 {
+        f64::from(self.num) / f64::from(self.den)
+    }
+
+    /// Parses `num/den`; `0/0` and other unusable values are `None`.
+    fn parse(text: &str) -> Option<Self> {
+        let (num, den) = text.split_once('/')?;
+        let rate = Self {
+            num: num.parse().ok()?,
+            den: den.parse().ok()?,
+        };
+        (rate.num > 0 && rate.den > 0).then_some(rate)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -113,6 +144,13 @@ struct RawStream {
     #[serde(default)]
     codec_name: String,
     channels: Option<u32>,
+    width: Option<u32>,
+    height: Option<u32>,
+    #[serde(default)]
+    avg_frame_rate: String,
+    #[serde(default)]
+    r_frame_rate: String,
+    bit_rate: Option<String>,
     #[serde(default)]
     disposition: BTreeMap<String, u8>,
 }
@@ -135,6 +173,10 @@ fn parse(json: &[u8]) -> Result<MediaInfo, ProbeError> {
             attached_pic: s.disposition.get("attached_pic") == Some(&1),
             codec: s.codec_name,
             channels: s.channels,
+            width: s.width.filter(|&w| w > 0),
+            height: s.height.filter(|&h| h > 0),
+            frame_rate: Rate::parse(&s.avg_frame_rate).or_else(|| Rate::parse(&s.r_frame_rate)),
+            bit_rate: s.bit_rate.and_then(|b| b.parse().ok()).filter(|&b| b > 0),
         })
         .collect();
     let duration = raw
@@ -158,8 +200,10 @@ mod tests {
     fn parses_streams_duration_and_tags() {
         let json = br#"{
             "streams": [
-                {"index": 0, "codec_type": "video", "codec_name": "h264", "disposition": {"attached_pic": 0}},
-                {"index": 1, "codec_type": "audio", "codec_name": "aac", "channels": 2},
+                {"index": 0, "codec_type": "video", "codec_name": "h264", "width": 3840, "height": 2160,
+                 "avg_frame_rate": "60000/1001", "r_frame_rate": "60/1", "disposition": {"attached_pic": 0}},
+                {"index": 1, "codec_type": "audio", "codec_name": "aac", "channels": 2,
+                 "avg_frame_rate": "0/0", "bit_rate": "128000"},
                 {"index": 2, "codec_type": "data"},
                 {"index": 3, "codec_type": "video", "codec_name": "mjpeg", "disposition": {"attached_pic": 1}}
             ],
@@ -169,6 +213,18 @@ mod tests {
         assert_eq!(info.duration, Some(Duration::from_millis(12_500)));
         assert_eq!(info.streams.len(), 4);
         assert_eq!(info.streams[1].channels, Some(2));
+        let video = &info.streams[0];
+        assert_eq!((video.width, video.height), (Some(3840), Some(2160)));
+        assert_eq!(
+            video.frame_rate,
+            Some(Rate {
+                num: 60000,
+                den: 1001
+            })
+        );
+        assert_eq!(info.streams[1].frame_rate, None);
+        assert_eq!(info.streams[1].bit_rate, Some(128_000));
+        assert_eq!(info.streams[3].width, None);
         assert_eq!(info.streams[2].kind, StreamKind::Data);
         assert_eq!(info.streams[2].codec, "");
         assert!(info.streams[3].attached_pic);

@@ -17,6 +17,7 @@ use crate::leftovers;
 use crate::plan::{self, Attempt, EncodePlan};
 use crate::probe::{self, MediaInfo, ProbeError, StreamKind};
 use crate::progress::fraction;
+use crate::search::{self, Found};
 use crate::toolchain::{self, Resolved, Toolchain, ToolchainError};
 
 /// A ready FFmpeg and what it can do on this computer. Built once per process.
@@ -102,13 +103,50 @@ fn run_attempts(
     control: &JobControl,
     on_update: &mut dyn FnMut(Update),
 ) -> Result<Compressed, CompressError> {
+    let capabilities = engine.capabilities;
+    let plan_for =
+        |attempt: Attempt, level| EncodePlan::new(source, temp, info, attempt, capabilities, level);
+    // Resizing frames left on the GPU needs `scale_cuda`; without it those attempts are skipped.
+    let attempts: Vec<Attempt> = plan::attempts(capabilities)
+        .into_iter()
+        .filter(|&attempt| {
+            let resizes = || {
+                plan_for(attempt, 0)
+                    .main_video()
+                    .is_some_and(|(_, shape)| shape.size.is_some())
+            };
+            !attempt.hw_decode || capabilities.scale_cuda || !resizes()
+        })
+        .collect();
+
+    // Shown as "getting ready" until the first attempt reports progress; Stop works throughout.
+    on_update(Update {
+        fraction: fraction(Duration::ZERO, info.duration),
+        speed: None,
+    });
+    let found = match attempts.first() {
+        Some(&first) => {
+            let fallback = Found::Fallback.level_for(first.encoder);
+            search::find_level(
+                &engine.toolchain,
+                &plan_for(first, fallback),
+                info.duration,
+                control,
+            )
+        }
+        None => Found::Fallback,
+    };
+    if found == Found::Cancelled {
+        return Err(CompressError::Cancelled);
+    }
+
     let mut last_error = String::new();
-    for attempt in plan::attempts(engine.capabilities) {
+    for attempt in attempts {
         if control.is_cancelled() {
             return Err(CompressError::Cancelled);
         }
-        let plan = EncodePlan::new(source, temp, info, attempt);
-        info!(?attempt, dropped = ?plan.dropped, "encoding");
+        let plan = plan_for(attempt, found.level_for(attempt.encoder));
+        info!(?attempt, level = plan.level, dropped = ?plan.dropped, "encoding");
         on_update(Update {
             fraction: fraction(Duration::ZERO, info.duration),
             speed: None,
