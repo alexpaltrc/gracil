@@ -16,6 +16,10 @@ use gracil_core::output::save_as_new;
 use gracil_core::toolchain;
 
 fn main() {
+    // Shows the engine's decisions, such as the quality level each video gets.
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .init();
     let sources: Vec<_> = std::env::args_os().skip(1).collect();
     if sources.is_empty() {
         eprintln!("usage: compress <video>...");
