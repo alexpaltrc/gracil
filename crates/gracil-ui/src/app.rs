@@ -668,6 +668,9 @@ impl Gracil {
         if let Some(tray) = &self.tray {
             tray.remove();
         }
+        // A replaced video's parked original may still be in another program's hands for a
+        // moment; anything left after this is removed at the next start.
+        gracil_core::output::finish_tidying(Duration::from_secs(5));
         info!("Gracil exited");
         logging::finish();
         std::process::exit(0)

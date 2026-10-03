@@ -4,7 +4,8 @@
 use std::fs::{self, File, FileTimes};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::sync::{Mutex, MutexGuard};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::leftovers;
 use crate::naming::save_as_new_candidate;
@@ -116,10 +117,84 @@ fn set_times(path: &Path, times: FileTimes) {
     }
 }
 
+/// Leftovers another program still had open when they were due to go, still being retried.
+static STUBBORN: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+/// How long to wait before each new try at a stubborn leftover: about a minute in all.
+const RETRY_DELAYS: [Duration; 9] = [
+    Duration::from_millis(100),
+    Duration::from_millis(250),
+    Duration::from_millis(500),
+    Duration::from_secs(1),
+    Duration::from_secs(2),
+    Duration::from_secs(4),
+    Duration::from_secs(8),
+    Duration::from_secs(15),
+    Duration::from_secs(30),
+];
+
+/// Removes a file Gracil no longer needs. A moment after a video is replaced, other programs often
+/// open the file that just appeared (antivirus, search indexing, File Explorer's thumbnails), so
+/// the first try may fail; it is tried again in the background, and whatever is still left then
+/// is settled the next time Gracil starts (`leftovers::sweep`).
 fn tidy(leftover: &Path) {
-    if let Err(error) = fs::remove_file(leftover) {
-        warn!(%error, ?leftover, "could not remove a leftover file");
+    if remove(leftover) {
+        return;
     }
+    warn!(?leftover, "a leftover file is in use; trying again shortly");
+    stubborn().push(leftover.to_owned());
+    let leftover = leftover.to_owned();
+    std::thread::spawn(move || {
+        for delay in RETRY_DELAYS {
+            std::thread::sleep(delay);
+            if retry(&leftover) {
+                return;
+            }
+        }
+        warn!(
+            ?leftover,
+            "could not remove a leftover file; it is removed at the next start"
+        );
+    });
+}
+
+/// Tries the stubborn leftovers until none is left or `within` has passed. Call before Gracil
+/// quits, so it doesn't leave behind a file it was about to remove.
+pub fn finish_tidying(within: Duration) {
+    let deadline = Instant::now() + within;
+    loop {
+        let left: Vec<PathBuf> = stubborn().clone();
+        if left.is_empty() || Instant::now() >= deadline {
+            return;
+        }
+        for leftover in &left {
+            retry(leftover);
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// One more try at a stubborn leftover; `true` once it is gone, whoever removed it.
+fn retry(leftover: &Path) -> bool {
+    let gone = remove(leftover);
+    if gone {
+        stubborn().retain(|path| path != leftover);
+    }
+    gone
+}
+
+/// Removes `leftover`; `true` if it is gone.
+fn remove(leftover: &Path) -> bool {
+    match fs::remove_file(leftover) {
+        Ok(()) => true,
+        Err(error) => error.kind() == io::ErrorKind::NotFound,
+    }
+}
+
+fn stubborn() -> MutexGuard<'static, Vec<PathBuf>> {
+    STUBBORN
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// The original's creation date, so the video keeps its place. The modified date is set to the
@@ -176,6 +251,45 @@ mod tests {
     fn failing_swap(original: &Path, _replacement: &Path, backup: &Path) -> io::Result<()> {
         fs::rename(original, backup)?;
         Err(io::Error::other("power cut"))
+    }
+
+    /// The parked original, held open by "another program" after [`swap_then_scanned`].
+    #[cfg(windows)]
+    static HELD: Mutex<Option<File>> = Mutex::new(None);
+
+    /// Swaps, then opens the parked original without letting anyone delete it, as an antivirus or
+    /// File Explorer may do with a file that just appeared.
+    #[cfg(windows)]
+    fn swap_then_scanned(original: &Path, replacement: &Path, backup: &Path) -> io::Result<()> {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_READ: u32 = 1;
+        rename_swap(original, replacement, backup)?;
+        let held = File::options()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(backup)?;
+        *HELD.lock().unwrap() = Some(held);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_parked_original_in_use_is_removed_once_released() {
+        let dir = fresh_dir("in-use");
+        let source = dir.join("Clip.mp4");
+        let temp = dir.join("Clip.mp4.gracil-1.part");
+        fs::write(&source, b"original").unwrap();
+        fs::write(&temp, b"compressed").unwrap();
+
+        replace_original(&temp, &source, swap_then_scanned).unwrap();
+        let kept_while_held = temp.with_extension("bak").exists();
+        HELD.lock().unwrap().take();
+        finish_tidying(Duration::from_secs(5));
+        let entries = fs::read_dir(&dir).unwrap().count();
+        fs::remove_dir_all(&dir).unwrap();
+
+        assert!(kept_while_held);
+        assert_eq!(entries, 1, "the parked original is gone once released");
     }
 
     fn an_hour_ago() -> std::time::SystemTime {

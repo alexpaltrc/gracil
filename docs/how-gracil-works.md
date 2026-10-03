@@ -169,6 +169,11 @@ Gracil never writes over your video while it works.
 - When you replace the original, the swap is done with Windows' own safe replacement, which
   keeps your original aside until the new file is fully in place. If anything goes wrong, your
   original is put back.
+- While it is set aside, your original sits next to the video for a moment with a name like
+  `Clip.mp4.gracil-1a2b3.bak`, and Gracil removes it once the smaller video is in place. Right
+  then, other programs (your antivirus, Windows search, File Explorer's thumbnails) sometimes
+  open it briefly, so Gracil may not be able to remove it at once. It keeps trying for about a
+  minute, and anything still left is removed the next time Gracil starts.
 - If Gracil is closed suddenly (the computer loses power, or Gracil is forced to quit), the
   compression it was doing stops with it; nothing keeps working in the background. It may leave
   its temporary files behind. The next time Gracil starts, it tidies them away. If it was

@@ -25,6 +25,15 @@ compresses the videos. The small window next to the clock opens so you can watch
 turned that off. When the work is done and you've closed the small window, Gracil quits again by
 itself. The next time you sign in to Windows, it starts as usual.
 
+## After replacing a video, a file ending in ".bak" appeared next to it. What is it?
+
+It's your original video, set aside while Gracil put the smaller one in its place, for example
+`Clip.mp4.gracil-1a2b3.bak`. Gracil removes it as soon as the smaller video is in place. If
+another program was looking at the file just then (your antivirus, Windows search or File
+Explorer's thumbnails often do, for a moment), Gracil keeps trying for about a minute, and if it
+still can't, it removes the file the next time it starts. You can also delete it yourself: the
+smaller video is already in place.
+
 ## Why does Windows show Gracil's version as 0.0.1.0?
 
 Gracil's version is 0.0.1. Windows writes the version of every app installed this way with four
