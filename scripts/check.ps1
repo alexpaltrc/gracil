@@ -1,5 +1,6 @@
 # Runs the same checks every commit must pass: formatting, Clippy and tests.
-$ErrorActionPreference = 'Stop'
+# Exit codes are checked explicitly: Windows PowerShell treats cargo's progress output on stderr
+# as errors when redirected, so `$ErrorActionPreference = 'Stop'` would abort a passing run.
 Set-Location (Split-Path $PSScriptRoot -Parent)
 
 cargo fmt --all -- --check
