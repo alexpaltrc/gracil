@@ -366,7 +366,7 @@ impl Gracil {
                     self.main = None;
                     self.confirming_exit = false;
                 }
-                window::close(id)
+                dismiss(id)
             }
             Message::ConfirmExit => {
                 self.exit_now();
@@ -440,7 +440,7 @@ impl Gracil {
 
     fn close_mini(&mut self) -> Task<Message> {
         match self.mini.take() {
-            Some(id) => window::close(id),
+            Some(id) => dismiss(id),
             None => Task::none(),
         }
     }
@@ -854,4 +854,11 @@ async fn choose_files(text: &'static Text) -> Vec<PathBuf> {
 /// Slow at both ends, so the change of theme settles in rather than snapping.
 fn ease_in_out(t: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
+}
+
+/// Closes a window without a white flash: Windows animates a closing window, and once its surface
+/// is gone that animation shows a blank white frame. Hidden first, the window leaves with its
+/// picture intact, and only then is it destroyed.
+fn dismiss(id: window::Id) -> Task<Message> {
+    window::set_mode::<Message>(id, window::Mode::Hidden).chain(window::close(id))
 }
