@@ -23,6 +23,10 @@ Requirements: Windows 11 x64, Rust stable (MSVC), Windows 11 SDK, Git. Details i
 | Path | Contents |
 |---|---|
 | `crates/gracil-core` | The compression engine. Independent from the UI. |
+| `crates/gracil-ui` | The Gracil app: windows, tray, mini-window |
+| `crates/gracil-windows` | Windows integration: single instance, pipe, tray icon, safe replace |
+| `crates/gracil-shell` | File Explorer's Gracil menu |
+| `packaging/msix/` | The package manifest, its identity and its images |
 | `docs/how-gracil-works.md` | How Gracil works, in plain language, for users |
 | `docs/specification.md` | Product and engineering specification |
 | `docs/architecture/` | How Gracil is put together |
@@ -30,8 +34,8 @@ Requirements: Windows 11 x64, Rust stable (MSVC), Windows 11 SDK, Git. Details i
 | `docs/development/` | Setup, versioning, release process |
 | `scripts/` | Development scripts |
 
-Further crates (`gracil-ui`, `gracil-windows`, `gracil-shell`) and the `packaging/` folder are
-added in the milestones that need them; see [docs/architecture/overview.md](docs/architecture/overview.md).
+How the crates fit together: [docs/architecture/overview.md](docs/architecture/overview.md). Building
+the package: [docs/development/packaging.md](docs/development/packaging.md).
 
 ## Main dependencies
 

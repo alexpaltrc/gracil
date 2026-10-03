@@ -1,0 +1,4 @@
+# Link the C runtime into gracil.exe and gracil_shell.dll, so the MSIX package needs no
+# Visual C++ runtime framework and the menu DLL inside File Explorer brings what it uses (ADR 0023).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

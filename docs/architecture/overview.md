@@ -99,8 +99,9 @@ folder with as many paths as fit on its command line and forwards the rest (ADR 
 
 ## Data on disk
 
-- Settings: `%LOCALAPPDATA%\Gracil\settings.json` (redirected into the package's private folder
-  when running as MSIX).
+- Settings: `%LOCALAPPDATA%\Gracil\settings.txt`, one `name=value` per line.
+- When Gracil runs from its package, what it writes under `%LOCALAPPDATA%` lands in the package's
+  private folder and is removed on uninstall (ADR 0023).
 - Logs: `%LOCALAPPDATA%\Gracil\logs\`, one plain-text file per day, the last seven kept.
 - No job history is persisted.
 
