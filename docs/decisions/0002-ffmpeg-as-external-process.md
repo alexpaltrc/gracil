@@ -1,0 +1,15 @@
+# 0002 — FFmpeg runs as a bundled external process
+
+**Status:** Accepted
+
+**Context.** Linking FFmpeg libraries would put codec crashes inside Gracil's process, tie Gracil
+to FFmpeg's C API and complicate licensing. Gracil only needs to start, observe, suspend and stop
+encodes.
+
+**Decision.** Ship known `ffmpeg.exe` and `ffprobe.exe` builds inside the package and run them with
+structured arguments (`std::process::Command`, never a shell). Resolve them relative to
+`gracil.exe`, never through `PATH`. Read progress from `-progress pipe:1`.
+
+**Consequences.** An FFmpeg crash fails one job, not the app. Pause works by suspending the
+process. FFmpeg can be upgraded by replacing two files plus its provenance notes. The libx265 CPU
+encoder requires a GPL FFmpeg build; its licensing obligations are documented with the binaries.
