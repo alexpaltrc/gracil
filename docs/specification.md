@@ -393,6 +393,9 @@ The currently active video gets visual priority. The remaining queue stays visua
 The exact typography, spacing, animation and visual appearance are not final. The interaction
 model IS final.
 
+*Current look (ADR 0014):* progress is a ring the marble fills clockwise, with pause/play and
+stop as symbols in its middle instead of the words in the sketch.
+
 # 32. Drawer behavior
 
 Selecting the subtle file-count control opens the file drawer, which lets the user inspect the

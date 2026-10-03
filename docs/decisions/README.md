@@ -18,3 +18,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0011](0011-english-and-spanish.md) | Gracil speaks English and Spanish, following Windows |
 | [0012](0012-every-result-is-mp4.md) | Every compressed video is an MP4 |
 | [0013](0013-pause-suspends-ffmpeg.md) | Pause suspends FFmpeg's threads |
+| [0014](0014-progress-dial.md) | Progress is a dial that holds the controls |

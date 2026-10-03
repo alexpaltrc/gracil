@@ -4,7 +4,7 @@
 //! ever refer to these names, so restyling Gracil happens here.
 
 use iced::theme::{Mode, Palette};
-use iced::widget::{button, container, progress_bar, text};
+use iced::widget::{button, container, text};
 use iced::{Background, Border, Color, Font, Theme};
 
 pub const FONT: Font = Font::with_name("Segoe UI Variable Text");
@@ -25,7 +25,6 @@ pub mod size {
 }
 
 pub const RADIUS: f32 = 12.0;
-pub const PROGRESS_GIRTH: f32 = 4.0;
 
 pub fn theme(mode: Mode) -> Theme {
     match mode {
@@ -103,15 +102,6 @@ pub fn action_button(theme: &Theme, status: button::Status) -> button::Style {
         text_color,
         border: Border::default().rounded(RADIUS),
         ..button::Style::default()
-    }
-}
-
-pub fn progress(theme: &Theme) -> progress_bar::Style {
-    let palette = theme.palette();
-    progress_bar::Style {
-        background: Background::Color(palette.text.scale_alpha(0.08)),
-        bar: Background::Color(palette.primary),
-        border: Border::default().rounded(PROGRESS_GIRTH / 2.0),
     }
 }
 

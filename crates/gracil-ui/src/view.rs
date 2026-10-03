@@ -4,12 +4,11 @@ use gracil_core::job::JobState;
 use gracil_core::plan::output_extension;
 use gracil_core::queue::Job;
 use iced::widget::text::Wrapping;
-use iced::widget::{
-    Space, button, column, container, progress_bar, row, scrollable, text, tooltip,
-};
+use iced::widget::{Canvas, Space, button, column, container, row, scrollable, text, tooltip};
 use iced::{Center, Element, Fill, window};
 
 use crate::app::{EngineState, Gracil, Message};
+use crate::dial::{self, Dial};
 use crate::style::{self, size, space};
 use crate::work::{Choice, Failure, Outcome};
 
@@ -60,31 +59,19 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         .max_width(320);
 
     if job.state.is_active() {
-        content = content.push(
-            progress_bar(0.0..=1.0, job.fraction.unwrap_or(0.0) as f32)
-                .girth(style::PROGRESS_GIRTH)
-                .style(style::progress),
-        );
+        let dial = Dial {
+            job: job.id,
+            fraction: job.fraction,
+            paused: job.state == JobState::Paused,
+            // Pause only once FFmpeg is compressing; before that there is nothing to hold.
+            can_pause: job.state == JobState::Compressing,
+        };
+        content = content.push(Canvas::new(dial).width(dial::SIZE).height(dial::SIZE));
     }
 
     let mut details = column![status_line(&status(state, job), size::BODY)]
         .spacing(space::S)
         .align_x(Center);
-    if job.state.is_active() {
-        let quiet = |label: &'static str, message: Option<Message>| {
-            button(text(label).size(size::CAPTION))
-                .style(style::quiet_button)
-                .on_press_maybe(message)
-        };
-        // Pause only once FFmpeg is compressing; before that there is nothing to hold.
-        let pause = match job.state {
-            JobState::Paused => quiet(state.text.resume, Some(Message::Resume)),
-            JobState::Compressing => quiet(state.text.pause, Some(Message::Pause)),
-            _ => quiet(state.text.pause, None),
-        };
-        details = details
-            .push(row![pause, quiet(state.text.cancel, Some(Message::Cancel))].spacing(space::S));
-    }
     match state.outcomes.get(&job.id) {
         Some(Outcome::Ready { placing, .. }) => {
             details = details.push(choices(state, job, !placing));

@@ -5,6 +5,7 @@
 #![windows_subsystem = "windows"]
 
 mod app;
+mod dial;
 mod logging;
 mod style;
 mod text;

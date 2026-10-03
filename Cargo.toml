@@ -26,7 +26,7 @@ strip = "symbols"
 [workspace.dependencies]
 gracil-core = { path = "crates/gracil-core" }
 gracil-windows = { path = "crates/gracil-windows" }
-iced = { version = "0.14.0", default-features = false, features = ["wgpu", "thread-pool"] }
+iced = { version = "0.14.0", default-features = false, features = ["wgpu", "thread-pool", "canvas"] }
 rfd = { version = "0.17.2", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"

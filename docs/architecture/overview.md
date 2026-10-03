@@ -48,7 +48,8 @@ attempts, from fastest to most forgiving: NVENC with CUDA decoding → NVENC wit
 `libx265` full, then essential). See [`../development/ffmpeg.md`](../development/ffmpeg.md).
 
 **The window.** `gracil-ui` is an Iced daemon. `app` holds the state and reacts to messages,
-`view` draws Focus + Drawer from that state alone, `work` runs the engine and each compression on
+`view` draws Focus + Drawer from that state alone (`dial` draws the progress ring and its
+controls, ADR 0014), `work` runs the engine and each compression on
 their own threads and reports back as messages, `style` holds every design token, and `text` every
 word shown, in English and Spanish (ADR 0011). Paths given on the command line are queued like
 dropped files. A finished result waits in its temporary file until the user chooses Replace or

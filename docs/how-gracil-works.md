@@ -23,10 +23,15 @@ Drop videos onto the window, or choose them with **or choose files**. You can ad
 time, even while Gracil is working.
 
 - Gracil compresses one video at a time, in the order you added them. The one being compressed
-  is shown large, with its progress and **Pause** and **Cancel** buttons.
-- **Pause** freezes the work exactly where it is, and Gracil stops using the processor and
-  graphics card. **Resume** carries on from the same point; nothing is lost or started over. You
-  can also cancel while paused.
+  is shown large, inside a ring: a marble rolls around it clockwise from the top as the work
+  advances, and when it gets back to the top the video is done. The percentage is written just
+  below.
+- The middle of the ring holds the controls. Its top part is **pause** (II); click it and it turns
+  into **play** (▶), which resumes. Its bottom part, under a thin line, is **stop** (■), which
+  cancels. While Gracil is still getting ready, only stop works.
+- Pausing freezes the work exactly where it is, and Gracil stops using the processor and
+  graphics card. Resuming carries on from the same point; nothing is lost or started over. You
+  can also stop while paused.
 - **View files**, under it, shows every video you added and how each one went: how much smaller
   it became, or why it couldn't be compressed. Click a video there to show it large. The **×**
   beside it takes it off the list, and **Clear** empties the list. Neither touches your original.
