@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 gracil-core.workspace = true
+gracil-windows.workspace = true
 iced.workspace = true
 rfd.workspace = true
 tracing.workspace = true

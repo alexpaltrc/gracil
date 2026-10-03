@@ -1,14 +1,15 @@
-//! Background work: starting the engine and compressing, each on its own thread so the window
-//! never waits on FFmpeg.
+//! Background work: starting the engine, compressing and placing results, each on its own thread
+//! so the window never waits on FFmpeg or the disk.
 
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
 
 use gracil_core::compress::{CompressError, Compressed, Engine, compress};
 use gracil_core::encode::JobControl;
-use gracil_core::output::save_as_new;
+use gracil_core::output::{replace_original, save_as_new};
 use gracil_core::toolchain;
 use iced::Task;
 use iced::futures::SinkExt;
@@ -16,14 +17,15 @@ use iced::futures::channel::mpsc::{self, Sender};
 use iced::futures::executor::block_on;
 use tracing::{error, info, warn};
 
-/// Why a video could not be compressed, in the terms the user sees.
+/// Why a video could not be compressed or placed, in the terms the user sees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Failure {
     NoVideo,
     Unreadable,
     CouldNotCompress,
-    CouldNotSave,
     NotSmaller,
+    CouldNotSave,
+    NameTaken,
 }
 
 impl Failure {
@@ -32,23 +34,48 @@ impl Failure {
             Self::NoVideo => "This file has no video",
             Self::Unreadable => "This file can't be opened as a video",
             Self::CouldNotCompress => "This video couldn't be compressed",
-            Self::CouldNotSave => "The compressed video couldn't be saved in this folder",
             Self::NotSmaller => {
-                "This video couldn't be made smaller than the original, so it wasn't saved"
+                "This video couldn't be made smaller than the original, so it isn't saved"
+            }
+            Self::CouldNotSave => "The compressed video couldn't be saved in this folder",
+            Self::NameTaken => {
+                "Another file already has this video's new name, so the original was kept"
             }
         }
     }
 }
 
+/// What the user chooses to do with a finished result (spec §37.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Choice {
+    Replace,
+    SaveCopy,
+}
+
 #[derive(Debug, Clone)]
 pub enum Outcome {
-    /// `smaller_by` is the share of the original size that was saved, from 0 to 1.
-    Saved {
+    /// Compressed and validated, waiting in `temp` for the user to choose.
+    Ready {
+        temp: PathBuf,
+        smaller_by: f64,
+        placing: bool,
+        /// Why the last attempt to place it failed, if it did.
+        problem: Option<Failure>,
+    },
+    Placed {
+        choice: Choice,
         path: PathBuf,
         smaller_by: f64,
     },
     Failed(Failure),
     Cancelled,
+}
+
+impl Outcome {
+    /// Compressed, and waiting for the user to choose replace or copy.
+    pub fn is_waiting(&self) -> bool {
+        matches!(self, Self::Ready { placing: false, .. })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -69,7 +96,7 @@ pub fn start_engine() -> Task<Option<Arc<Engine>>> {
     })
 }
 
-/// Compresses `source` and saves the result beside it.
+/// Compresses `source`, leaving the result beside it for the user to place.
 pub fn compress_video(engine: Arc<Engine>, source: PathBuf, control: JobControl) -> Task<Report> {
     on_thread(move |mut sender: Sender<Report>| {
         let mut progress = sender.clone();
@@ -79,7 +106,7 @@ pub fn compress_video(engine: Arc<Engine>, source: PathBuf, control: JobControl)
         });
 
         let outcome = match result {
-            Ok(compressed) => keep(&compressed, &source),
+            Ok(compressed) => ready(compressed, &source),
             Err(CompressError::Cancelled) => Outcome::Cancelled,
             Err(e) => {
                 warn!(error = %e, "compression failed");
@@ -97,34 +124,44 @@ pub fn compress_video(engine: Arc<Engine>, source: PathBuf, control: JobControl)
     })
 }
 
-/// Saves the compressed copy beside the source, unless it is not smaller (spec §40.1).
-fn keep(compressed: &Compressed, source: &Path) -> Outcome {
+/// Keeps the result for the user, unless it is not smaller (spec §40.1).
+fn ready(compressed: Compressed, source: &Path) -> Outcome {
     let original = fs::metadata(source).map_or(0, |metadata| metadata.len());
-    let saved = if compressed.size < original {
-        save_as_new(&compressed.temp, source).map_err(|e| {
-            warn!(error = %e, "could not place compressed copy");
-            Failure::CouldNotSave
-        })
-    } else {
-        info!(
-            original,
-            compressed = compressed.size,
-            "result not smaller; not saved"
-        );
-        Err(Failure::NotSmaller)
-    };
-    match saved {
-        Ok(path) => {
-            info!(?compressed.attempt, original, compressed = compressed.size, "saved compressed copy");
-            Outcome::Saved {
-                path,
-                smaller_by: 1.0 - compressed.size as f64 / original as f64,
+    info!(?compressed.attempt, original, compressed = compressed.size, "compressed");
+    if compressed.size >= original {
+        discard(&compressed.temp);
+        return Outcome::Failed(Failure::NotSmaller);
+    }
+    Outcome::Ready {
+        temp: compressed.temp,
+        smaller_by: 1.0 - compressed.size as f64 / original as f64,
+        placing: false,
+        problem: None,
+    }
+}
+
+/// Puts a result in place of the original or beside it. Returns where it ended up.
+pub fn place(temp: PathBuf, source: PathBuf, choice: Choice) -> Task<Result<PathBuf, Failure>> {
+    on_thread(move |mut sender: Sender<Result<PathBuf, Failure>>| {
+        let placed = match choice {
+            Choice::Replace => replace_original(&temp, &source, gracil_windows::replace_file),
+            Choice::SaveCopy => save_as_new(&temp, &source),
+        }
+        .map_err(|e| {
+            warn!(error = %e, ?choice, "could not place result");
+            match e.kind() {
+                io::ErrorKind::AlreadyExists => Failure::NameTaken,
+                _ => Failure::CouldNotSave,
             }
-        }
-        Err(failure) => {
-            let _ = fs::remove_file(&compressed.temp);
-            Outcome::Failed(failure)
-        }
+        });
+        let _ = block_on(sender.send(placed));
+    })
+}
+
+/// Deletes a result the user did not keep. The original is never involved.
+pub fn discard(temp: &Path) {
+    if let Err(error) = fs::remove_file(temp) {
+        warn!(%error, ?temp, "could not remove an unused result");
     }
 }
 

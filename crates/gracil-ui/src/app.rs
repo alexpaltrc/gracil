@@ -6,14 +6,14 @@ use std::sync::Arc;
 
 use gracil_core::compress::Engine;
 use gracil_core::encode::JobControl;
-use gracil_core::job::JobEvent;
-use gracil_core::queue::{JobId, Queue};
+use gracil_core::job::{JobEvent, JobState};
+use gracil_core::queue::{Job, JobId, Queue};
 use iced::theme::Mode;
 use iced::{Event, Size, Subscription, Task, Theme, event, system, window};
 use tracing::warn;
 
 use crate::style;
-use crate::work::{self, Outcome, Report};
+use crate::work::{self, Choice, Failure, Outcome, Report};
 
 pub struct Gracil {
     pub queue: Queue,
@@ -21,6 +21,8 @@ pub struct Gracil {
     pub engine: EngineState,
     pub hovering_files: bool,
     pub drawer_open: bool,
+    /// The video the user picked in the drawer to look at, if any.
+    pub selected: Option<JobId>,
     theme: Theme,
     running: Option<(JobId, JobControl)>,
 }
@@ -43,6 +45,13 @@ pub enum Message {
     ChooseFiles,
     FilesChosen(Vec<PathBuf>),
     Job(JobId, Report),
+    Cancel,
+    Choose(JobId, Choice),
+    ChooseAll(Choice),
+    Placed(JobId, Choice, Result<PathBuf, Failure>),
+    Select(JobId),
+    Remove(JobId),
+    Clear,
     ToggleDrawer,
     ThemeChanged(Mode),
     CloseRequested,
@@ -51,8 +60,8 @@ pub enum Message {
 impl Gracil {
     pub fn boot() -> (Self, Task<Message>) {
         let (_, open) = window::open(window::Settings {
-            size: Size::new(440.0, 420.0),
-            min_size: Some(Size::new(360.0, 320.0)),
+            size: Size::new(440.0, 440.0),
+            min_size: Some(Size::new(360.0, 340.0)),
             exit_on_close_request: false,
             ..window::Settings::default()
         });
@@ -62,6 +71,7 @@ impl Gracil {
             engine: EngineState::Starting,
             hovering_files: false,
             drawer_open: false,
+            selected: None,
             theme: style::theme(Mode::Light),
             running: None,
         };
@@ -123,6 +133,45 @@ impl Gracil {
             Message::ChooseFiles => Task::perform(choose_files(), Message::FilesChosen),
             Message::FilesChosen(paths) => self.add(paths),
             Message::Job(id, report) => self.on_report(id, report),
+            Message::Cancel => {
+                if let Some((_, control)) = &self.running {
+                    control.cancel();
+                }
+                Task::none()
+            }
+            Message::Choose(id, choice) => self.choose(id, choice),
+            Message::ChooseAll(choice) => {
+                let waiting: Vec<JobId> = self
+                    .queue
+                    .jobs()
+                    .iter()
+                    .map(|job| job.id)
+                    .filter(|id| self.outcomes.get(id).is_some_and(Outcome::is_waiting))
+                    .collect();
+                Task::batch(waiting.into_iter().map(|id| self.choose(id, choice)))
+            }
+            Message::Placed(id, choice, placed) => {
+                self.placed(id, choice, placed);
+                Task::none()
+            }
+            Message::Select(id) => {
+                self.selected = Some(id);
+                Task::none()
+            }
+            Message::Remove(id) => {
+                self.remove(id);
+                Task::none()
+            }
+            Message::Clear => {
+                let ids: Vec<JobId> = self.queue.jobs().iter().map(|job| job.id).collect();
+                for id in ids {
+                    self.remove(id);
+                }
+                if self.queue.is_empty() {
+                    self.drawer_open = false;
+                }
+                Task::none()
+            }
             Message::ToggleDrawer => {
                 self.drawer_open = !self.drawer_open;
                 Task::none()
@@ -132,13 +181,48 @@ impl Gracil {
                 Task::none()
             }
             Message::CloseRequested => {
-                // Until the tray arrives (M5), closing quits. FFmpeg must not outlive Gracil.
+                // Until the tray arrives (M5), closing quits. FFmpeg must not outlive Gracil, and
+                // results nobody chose for are not left behind (ADR 0009).
                 if let Some((_, control)) = &self.running {
                     control.cancel();
+                }
+                for outcome in self.outcomes.values() {
+                    if let Outcome::Ready { temp, .. } = outcome {
+                        work::discard(temp);
+                    }
                 }
                 iced::exit()
             }
         }
+    }
+
+    /// The video shown large: the one the user picked; otherwise the running one; otherwise a
+    /// result waiting for a choice; otherwise the next one waiting; otherwise the last one done.
+    pub fn focused(&self) -> Option<&Job> {
+        let jobs = self.queue.jobs();
+        self.selected
+            .and_then(|id| self.queue.get(id))
+            .or_else(|| self.queue.active())
+            .or_else(|| {
+                jobs.iter()
+                    .find(|job| self.outcomes.get(&job.id).is_some_and(Outcome::is_waiting))
+            })
+            .or_else(|| jobs.iter().find(|job| job.state == JobState::Pending))
+            .or_else(|| jobs.iter().rev().find(|job| job.state.is_finished()))
+    }
+
+    /// How many results are waiting for the user to choose replace or copy.
+    pub fn waiting_count(&self) -> usize {
+        self.outcomes.values().filter(|o| o.is_waiting()).count()
+    }
+
+    /// Whether a video can leave the list now: it is not running and not being put in place.
+    pub fn can_remove(&self, job: &Job) -> bool {
+        job.state.is_removable()
+            && !matches!(
+                self.outcomes.get(&job.id),
+                Some(Outcome::Ready { placing: true, .. })
+            )
     }
 
     fn add(&mut self, paths: Vec<PathBuf>) -> Task<Message> {
@@ -148,6 +232,71 @@ impl Gracil {
             return work::start_engine().map(Message::EngineStarted);
         }
         self.schedule()
+    }
+
+    fn choose(&mut self, id: JobId, choice: Choice) -> Task<Message> {
+        let Some(source) = self.queue.get(id).map(|job| job.path.clone()) else {
+            return Task::none();
+        };
+        let Some(Outcome::Ready {
+            temp,
+            placing,
+            problem,
+            ..
+        }) = self.outcomes.get_mut(&id)
+        else {
+            return Task::none();
+        };
+        if *placing {
+            return Task::none();
+        }
+        *placing = true;
+        *problem = None;
+        work::place(temp.clone(), source, choice)
+            .map(move |placed| Message::Placed(id, choice, placed))
+    }
+
+    fn placed(&mut self, id: JobId, choice: Choice, placed: Result<PathBuf, Failure>) {
+        let Some(outcome) = self.outcomes.get_mut(&id) else {
+            return;
+        };
+        let Outcome::Ready {
+            smaller_by,
+            placing,
+            problem,
+            ..
+        } = outcome
+        else {
+            return;
+        };
+        match placed {
+            Ok(path) => {
+                let smaller_by = *smaller_by;
+                *outcome = Outcome::Placed {
+                    choice,
+                    path,
+                    smaller_by,
+                };
+            }
+            Err(failure) => {
+                *placing = false;
+                *problem = Some(failure);
+            }
+        }
+    }
+
+    /// Takes a video off the list. A result nobody chose for is deleted; the original stays.
+    fn remove(&mut self, id: JobId) {
+        let removable = self.queue.get(id).is_some_and(|job| self.can_remove(job));
+        if !removable || !self.queue.remove(id) {
+            return;
+        }
+        if let Some(Outcome::Ready { temp, .. }) = self.outcomes.remove(&id) {
+            work::discard(&temp);
+        }
+        if self.selected == Some(id) {
+            self.selected = None;
+        }
     }
 
     /// Starts the next video when the engine is ready and nothing is running.
@@ -169,7 +318,7 @@ impl Gracil {
         match report {
             Report::Progress(fraction) => {
                 let state = self.queue.get(id).map(|job| job.state);
-                if state == Some(gracil_core::job::JobState::Preparing) {
+                if state == Some(JobState::Preparing) {
                     self.transition(id, JobEvent::BeginCompressing);
                 }
                 self.queue.set_fraction(id, fraction);
@@ -177,7 +326,7 @@ impl Gracil {
             }
             Report::Done(outcome) => {
                 let events: &[JobEvent] = match outcome {
-                    Outcome::Saved { .. } => &[
+                    Outcome::Ready { .. } | Outcome::Placed { .. } => &[
                         JobEvent::BeginCompressing,
                         JobEvent::BeginFinalizing,
                         JobEvent::Complete,

@@ -3,16 +3,18 @@
 use gracil_core::job::JobState;
 use gracil_core::queue::Job;
 use iced::widget::text::Wrapping;
-use iced::widget::{button, column, container, progress_bar, row, scrollable, text, tooltip};
+use iced::widget::{
+    Space, button, column, container, progress_bar, row, scrollable, text, tooltip,
+};
 use iced::{Center, Element, Fill, window};
 
 use crate::app::{EngineState, Gracil, Message};
 use crate::style::{self, size, space};
-use crate::work::Outcome;
+use crate::work::{Choice, Failure, Outcome};
 
 /// Longest file name shown before it is shortened in the middle.
 const FOCUS_NAME_CHARS: usize = 28;
-const DRAWER_NAME_CHARS: usize = 30;
+const DRAWER_NAME_CHARS: usize = 26;
 const TOOLTIP_WIDTH: f32 = 240.0;
 const DRAWER_MAX_HEIGHT: f32 = 148.0;
 
@@ -36,7 +38,7 @@ fn focus(state: &Gracil) -> Element<'_, Message> {
     if state.hovering_files {
         return text("Release to add").size(size::TITLE).into();
     }
-    match focused_job(state) {
+    match state.focused() {
         Some(job) => focused(state, job),
         None => column![
             text("Drop videos here").size(size::TITLE),
@@ -48,16 +50,6 @@ fn focus(state: &Gracil) -> Element<'_, Message> {
         .align_x(Center)
         .into(),
     }
-}
-
-/// The running video; otherwise the next one waiting; otherwise the last one finished.
-fn focused_job(state: &Gracil) -> Option<&Job> {
-    let jobs = state.queue.jobs();
-    state
-        .queue
-        .active()
-        .or_else(|| jobs.iter().find(|job| job.state == JobState::Pending))
-        .or_else(|| jobs.iter().rev().find(|job| job.state.is_finished()))
 }
 
 fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
@@ -74,20 +66,63 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         );
     }
 
-    let status = status(state, job);
-    let mut details = column![status_line(&status, size::BODY)]
-        .spacing(space::XS)
+    let mut details = column![status_line(&status(state, job), size::BODY)]
+        .spacing(space::S)
         .align_x(Center);
-    if let Some(Outcome::Saved { path, .. }) = state.outcomes.get(&job.id) {
-        let saved_as = path.file_name().unwrap_or_default().to_string_lossy();
+    if job.state.is_active() {
         details = details.push(
-            text(format!("Saved as {}", shorten(&saved_as, FOCUS_NAME_CHARS)))
-                .size(size::CAPTION)
-                .style(style::muted)
-                .wrapping(Wrapping::None),
+            button(text("Cancel").size(size::CAPTION))
+                .style(style::quiet_button)
+                .on_press(Message::Cancel),
         );
     }
+    match state.outcomes.get(&job.id) {
+        Some(Outcome::Ready { placing, .. }) => {
+            details = details.push(choices(job, !placing));
+        }
+        Some(Outcome::Failed(Failure::NotSmaller)) => {
+            // Shown turned off, so it is clear there was nothing worth keeping (spec §40.1).
+            details = details.push(choices(job, false));
+        }
+        Some(Outcome::Placed { choice, path, .. }) => {
+            details = details.push(caption(placed_caption(job, *choice, path)));
+        }
+        _ => {}
+    }
     content.push(details).into()
+}
+
+/// Replace and Save copy, the two things to do with a finished result (ADR 0009).
+fn choices(job: &Job, enabled: bool) -> Element<'static, Message> {
+    let action = |label: &'static str, choice: Choice| {
+        button(text(label).size(size::BODY))
+            .padding([space::XS, space::M])
+            .style(style::action_button)
+            .on_press_maybe(enabled.then_some(Message::Choose(job.id, choice)))
+    };
+    row![
+        action("Replace", Choice::Replace),
+        action("Save copy", Choice::SaveCopy)
+    ]
+    .spacing(space::S)
+    .into()
+}
+
+fn placed_caption(job: &Job, choice: Choice, path: &std::path::Path) -> String {
+    let placed_name = path.file_name().unwrap_or_default().to_string_lossy();
+    match choice {
+        Choice::SaveCopy => format!("Saved as {}", shorten(&placed_name, FOCUS_NAME_CHARS)),
+        Choice::Replace if placed_name == job.file_name() => "Replaced the original".to_owned(),
+        Choice::Replace => format!("Replaced by {}", shorten(&placed_name, FOCUS_NAME_CHARS)),
+    }
+}
+
+fn caption(label: String) -> Element<'static, Message> {
+    text(label)
+        .size(size::CAPTION)
+        .style(style::muted)
+        .wrapping(Wrapping::None)
+        .into()
 }
 
 /// A job's state in a few words, plus an explanation behind a "!" when something needs it.
@@ -126,9 +161,20 @@ fn status(state: &Gracil, job: &Job) -> Status {
         JobState::Finalizing => Status::plain("Saving"),
         JobState::Completed | JobState::Failed | JobState::Cancelled => {
             match state.outcomes.get(&job.id) {
-                Some(Outcome::Saved { smaller_by, .. }) => {
-                    Status::plain(format!("{:.0}% smaller", smaller_by * 100.0))
-                }
+                Some(Outcome::Ready { placing: true, .. }) => Status::plain("Saving"),
+                Some(Outcome::Ready {
+                    smaller_by,
+                    problem,
+                    ..
+                }) => Status {
+                    label: smaller(*smaller_by),
+                    notice: problem.map(Failure::explanation),
+                },
+                Some(Outcome::Placed { smaller_by, .. }) => Status::plain(smaller(*smaller_by)),
+                Some(Outcome::Failed(Failure::NotSmaller)) => Status {
+                    label: "Not smaller".into(),
+                    notice: Some(Failure::NotSmaller.explanation()),
+                },
                 Some(Outcome::Failed(failure)) => Status {
                     label: "Not compressed".into(),
                     notice: Some(failure.explanation()),
@@ -136,6 +182,25 @@ fn status(state: &Gracil, job: &Job) -> Status {
                 _ => Status::plain("Cancelled"),
             }
         }
+    }
+}
+
+fn smaller(smaller_by: f64) -> String {
+    format!("{:.0}% smaller", smaller_by * 100.0)
+}
+
+/// The drawer says what happened to a result in one word, since the focus shows the details.
+fn drawer_status(state: &Gracil, job: &Job) -> Status {
+    match state.outcomes.get(&job.id) {
+        Some(Outcome::Placed {
+            choice: Choice::Replace,
+            ..
+        }) => Status::plain("Replaced"),
+        Some(Outcome::Placed {
+            choice: Choice::SaveCopy,
+            ..
+        }) => Status::plain("Copy saved"),
+        _ => status(state, job),
     }
 }
 
@@ -162,19 +227,24 @@ fn name(job: &Job, max_chars: usize, text_size: f32) -> Element<'static, Message
 }
 
 fn footer(state: &Gracil) -> Element<'_, Message> {
-    let count = match state.queue.len() {
+    let mut summary = match state.queue.len() {
         1 => "1 video".to_owned(),
         n => format!("{n} videos"),
     };
+    match state.waiting_count() {
+        0 => {}
+        n => summary.push_str(&format!("  ·  {n} ready")),
+    }
     let toggle = if state.drawer_open {
         "Hide files"
     } else {
         "View files"
     };
     row![
-        button(text(format!("{count}  ·  {toggle}")).size(size::CAPTION))
+        button(text(format!("{summary}  ·  {toggle}")).size(size::CAPTION))
             .style(style::quiet_button)
             .on_press(Message::ToggleDrawer),
+        Space::new().width(Fill),
         button(text("Add videos").size(size::CAPTION))
             .style(style::quiet_button)
             .on_press(Message::ChooseFiles),
@@ -185,20 +255,66 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
 }
 
 fn drawer(state: &Gracil) -> Element<'_, Message> {
+    let quiet = |label: &'static str, message: Option<Message>| {
+        button(text(label).size(size::CAPTION))
+            .style(style::quiet_button)
+            .on_press_maybe(message)
+    };
+
+    let mut header = row![].spacing(space::XS).align_y(Center);
+    if state.waiting_count() >= 2 {
+        header = header
+            .push(quiet(
+                "Replace all",
+                Some(Message::ChooseAll(Choice::Replace)),
+            ))
+            .push(quiet(
+                "Save all copies",
+                Some(Message::ChooseAll(Choice::SaveCopy)),
+            ));
+    }
+    let any_removable = state.queue.jobs().iter().any(|job| state.can_remove(job));
+    header = header
+        .push(Space::new().width(Fill))
+        .push(quiet("Clear", any_removable.then_some(Message::Clear)));
+
     let rows = state.queue.jobs().iter().map(|job| {
-        row![
+        let line = row![
             container(name(job, DRAWER_NAME_CHARS, size::BODY)).width(Fill),
-            status_line(&status(state, job), size::CAPTION),
+            status_line(&drawer_status(state, job), size::CAPTION),
         ]
         .spacing(space::M)
+        .align_y(Center);
+        let remove = quiet(
+            "×",
+            state.can_remove(job).then_some(Message::Remove(job.id)),
+        );
+        row![
+            button(line)
+                .padding([space::XS, space::S])
+                .width(Fill)
+                .style(style::quiet_button)
+                .on_press(Message::Select(job.id)),
+            remove,
+        ]
         .align_y(Center)
         .into()
     });
-    container(scrollable(column(rows).spacing(space::S).padding(space::M)))
-        .max_height(DRAWER_MAX_HEIGHT)
-        .width(Fill)
-        .style(style::drawer)
-        .into()
+
+    container(
+        column![
+            header,
+            scrollable(column(rows).spacing(space::XS))
+                .spacing(space::XS)
+                .height(iced::Shrink),
+        ]
+        .spacing(space::XS)
+        .padding(space::S),
+    )
+    .max_height(DRAWER_MAX_HEIGHT)
+    .width(Fill)
+    .style(style::drawer)
+    .into()
 }
 
 /// A small "!" that explains itself on hover (spec §2.3).

@@ -791,6 +791,7 @@ name = "gracil-ui"
 version = "0.0.1-dev"
 dependencies = [
  "gracil-core",
+ "gracil-windows",
  "iced",
  "rfd",
  "tracing",

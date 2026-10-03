@@ -84,6 +84,28 @@ pub fn quiet_button(theme: &Theme, status: button::Status) -> button::Style {
     }
 }
 
+/// The one kind of button with a surface: what to do with a finished result. Still soft, so it
+/// reads as an offer rather than a demand.
+pub fn action_button(theme: &Theme, status: button::Status) -> button::Style {
+    let palette = theme.palette();
+    let (fill, text_color) = match status {
+        button::Status::Hovered | button::Status::Pressed => {
+            (palette.primary.scale_alpha(0.18), palette.primary)
+        }
+        button::Status::Disabled => (
+            palette.text.scale_alpha(0.04),
+            palette.text.scale_alpha(0.3),
+        ),
+        button::Status::Active => (palette.primary.scale_alpha(0.1), palette.primary),
+    };
+    button::Style {
+        background: Some(Background::Color(fill)),
+        text_color,
+        border: Border::default().rounded(RADIUS),
+        ..button::Style::default()
+    }
+}
+
 pub fn progress(theme: &Theme) -> progress_bar::Style {
     let palette = theme.palette();
     progress_bar::Style {
