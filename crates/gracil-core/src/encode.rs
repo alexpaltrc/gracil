@@ -1,0 +1,181 @@
+//! Running one FFmpeg encode and reporting its progress.
+
+use std::io::{BufRead, BufReader, Read};
+use std::process::{Child, Stdio};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::thread;
+
+use tracing::{debug, warn};
+
+use crate::plan::EncodePlan;
+use crate::progress::{Progress, ProgressParser};
+use crate::toolchain::Toolchain;
+
+/// Lets another thread cancel a running compression. Cheap to clone.
+#[derive(Debug, Clone, Default)]
+pub struct JobControl(Arc<Mutex<Slot>>);
+
+#[derive(Debug, Default)]
+struct Slot {
+    cancelled: bool,
+    child: Option<Child>,
+}
+
+impl JobControl {
+    /// Stops the current FFmpeg process, if any, and every attempt after it.
+    pub fn cancel(&self) {
+        let mut slot = self.lock();
+        slot.cancelled = true;
+        if let Some(child) = slot.child.as_mut()
+            && let Err(error) = child.kill()
+        {
+            debug!(%error, "FFmpeg already exited when cancelled");
+        }
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.lock().cancelled
+    }
+
+    /// Process id of the running FFmpeg, used to pause it.
+    pub fn process_id(&self) -> Option<u32> {
+        self.lock().child.as_ref().map(Child::id)
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Slot> {
+        // The slot holds no invariant a panic could break, so a poisoned lock is still usable.
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EncodeOutcome {
+    Finished,
+    Cancelled,
+    Failed {
+        /// The end of FFmpeg's error output, for the log.
+        error: String,
+        /// Whether any part of the video had been encoded before it failed.
+        made_progress: bool,
+    },
+}
+
+/// Bytes of FFmpeg's error output kept for the log.
+const ERROR_TAIL: usize = 4096;
+
+/// Runs `plan` to completion, calling `on_progress` after every progress block.
+pub fn run(
+    toolchain: &Toolchain,
+    plan: &EncodePlan,
+    control: &JobControl,
+    on_progress: &mut dyn FnMut(Progress),
+) -> EncodeOutcome {
+    let failed = |error: String| EncodeOutcome::Failed {
+        error,
+        made_progress: false,
+    };
+
+    let mut child = match toolchain
+        .ffmpeg()
+        .args(plan.args())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(error) => return failed(format!("could not start FFmpeg: {error}")),
+    };
+    let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return failed("FFmpeg pipes unavailable".into());
+    };
+
+    {
+        let mut slot = control.lock();
+        if slot.cancelled {
+            drop(slot);
+            let _ = child.kill();
+            let _ = child.wait();
+            return EncodeOutcome::Cancelled;
+        }
+        slot.child = Some(child);
+    }
+
+    // Drained on its own thread so a chatty FFmpeg never blocks on a full pipe.
+    let stderr_reader = thread::spawn(move || tail(stderr, ERROR_TAIL));
+
+    let mut parser = ProgressParser::default();
+    let mut made_progress = false;
+    for line in BufReader::new(stdout).lines() {
+        let Ok(line) = line else { break };
+        if let Some(progress) = parser.feed(&line) {
+            made_progress |= !progress.position.is_zero();
+            on_progress(progress);
+        }
+    }
+
+    // Stdout closes when FFmpeg exits or is killed; collect its status.
+    let (status, cancelled) = {
+        let mut slot = control.lock();
+        let status = slot.child.take().map(|mut child| child.wait());
+        (status, slot.cancelled)
+    };
+    let error = stderr_reader.join().unwrap_or_default();
+
+    match status {
+        _ if cancelled => EncodeOutcome::Cancelled,
+        Some(Ok(status)) if status.success() => EncodeOutcome::Finished,
+        Some(Ok(status)) => {
+            warn!(%status, %error, "FFmpeg failed");
+            EncodeOutcome::Failed {
+                error: if error.is_empty() {
+                    format!("FFmpeg exited with {status}")
+                } else {
+                    error
+                },
+                made_progress,
+            }
+        }
+        Some(Err(error)) => failed(format!("waiting for FFmpeg failed: {error}")),
+        None => failed("FFmpeg process lost".into()),
+    }
+}
+
+/// Reads `reader` to the end and returns its last `limit` bytes as text.
+fn tail(mut reader: impl Read, limit: usize) -> String {
+    let mut kept = Vec::with_capacity(limit);
+    let mut buffer = [0; 4096];
+    while let Ok(read) = reader.read(&mut buffer) {
+        if read == 0 {
+            break;
+        }
+        kept.extend_from_slice(&buffer[..read]);
+        if kept.len() > limit {
+            kept.drain(..kept.len() - limit);
+        }
+    }
+    String::from_utf8_lossy(&kept).trim().to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tail_keeps_the_end() {
+        let input = "a".repeat(10_000) + "the end";
+        let kept = tail(input.as_bytes(), 16);
+        assert_eq!(kept.len(), 16);
+        assert!(kept.ends_with("the end"));
+    }
+
+    #[test]
+    fn cancel_before_start_is_remembered() {
+        let control = JobControl::default();
+        assert!(!control.is_cancelled());
+        control.cancel();
+        assert!(control.is_cancelled());
+        assert_eq!(control.process_id(), None);
+    }
+}
