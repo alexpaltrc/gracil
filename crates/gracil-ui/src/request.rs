@@ -5,6 +5,8 @@
 //!   or Save copy after each one is done.
 //! - `gracil.exe --replace videos` and `--save-copy videos`: what File Explorer's commands send.
 //!   The videos are compressed in the background, and each result is placed as asked.
+//! - `gracil.exe --startup`: what Windows sends when it starts Gracil with the session. Gracil
+//!   stays in the tray with no window (ADR 0024).
 //!
 //! Both arrive the same way, as a list of arguments, so one parser serves both. Anything else is
 //! taken as a path and checked like any dropped file.
@@ -20,10 +22,13 @@ pub struct Request {
     /// the work happens in the background.
     pub choice: Option<Choice>,
     pub paths: Vec<PathBuf>,
+    /// Started with Windows: stay in the tray, show nothing.
+    pub at_startup: bool,
 }
 
 const REPLACE: &str = "--replace";
 const SAVE_COPY: &str = "--save-copy";
+const STARTUP: &str = "--startup";
 
 impl Request {
     /// Reads a command line without the program's own name.
@@ -31,12 +36,15 @@ impl Request {
         let mut request = Self {
             choice: None,
             paths: Vec::new(),
+            at_startup: false,
         };
         for argument in arguments {
             if argument == OsStr::new(REPLACE) {
                 request.choice = Some(Choice::Replace);
             } else if argument == OsStr::new(SAVE_COPY) {
                 request.choice = Some(Choice::SaveCopy);
+            } else if argument == OsStr::new(STARTUP) {
+                request.at_startup = true;
             } else {
                 // Absolute, so the same video named two ways is still one video.
                 let path = PathBuf::from(argument);
@@ -57,12 +65,13 @@ impl Request {
             Some(Choice::SaveCopy) => Some(OsString::from(SAVE_COPY)),
         };
         let paths = self.paths.iter().map(|path| path.clone().into_os_string());
-        flag.into_iter().chain(paths).collect()
+        let startup = self.at_startup.then(|| OsString::from(STARTUP));
+        flag.into_iter().chain(startup).chain(paths).collect()
     }
 
     /// Whether this request needs the main window. A plain launch with nothing to add still does.
     pub fn shows_window(&self) -> bool {
-        self.choice.is_none()
+        self.choice.is_none() && !self.at_startup
     }
 }
 
@@ -91,6 +100,15 @@ mod tests {
 
         let request = Request::parse(arguments(&["--save-copy", r"C:\a.mov"]));
         assert_eq!(request.choice, Some(Choice::SaveCopy));
+    }
+
+    #[test]
+    fn starting_with_windows_shows_nothing() {
+        let request = Request::parse(arguments(&["--startup"]));
+        assert!(request.at_startup);
+        assert!(request.paths.is_empty());
+        assert!(!request.shows_window());
+        assert!(Request::parse(request.to_arguments()).at_startup);
     }
 
     #[test]

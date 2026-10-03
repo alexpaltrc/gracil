@@ -27,6 +27,15 @@ Gracil is still being built, but you can already compress videos with it.
   resumes just like the big one. It also says how many videos are waiting and where a finished
   one went, and you can drop more videos on it. It stays open while you do other things until you
   close it or click the marble again; **Open Gracil** in it brings up the big window.
+- Right-click videos in File Explorer and choose **Gracil**, which shows how many videos you
+  picked, for example **Gracil (3)**. Inside are **Compress and replace** and **Compress and save
+  as new**. The videos are compressed without opening the big window, and other files picked along
+  with them are left alone. The small window opens by itself so you can watch; if you'd rather it
+  didn't, untick **Show mini-window when compressing from File Explorer** in the marble's
+  right-click menu.
+- Gracil installs like any other Windows app, and starts by itself when you sign in, waiting
+  quietly next to the clock until you give it videos. To stop that, turn Gracil off in Windows'
+  **Settings → Apps → Startup**.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
   advances. The middle of the ring holds the controls, as symbols instead of words: the top part
   pauses (II) and turns into play (▶) to resume, and the bottom part stops (■). Pausing frees up

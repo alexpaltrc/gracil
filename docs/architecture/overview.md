@@ -64,7 +64,7 @@ Save copy; `work::place` then calls `gracil_core::output` on its own thread, wit
 
 **Closing and exiting.** Closing a window hides it; the process keeps running in the tray. Only
 the tray menu's Exit quits. A process started from Explorer that never showed a window exits by
-itself when its work is finished (spec §53, §54.1).
+itself when its work is finished (spec §53, §54.1); one started with Windows stays (ADR 0024).
 
 **Tray.** `gracil_windows::Tray` owns the notification icon on a thread of its own, with a hidden
 window for its messages, and draws each state (Idle, Processing, Paused, Error) itself
@@ -94,8 +94,15 @@ work in the background. A Gracil whose window never opened ends itself when that
 "Gracil (N)" by the number of selected files with a video extension
 (`gracil_core::media::looks_like_video`) and hidden when there are none, with **Compress and
 replace** and **Compress and save as new** under it. A click returns at once; a thread of the DLL
-forwards the paths over the pipe when Gracil is running, or starts `gracil.exe` from the DLL's
-folder with as many paths as fit on its command line and forwards the rest (ADR 0022).
+forwards the paths over the pipe when Gracil is running, or starts Gracil with as many paths as
+fit on its command line and forwards the rest (ADR 0022). Packaged, it starts Gracil through the
+package's `gracil.exe` alias, so Gracil keeps the package's identity (ADR 0023); otherwise it
+starts the `gracil.exe` beside the DLL.
+
+**Starting with Windows.** The package's hidden `Startup` application runs `gracil.exe --startup`
+at sign-in (`windows.startupTask`). That request opens nothing, and marks the app `resident`:
+it stays in the tray for the session instead of leaving when background work is done
+(ADR 0024).
 
 ## Data on disk
 

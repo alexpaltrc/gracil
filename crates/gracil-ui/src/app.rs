@@ -50,6 +50,9 @@ pub struct Gracil {
     window_shown: bool,
     /// Whether any request has arrived yet; until then there is nothing to be done or finished.
     requested: bool,
+    /// Whether Gracil was started with Windows. It then stays in the tray for the whole session
+    /// instead of leaving when background work is done (ADR 0024).
+    resident: bool,
     /// Choices made before compressing, by File Explorer's commands: the result is placed as soon
     /// as it is ready.
     intents: HashMap<JobId, Choice>,
@@ -156,6 +159,7 @@ impl Gracil {
             main: None,
             window_shown: false,
             requested: false,
+            resident: false,
             intents: HashMap::new(),
             exiting: false,
             tray,
@@ -491,6 +495,7 @@ impl Gracil {
     /// advance applies to each of its videos, including one already on the list.
     fn on_request(&mut self, request: Request) -> Task<Message> {
         self.requested = true;
+        self.resident |= request.at_startup;
         let show = if request.shows_window() {
             self.show_main()
         } else if request.choice.is_some()
@@ -574,6 +579,7 @@ impl Gracil {
     /// mini-window is open, the user is still looking, so Gracil waits for it to close.
     fn background_work_done(&self) -> bool {
         self.requested
+            && !self.resident
             && !self.window_shown
             && self.mini.is_none()
             && self.running.is_none()

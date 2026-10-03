@@ -582,6 +582,11 @@ background work and all jobs are finished, no window must remain visible and no 
 exists to stay alive, allow it to exit cleanly. Do not add "Launch at startup" unless requested
 later.
 
+*Update (ADR 0024):* requested. The installed Gracil starts with Windows, always, and stays in the
+tray for the session; there is no setting for it in Gracil, and people turn it off with Windows'
+own startup settings. Still no Windows service, and a Gracil started only for File Explorer's work
+still exits when done.
+
 # 54. System tray
 
 Gracil uses a system tray icon when background work is active. Logical tray states: Idle,
@@ -812,6 +817,8 @@ remove CPU fallback; remove hardware-decoding fallback; remove metadata preserva
 safe-replace model; change MSIX; use a legacy-only Explorer menu; change Focus + Drawer into a
 conventional queue; add a permanent Windows service; add startup execution; add analytics or
 telemetry; introduce cloud processing; upload videos anywhere; change versioning rules.
+
+*Update (ADR 0024):* startup execution was requested and added; see §53.
 
 If a requirement becomes technically problematic, explain the conflict before changing behavior.
 

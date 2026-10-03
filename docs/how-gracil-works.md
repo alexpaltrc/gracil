@@ -178,14 +178,21 @@ existing file.
 Gracil runs once. If you open it again, or open videos with it while it is already running, the
 Gracil you have comes forward and the videos join the same list.
 
-*(in progress)* Right-click videos in File Explorer and you'll find **Gracil** in the menu, with
+Right-click videos in File Explorer and you'll find **Gracil** in the menu, with
 the number of videos in brackets when you picked more than one, for example **Gracil (3)**. Other
 files you picked along with them are left alone, and if none of them is a video the menu doesn't
 show Gracil at all. Inside are two choices: **Compress and replace** and **Compress and save as
 new**. Either one compresses the videos without opening the big window, and replaces them or
-saves copies as you chose. If Gracil is already running, the videos join its list. When Gracil
-was opened only for that, it closes by itself once the work is done. This arrives with Gracil's
-installer.
+saves copies as you chose. If Gracil is already running, the videos join its list. If Gracil wasn't
+running, it starts for that, and closes by itself once the work is done.
+
+## Starting with Windows
+
+Gracil starts by itself when you sign in to Windows, and waits quietly next to the clock, with no
+window, until you give it videos. There is nothing to set in Gracil. If you'd rather it didn't
+start with Windows, turn it off where Windows lists the apps that start with it: **Settings →
+Apps → Startup**, or the **Startup apps** page of Task Manager. Gracil respects that and never
+turns it back on; you can still open it from the Start menu whenever you like.
 
 ## Closing Gracil
 
@@ -208,8 +215,8 @@ where it went. You can drop more videos on it. It stays open while you do other 
 with its **×** or by clicking the marble again, and use **Open Gracil** in it to get the big
 window.
 
-*(in progress)* When you compress from File Explorer, this small window opens by itself so you can see the work
-happen. If you'd rather it didn't, right-click the marble and untick **Show mini-window when
+When you compress from File Explorer, this small window opens by itself so you can see the
+work happen. If you'd rather it didn't, right-click the marble and untick **Show mini-window when
 compressing from File Explorer**. Gracil remembers your choice, and it never changes how videos
 are compressed.
 
