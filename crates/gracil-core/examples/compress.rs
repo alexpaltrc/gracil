@@ -12,8 +12,7 @@ use std::path::Path;
 
 use gracil_core::compress::{Engine, compress};
 use gracil_core::encode::JobControl;
-use gracil_core::naming::first_free_save_as_new_path;
-use gracil_core::plan::Container;
+use gracil_core::output::save_as_new;
 use gracil_core::toolchain;
 
 fn main() {
@@ -54,12 +53,7 @@ fn run(engine: &Engine, source: &Path) -> Result<(), Box<dyn std::error::Error>>
         }
     })?;
 
-    let named_like = source.with_extension(Container::output_extension(source));
-    let destination =
-        first_free_save_as_new_path(&named_like, Path::exists).ok_or("no free file name")?;
-    // A hard link fails instead of replacing anything that appeared since the name was chosen.
-    fs::hard_link(&result.temp, &destination)?;
-    fs::remove_file(&result.temp)?;
+    let destination = save_as_new(&result.temp, source)?;
 
     eprintln!(
         "\r{} -> {} ({:.0}% smaller, {:?})",
