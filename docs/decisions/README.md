@@ -31,3 +31,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0024](0024-start-with-windows.md) | Gracil starts with Windows, always |
 | [0025](0025-always-replace-or-copy.md) | "Always": replace or save a copy without being asked |
 | [0026](0026-icon-tile.md) | The app icon sits on its own Piedra tile, light or dark with the taskbar |
+| [0027](0027-version-scheme.md) | Versions stay small: 1.0 at the Store, then slowly |

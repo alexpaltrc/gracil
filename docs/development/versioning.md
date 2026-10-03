@@ -26,12 +26,10 @@ are only installed locally and are replaced with `Add-AppxPackage -ForceUpdateFr
 this never reaches users. The packaging script derives the MSIX version from `Cargo.toml`; it is
 never typed by hand.
 
-**Pending, before the first Microsoft Store release.** The product owner wants to evaluate a
-different-looking version scheme, such as `0.0.01` or `01.00`, instead of `0.0.1`. Not decided
-and not to be worked on yet. Whatever is chosen has to fit the constraints above: MSIX parts are
-plain numbers (a leading zero is not kept, so `01` is `1`), there are four of them, and the Store
-wants the last one to be `0`. Decide it, with an ADR, before anything is uploaded to the Store,
-since a published version can never go back down.
+**How numbers grow** ([ADR 0027](../decisions/0027-version-scheme.md)). The first Microsoft Store
+release is `1.0.0`. The second number goes up only for releases with something new a user would
+notice, the third only for fixes (`1.1.1`), and the first only for a change of era. Gracil and the
+changelog write `1.1` and `1.1.1`; Windows shows `1.1.0.0` and `1.1.1.0`.
 
 ## Changelog
 
