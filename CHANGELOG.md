@@ -25,11 +25,12 @@ Gracil is still being built, but you can already compress videos with it.
 - Click the marble next to the clock and a small window opens beside it, wherever your taskbar
   is. It shows the video being compressed and how far along it is, and its ring pauses and
   resumes just like the big one. It also says how many videos are waiting and where a finished
-  one went, and you can drop more videos on it. It stays open while you do other things until you
+  one went, and you can drop more videos on it. When a video is done, you can choose **Replace**
+  or **Save copy** right there, without opening the big window. It stays open while you do other things until you
   close it or click the marble again; **Open Gracil** in it brings up the big window.
 - Right-click videos in File Explorer and choose **Gracil**, which shows how many videos you
   picked, for example **Gracil (3)**. Inside are **Compress and replace** and **Compress and save
-  as new**. The videos are compressed without opening the big window, and other files picked along
+  a copy**. The videos are compressed without opening the big window, and other files picked along
   with them are left alone. The small window opens by itself so you can watch; if you'd rather it
   didn't, untick **Show mini-window when compressing from File Explorer** in the marble's
   right-click menu.
@@ -46,6 +47,10 @@ Gracil is still being built, but you can already compress videos with it.
   place of the original, keeping its name and the date it was created; **Save copy** keeps your
   original and saves the smaller one next to it as `Gracil-` followed by its name. With several
   videos done, **Replace all** and **Save all copies** handle them in one go.
+- If you always answer the same way, the line at the foot of the window lets you say so once:
+  **Always**, then **Replace**, **Or** or **Save a copy**. Pick either end and Gracil does that
+  with every video that finishes from then on. In the middle, where it starts, Gracil asks each
+  time.
 - Replacing is done safely: if anything goes wrong, your original is put back. No other file is
   ever overwritten.
 - If Gracil is closed suddenly, for example when the computer loses power or it is forced to
