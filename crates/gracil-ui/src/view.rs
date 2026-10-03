@@ -1,6 +1,7 @@
 //! Focus + Drawer (spec §31–§32): one video in focus, everything else one quiet click away.
 
 use gracil_core::job::JobState;
+use gracil_core::plan::output_extension;
 use gracil_core::queue::Job;
 use iced::widget::text::Wrapping;
 use iced::widget::{
@@ -79,6 +80,9 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
     match state.outcomes.get(&job.id) {
         Some(Outcome::Ready { placing, .. }) => {
             details = details.push(choices(state, job, !placing));
+            if let Some(change) = format_change(job) {
+                details = details.push(caption(change));
+            }
         }
         Some(Outcome::Failed(Failure::NotSmaller)) => {
             // Shown turned off, so it is clear there was nothing worth keeping (spec §40.1).
@@ -121,6 +125,25 @@ fn placed_caption(state: &Gracil, job: &Job, choice: Choice, path: &std::path::P
             .text
             .replaced_by(&shorten(&placed_name, FOCUS_NAME_CHARS)),
     }
+}
+
+/// Every result is an MP4 (ADR 0012). When that changes the name, say so before the user
+/// chooses, in the plainest words there are: `IMG_0042.MOV → IMG_0042.mp4`.
+fn format_change(job: &Job) -> Option<String> {
+    let source = job.path.extension();
+    let output = output_extension(&job.path);
+    if source == Some(output.as_os_str()) {
+        return None;
+    }
+    let renamed = job.path.with_extension(output);
+    let renamed = renamed.file_name()?.to_string_lossy();
+    // Both names have to fit on one line, so each gets half the room.
+    let room = FOCUS_NAME_CHARS / 2 + 2;
+    Some(format!(
+        "{} → {}",
+        shorten(&job.file_name(), room),
+        shorten(&renamed, room)
+    ))
 }
 
 fn caption(label: String) -> Element<'static, Message> {

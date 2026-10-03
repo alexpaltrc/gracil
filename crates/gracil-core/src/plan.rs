@@ -11,67 +11,23 @@ use std::path::{Path, PathBuf};
 use crate::capabilities::{Capabilities, VideoEncoder};
 use crate::probe::{MediaInfo, Stream, StreamKind, file_url};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Container {
-    Mp4,
-    Mov,
-    Mkv,
+/// Every compressed video is an MP4, whatever it was before (ADR 0012).
+///
+/// Extension for the compressed file: `mp4`, keeping the source's spelling when it already is
+/// one (so `Clip.MP4` stays `Clip.MP4` and is replaced in place rather than renamed).
+pub fn output_extension(source: &Path) -> OsString {
+    match source.extension() {
+        Some(ext) if ext.eq_ignore_ascii_case("mp4") => ext.to_owned(),
+        _ => "mp4".into(),
+    }
 }
 
-impl Container {
-    /// Keeps the source container when it holds HEVC well; anything else becomes MP4.
-    pub fn for_source(source: &Path) -> Self {
-        let extension = source
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(str::to_ascii_lowercase);
-        match extension.as_deref() {
-            Some("mov") => Self::Mov,
-            Some("mkv") => Self::Mkv,
-            _ => Self::Mp4,
-        }
-    }
-
-    /// Extension for the compressed file: the source's own when the container is kept (spelling
-    /// included, so `.MOV` stays `.MOV`), `mp4` otherwise.
-    pub fn output_extension(source: &Path) -> OsString {
-        match source.extension() {
-            Some(ext)
-                if ext.to_str().is_some_and(|e| {
-                    ["mp4", "m4v", "mov", "mkv"].contains(&e.to_ascii_lowercase().as_str())
-                }) =>
-            {
-                ext.to_owned()
-            }
-            _ => "mp4".into(),
-        }
-    }
-
-    fn muxer(self) -> &'static str {
-        match self {
-            Self::Mp4 => "mp4",
-            Self::Mov => "mov",
-            Self::Mkv => "matroska",
-        }
-    }
-
-    fn is_quicktime_family(self) -> bool {
-        matches!(self, Self::Mp4 | Self::Mov)
-    }
-
-    fn can_copy_audio(self, codec: &str) -> bool {
-        match self {
-            Self::Mp4 => matches!(
-                codec,
-                "aac" | "mp3" | "ac3" | "eac3" | "alac" | "opus" | "flac"
-            ),
-            Self::Mov => {
-                matches!(codec, "aac" | "alac" | "mp3" | "ac3" | "eac3")
-                    || codec.starts_with("pcm_")
-            }
-            Self::Mkv => true,
-        }
-    }
+/// Audio MP4 holds as is; anything else is converted to AAC.
+fn mp4_can_copy_audio(codec: &str) -> bool {
+    matches!(
+        codec,
+        "aac" | "mp3" | "ac3" | "eac3" | "alac" | "opus" | "flac"
+    )
 }
 
 /// How much of the source an attempt tries to carry over.
@@ -123,7 +79,6 @@ pub enum StreamAction {
     EncodeVideo,
     Copy,
     ToMovText,
-    ToSubrip,
     ToAac { kbps: u32 },
 }
 
@@ -137,27 +92,20 @@ pub struct MappedStream {
 pub struct EncodePlan {
     pub input: PathBuf,
     pub output: PathBuf,
-    pub container: Container,
     pub attempt: Attempt,
     pub streams: Vec<MappedStream>,
     /// Source streams left out because the output cannot hold them. Logged, never shown.
     pub dropped: Vec<u32>,
-    /// iPhone-style `com.apple.*` keys only survive when written as QuickTime `mdta` metadata.
+    /// iPhone-style `com.apple.*` keys only survive when written as `mdta` metadata.
     pub keep_apple_metadata: bool,
 }
 
 impl EncodePlan {
-    pub fn new(
-        input: &Path,
-        output: &Path,
-        container: Container,
-        info: &MediaInfo,
-        attempt: Attempt,
-    ) -> Self {
+    pub fn new(input: &Path, output: &Path, info: &MediaInfo, attempt: Attempt) -> Self {
         let mut streams = Vec::with_capacity(info.streams.len());
         let mut dropped = Vec::new();
         for stream in &info.streams {
-            match stream_action(stream, container, attempt.preservation) {
+            match stream_action(stream, attempt.preservation) {
                 Some(action) => streams.push(MappedStream {
                     source_index: stream.index,
                     action,
@@ -168,12 +116,10 @@ impl EncodePlan {
         Self {
             input: input.to_owned(),
             output: output.to_owned(),
-            container,
             attempt,
             streams,
             dropped,
-            keep_apple_metadata: container.is_quicktime_family()
-                && info.tag_keys.iter().any(|k| k.starts_with("com.apple.")),
+            keep_apple_metadata: info.tag_keys.iter().any(|k| k.starts_with("com.apple.")),
         }
     }
 
@@ -212,7 +158,7 @@ impl EncodePlan {
         if self.keep_apple_metadata {
             args.extend(["-movflags", "+use_metadata_tags"].map(OsString::from));
         }
-        args.extend(["-f", self.container.muxer()].map(OsString::from));
+        args.extend(["-f", "mp4"].map(OsString::from));
         args.push(file_url(&self.output));
         args
     }
@@ -240,14 +186,11 @@ impl EncodePlan {
                         option("x265-params", "log-level=error");
                     }
                 }
-                if self.container.is_quicktime_family() {
-                    // `hvc1` is the HEVC tag Apple devices and Windows players expect.
-                    option("tag", "hvc1");
-                }
+                // `hvc1` is the HEVC tag Apple devices and Windows players expect.
+                option("tag", "hvc1");
             }
             StreamAction::Copy => option("c", "copy"),
             StreamAction::ToMovText => option("c", "mov_text"),
-            StreamAction::ToSubrip => option("c", "srt"),
             StreamAction::ToAac { kbps } => {
                 option("c", "aac");
                 option("b", &format!("{kbps}k"));
@@ -259,30 +202,22 @@ impl EncodePlan {
 const TEXT_SUBTITLES: [&str; 6] = ["mov_text", "subrip", "srt", "ass", "ssa", "webvtt"];
 
 /// What to do with one source stream, or `None` to leave it out.
-fn stream_action(
-    stream: &Stream,
-    container: Container,
-    preservation: Preservation,
-) -> Option<StreamAction> {
+fn stream_action(stream: &Stream, preservation: Preservation) -> Option<StreamAction> {
     let codec = stream.codec.as_str();
     let essential = preservation == Preservation::Essential;
     match stream.kind {
         StreamKind::Video if !stream.attached_pic => Some(StreamAction::EncodeVideo),
         StreamKind::Audio if essential => Some(aac_for(stream)),
-        StreamKind::Audio if container.can_copy_audio(codec) => Some(StreamAction::Copy),
+        StreamKind::Audio if mp4_can_copy_audio(codec) => Some(StreamAction::Copy),
         StreamKind::Audio => Some(aac_for(stream)),
         _ if essential => None,
         StreamKind::Video => matches!(codec, "mjpeg" | "png").then_some(StreamAction::Copy),
-        StreamKind::Subtitle => match container {
-            Container::Mkv if codec == "mov_text" => Some(StreamAction::ToSubrip),
-            Container::Mkv => (!codec.is_empty()).then_some(StreamAction::Copy),
-            _ if codec == "mov_text" => Some(StreamAction::Copy),
-            _ => TEXT_SUBTITLES
-                .contains(&codec)
-                .then_some(StreamAction::ToMovText),
-        },
-        StreamKind::Attachment => (container == Container::Mkv).then_some(StreamAction::Copy),
-        StreamKind::Data | StreamKind::Other => None,
+        StreamKind::Subtitle if codec == "mov_text" => Some(StreamAction::Copy),
+        StreamKind::Subtitle => TEXT_SUBTITLES
+            .contains(&codec)
+            .then_some(StreamAction::ToMovText),
+        // Bitmap subtitles, fonts and data tracks have no place in MP4.
+        StreamKind::Attachment | StreamKind::Data | StreamKind::Other => None,
     }
 }
 
@@ -332,11 +267,10 @@ mod tests {
         }
     }
 
-    fn plan(container: Container, info: &MediaInfo, attempt: Attempt) -> EncodePlan {
+    fn plan(info: &MediaInfo, attempt: Attempt) -> EncodePlan {
         EncodePlan::new(
-            Path::new(r"C:\in\a.mp4"),
+            Path::new(r"C:\in\a.mov"),
             Path::new(r"C:\in\a.part"),
-            container,
             info,
             attempt,
         )
@@ -358,37 +292,18 @@ mod tests {
     }
 
     #[test]
-    fn container_follows_source_extension() {
+    fn every_output_is_mp4() {
         let cases = [
-            ("a.mp4", Container::Mp4),
-            ("a.M4V", Container::Mp4),
-            ("a.MOV", Container::Mov),
-            ("a.mkv", Container::Mkv),
-            ("a.avi", Container::Mp4),
-            ("a.webm", Container::Mp4),
-            ("a.mts", Container::Mp4),
-            ("noext", Container::Mp4),
-        ];
-        for (name, expected) in cases {
-            assert_eq!(Container::for_source(Path::new(name)), expected, "{name}");
-        }
-    }
-
-    #[test]
-    fn output_extension_keeps_supported_spelling() {
-        let cases = [
-            ("a.MOV", "MOV"),
-            ("a.m4v", "m4v"),
-            ("a.mkv", "mkv"),
+            ("a.mp4", "mp4"),
+            ("a.MP4", "MP4"),
+            ("a.m4v", "mp4"),
+            ("a.MOV", "mp4"),
+            ("a.mkv", "mp4"),
             ("a.avi", "mp4"),
             ("noext", "mp4"),
         ];
         for (name, expected) in cases {
-            assert_eq!(
-                Container::output_extension(Path::new(name)),
-                expected,
-                "{name}"
-            );
+            assert_eq!(output_extension(Path::new(name)), expected, "{name}");
         }
     }
 
@@ -398,7 +313,7 @@ mod tests {
             stream(0, StreamKind::Video, "h264"),
             stream(1, StreamKind::Audio, "aac"),
         ]);
-        let args = joined(&plan(Container::Mp4, &info, nvenc_full()));
+        let args = joined(&plan(&info, nvenc_full()));
         assert!(args.contains(
             "-c:0 hevc_nvenc -preset:0 p6 -tune:0 hq -rc:0 vbr -cq:0 27 -b:0 0 -tag:0 hvc1"
         ));
@@ -414,7 +329,7 @@ mod tests {
             stream(1, StreamKind::Video, "h264"),
             stream(2, StreamKind::Audio, "aac"),
         ]);
-        let args = joined(&plan(Container::Mp4, &info, nvenc_full()));
+        let args = joined(&plan(&info, nvenc_full()));
         assert!(args.contains("-map 0:1 -map 0:2 -map_metadata 0 -map_chapters 0"));
         assert!(args.contains("-map_metadata:s:0 0:s:1 -map_metadata:s:1 0:s:2"));
         assert!(!args.contains("0:0"));
@@ -428,11 +343,10 @@ mod tests {
             preservation: Preservation::Full,
         };
         let info = info(vec![stream(0, StreamKind::Video, "h264")]);
-        let args = joined(&plan(Container::Mkv, &info, attempt));
+        let args = joined(&plan(&info, attempt));
         assert!(args.contains("-c:0 libx265 -preset:0 medium -crf:0 26"));
+        assert!(args.contains("-tag:0 hvc1"));
         assert!(!args.contains("hwaccel"));
-        assert!(!args.contains("hvc1"), "hvc1 is only for MP4/MOV");
-        assert!(args.contains("-f matroska"));
     }
 
     #[test]
@@ -451,7 +365,7 @@ mod tests {
             cover(8, "bmp"),
             stream(9, StreamKind::Attachment, "ttf"),
         ]);
-        let plan = plan(Container::Mp4, &info, nvenc_full());
+        let plan = plan(&info, nvenc_full());
         assert_eq!(
             actions(&plan),
             [
@@ -467,27 +381,26 @@ mod tests {
     }
 
     #[test]
-    fn mkv_keeps_nearly_everything() {
+    fn mkv_sources_keep_what_mp4_can_hold() {
         let info = info(vec![
             stream(0, StreamKind::Video, "hevc"),
             stream(1, StreamKind::Audio, "dts"),
             stream(2, StreamKind::Subtitle, "hdmv_pgs_subtitle"),
-            stream(3, StreamKind::Subtitle, "mov_text"),
-            stream(4, StreamKind::Attachment, "ttf"),
-            stream(5, StreamKind::Data, "bin_data"),
+            stream(3, StreamKind::Subtitle, "ass"),
+            stream(4, StreamKind::Subtitle, "mov_text"),
+            stream(5, StreamKind::Attachment, "ttf"),
         ]);
-        let plan = plan(Container::Mkv, &info, nvenc_full());
+        let plan = plan(&info, nvenc_full());
         assert_eq!(
             actions(&plan),
             [
                 (0, EncodeVideo),
-                (1, Copy),
-                (2, Copy),
-                (3, ToSubrip),
+                (1, ToAac { kbps: 128 }),
+                (3, ToMovText),
                 (4, Copy)
             ]
         );
-        assert_eq!(plan.dropped, [5]);
+        assert_eq!(plan.dropped, [2, 5]);
     }
 
     #[test]
@@ -504,24 +417,21 @@ mod tests {
             preservation: Preservation::Essential,
             ..nvenc_full()
         };
-        let plan = plan(Container::Mp4, &info, attempt);
+        let plan = plan(&info, attempt);
         assert_eq!(actions(&plan), [(0, EncodeVideo), (1, ToAac { kbps: 384 })]);
         assert_eq!(plan.dropped, [2, 3]);
         assert!(joined(&plan).contains("-c:1 aac -b:1 384k"));
     }
 
     #[test]
-    fn apple_metadata_only_for_quicktime_outputs_with_apple_keys() {
+    fn apple_metadata_kept_only_when_present() {
         let mut iphone = info(vec![stream(0, StreamKind::Video, "hevc")]);
         iphone.tag_keys = vec!["com.apple.quicktime.make".into()];
-        assert!(plan(Container::Mov, &iphone, nvenc_full()).keep_apple_metadata);
-        assert!(
-            joined(&plan(Container::Mov, &iphone, nvenc_full())).contains("+use_metadata_tags")
-        );
-        assert!(!plan(Container::Mkv, &iphone, nvenc_full()).keep_apple_metadata);
+        assert!(plan(&iphone, nvenc_full()).keep_apple_metadata);
+        assert!(joined(&plan(&iphone, nvenc_full())).contains("+use_metadata_tags"));
 
         let plain = info(vec![stream(0, StreamKind::Video, "hevc")]);
-        assert!(!plan(Container::Mov, &plain, nvenc_full()).keep_apple_metadata);
+        assert!(!plan(&plain, nvenc_full()).keep_apple_metadata);
     }
 
     #[test]
@@ -530,7 +440,6 @@ mod tests {
         let plan = EncodePlan::new(
             Path::new(r"C:\日本語\Mi cumpleaños 🎂 (it's).mp4"),
             Path::new(r"C:\日本語\out.part"),
-            Container::Mp4,
             &info,
             nvenc_full(),
         );

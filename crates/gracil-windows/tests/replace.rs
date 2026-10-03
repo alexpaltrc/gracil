@@ -11,8 +11,8 @@ fn replaced_video_keeps_its_creation_date_and_shows_when_it_changed() {
     let dir = std::env::temp_dir().join(format!("gracil-replace-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
-    let source = dir.join("日本語 動画.mov");
-    let temp = dir.join("日本語 動画.mov.gracil-7.part");
+    let source = dir.join("日本語 動画.mp4");
+    let temp = dir.join("日本語 動画.mp4.gracil-7.part");
     fs::write(&source, b"original").unwrap();
     let recorded = SystemTime::now() - Duration::from_secs(86_400);
     File::options()

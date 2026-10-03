@@ -13,7 +13,7 @@ use tracing::{info, warn};
 
 use crate::capabilities::Capabilities;
 use crate::encode::{self, EncodeOutcome, JobControl};
-use crate::plan::{self, Attempt, Container, EncodePlan};
+use crate::plan::{self, Attempt, EncodePlan};
 use crate::probe::{self, MediaInfo, ProbeError, StreamKind};
 use crate::progress::fraction;
 use crate::toolchain::{self, Resolved, Toolchain, ToolchainError};
@@ -53,8 +53,6 @@ pub struct Update {
 pub struct Compressed {
     /// The finished, validated file. The caller moves it into place or deletes it.
     pub temp: PathBuf,
-    /// The container written, which decides the final extension.
-    pub container: Container,
     pub size: u64,
     pub attempt: Attempt,
 }
@@ -84,10 +82,9 @@ pub fn compress(
     if !info.has_video() {
         return Err(CompressError::NoVideo);
     }
-    let container = Container::for_source(source);
     let temp = reserve_temp(source)?;
 
-    let result = run_attempts(engine, source, &temp, container, &info, control, on_update);
+    let result = run_attempts(engine, source, &temp, &info, control, on_update);
     if result.is_err()
         && let Err(error) = fs::remove_file(&temp)
     {
@@ -100,7 +97,6 @@ fn run_attempts(
     engine: &Engine,
     source: &Path,
     temp: &Path,
-    container: Container,
     info: &MediaInfo,
     control: &JobControl,
     on_update: &mut dyn FnMut(Update),
@@ -110,7 +106,7 @@ fn run_attempts(
         if control.is_cancelled() {
             return Err(CompressError::Cancelled);
         }
-        let plan = EncodePlan::new(source, temp, container, info, attempt);
+        let plan = EncodePlan::new(source, temp, info, attempt);
         info!(?attempt, dropped = ?plan.dropped, "encoding");
         on_update(Update {
             fraction: fraction(Duration::ZERO, info.duration),
@@ -130,7 +126,6 @@ fn run_attempts(
                 Ok(size) => {
                     return Ok(Compressed {
                         temp: temp.to_owned(),
-                        container,
                         size,
                         attempt,
                     });

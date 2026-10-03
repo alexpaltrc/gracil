@@ -51,8 +51,8 @@ Detected once per process (`Capabilities::detect`):
 
 | Order | Encoder | Decoding | Streams kept |
 |---|---|---|---|
-| 1 | NVENC | CUDA | all the container can hold |
-| 2 | NVENC | software | all the container can hold |
+| 1 | NVENC | CUDA | all MP4 can hold |
+| 2 | NVENC | software | all MP4 can hold |
 | 3 | NVENC | software | video + AAC audio |
 | 4 | x265 | software | video + AAC audio |
 
@@ -67,11 +67,12 @@ source within 1% or one second.
 
 - NVENC (spec §21): `hevc_nvenc -preset p6 -tune hq -rc vbr -cq 27 -b:v 0`.
 - x265: `-preset medium -crf 26`.
-- MP4/MOV outputs tag HEVC as `hvc1` so Apple devices and Windows players accept it.
+- HEVC is tagged `hvc1` so Apple devices and Windows players accept it.
 
 ### Keeping what matters (spec §41)
 
-- **Container**: MP4, M4V, MOV and MKV keep their container. Everything else becomes MP4.
+- **Container**: always MP4 (ADR 0012). `.mp4` keeps its spelling; every other extension becomes
+  `.mp4`.
 - **Rotation**: `-noautorotate` keeps the pixels as recorded and copies the rotation flag.
 - **Metadata**: `-map_metadata 0` is required, because without it FFmpeg drops
   `creation_time`. Per-stream metadata such as language is mapped one stream at a time.
@@ -79,9 +80,9 @@ source within 1% or one second.
 - **iPhone keys** (`com.apple.*`) need `-movflags +use_metadata_tags`. That flag also writes
   junk keys and can hide the title from Explorer, so it is only used when such keys exist.
 - **Streams**: audio is copied when the container accepts it, otherwise converted to AAC
-  (64 kbps per channel, 128–512). Text subtitles become `mov_text` in MP4/MOV. Cover art is
-  copied. Anything the output cannot hold (bitmap subtitles in MP4, data tracks, fonts outside
-  MKV) is left out and logged, never refused.
+  (64 kbps per channel, 128–512). Text subtitles (SRT, ASS, WebVTT) become `mov_text`. Cover art
+  is copied. Anything MP4 cannot hold (bitmap subtitles, data tracks, fonts) is left out and
+  logged, never refused.
 
 ### Safety
 

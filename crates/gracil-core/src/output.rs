@@ -7,13 +7,13 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::naming::save_as_new_candidate;
-use crate::plan::Container;
+use crate::plan::output_extension;
 use tracing::warn;
 
 /// Moves the validated `temp` file next to `source` as `Gracil-<name>`, never overwriting
 /// anything. Returns the final path.
 pub fn save_as_new(temp: &Path, source: &Path) -> io::Result<PathBuf> {
-    let named_like = source.with_extension(Container::output_extension(source));
+    let named_like = source.with_extension(output_extension(source));
     for attempt in 1..=u32::MAX {
         let candidate = save_as_new_candidate(&named_like, attempt);
         if candidate.try_exists()? {
@@ -51,10 +51,10 @@ pub type Swap = fn(original: &Path, replacement: &Path, backup: &Path) -> io::Re
 ///
 /// - Same format: the file is swapped in place and keeps its name and creation date, so it feels
 ///   like the same video, compressed. Its modified date becomes the moment it was replaced (ADR 0010).
-/// - Changed format (`Clip.avi` becomes MP4): `Clip.mp4` is created first, never over an existing
-///   file, and only then is `Clip.avi` deleted.
+/// - Changed format (`Clip.mov` becomes MP4): `Clip.mp4` is created first, never over an existing
+///   file, and only then is `Clip.mov` deleted.
 pub fn replace_original(temp: &Path, source: &Path, swap: Swap) -> io::Result<PathBuf> {
-    let target = source.with_extension(Container::output_extension(source));
+    let target = source.with_extension(output_extension(source));
     let times = replaced_times(&fs::metadata(source)?);
 
     if target == source {
@@ -233,8 +233,8 @@ mod tests {
     #[test]
     fn changed_format_creates_new_name_then_removes_original() {
         let dir = fresh_dir("format");
-        let source = dir.join("Clip.avi");
-        let temp = dir.join("Clip.avi.gracil-1.part");
+        let source = dir.join("IMG_0042.MOV");
+        let temp = dir.join("IMG_0042.MOV.gracil-1.part");
         fs::write(&source, b"original").unwrap();
         fs::write(&temp, b"compressed").unwrap();
 
@@ -243,7 +243,7 @@ mod tests {
         let entries = fs::read_dir(&dir).unwrap().count();
         fs::remove_dir_all(&dir).unwrap();
 
-        assert_eq!(placed, dir.join("Clip.mp4"));
+        assert_eq!(placed, dir.join("IMG_0042.mp4"));
         assert_eq!(content, b"compressed");
         assert_eq!(entries, 1, "only the compressed video remains");
     }
@@ -251,9 +251,9 @@ mod tests {
     #[test]
     fn changed_format_never_overwrites_another_file() {
         let dir = fresh_dir("taken");
-        let source = dir.join("Clip.avi");
-        let other = dir.join("Clip.mp4");
-        let temp = dir.join("Clip.avi.gracil-1.part");
+        let source = dir.join("IMG_0042.MOV");
+        let other = dir.join("IMG_0042.mp4");
+        let temp = dir.join("IMG_0042.MOV.gracil-1.part");
         fs::write(&source, b"original").unwrap();
         fs::write(&other, b"someone else's").unwrap();
         fs::write(&temp, b"compressed").unwrap();

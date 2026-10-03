@@ -13,7 +13,6 @@ use std::time::Duration;
 
 use gracil_core::compress::{CompressError, Engine, compress};
 use gracil_core::encode::JobControl;
-use gracil_core::plan::Container;
 use gracil_core::probe::{self, StreamKind};
 use gracil_core::toolchain;
 
@@ -120,7 +119,6 @@ fn compresses_and_keeps_metadata() {
         original,
         "source must not change"
     );
-    assert_eq!(result.container, Container::Mp4);
     assert!(updates.iter().any(|u| u.fraction.is_some_and(|f| f > 0.5)));
 
     let output = probe::probe(&engine.toolchain, &result.temp).unwrap();
@@ -157,14 +155,13 @@ fn other_containers_become_mp4_with_compatible_audio() {
     make(&engine, &source, &["-c:v", "mpeg4", "-c:a", "pcm_s16le"]);
 
     let result = compress(&engine, &source, &JobControl::default(), &mut |_| {}).unwrap();
-    assert_eq!(result.container, Container::Mp4);
     let output = probe::probe(&engine.toolchain, &result.temp).unwrap();
     assert!(output.streams.iter().any(|s| s.codec == "hevc"));
     assert!(output.streams.iter().any(|s| s.codec == "aac"));
 }
 
 #[test]
-fn matroska_keeps_subtitles() {
+fn matroska_becomes_mp4_keeping_subtitles() {
     let Some(engine) = engine() else { return };
     let dir = TempDir::new();
     let subtitles = dir.0.join("subs.srt");
@@ -190,13 +187,21 @@ fn matroska_keeps_subtitles() {
     );
 
     let result = compress(&engine, &source, &JobControl::default(), &mut |_| {}).unwrap();
-    assert_eq!(result.container, Container::Mkv);
     let output = probe::probe(&engine.toolchain, &result.temp).unwrap();
-    let kinds: Vec<_> = output.streams.iter().map(|s| s.kind).collect();
+    let codecs: Vec<_> = output
+        .streams
+        .iter()
+        .map(|s| (s.kind, s.codec.as_str()))
+        .collect();
     assert_eq!(
-        kinds,
-        [StreamKind::Video, StreamKind::Audio, StreamKind::Subtitle]
+        codecs,
+        [
+            (StreamKind::Video, "hevc"),
+            (StreamKind::Audio, "opus"),
+            (StreamKind::Subtitle, "mov_text")
+        ]
     );
+    assert!(ffprobe_entries(&engine, &result.temp).contains("format_name=mov,mp4"));
 }
 
 #[test]

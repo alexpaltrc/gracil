@@ -23,8 +23,12 @@ Gracil is still being built, but you can already compress videos with it.
   ever overwritten.
 - If you take a finished video off the list or close Gracil without choosing, the smaller version
   is deleted and your original stays as it was.
+- Every compressed video is an MP4, so it plays everywhere: on Windows, iPhone, Mac, Android, TVs
+  and in web browsers. When that changes a video's name, Gracil shows it before you choose, for
+  example `IMG_0042.MOV → IMG_0042.mp4`.
 - Compressed videos keep their recording date, orientation, chapters, subtitles, audio languages
-  and cover art.
+  and cover art. The few things an MP4 can't hold, such as subtitles that are pictures rather
+  than text, are left out, and the video is still kept.
 - With a recent NVIDIA graphics card, Gracil uses it to compress much faster. Without one, it uses
   the processor.
 - If a video is unusual, Gracil quietly tries simpler ways until one works, instead of giving up.

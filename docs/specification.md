@@ -514,9 +514,10 @@ human-readable explanation without muxer terminology.
 
 ~~Do not pretend to support every format. Use a deliberately safe supported set.~~
 *Clarified after the original specification:* aim for wide compatibility. Any video FFmpeg can
-read is accepted. The output keeps the source's container when that container can hold HEVC
-properly; otherwise Gracil produces an MP4. Ensure the output container can safely contain HEVC
-video and audio, plus whatever metadata and additional streams it can hold.
+read is accepted. ~~The output keeps the source's container when that container can hold HEVC
+properly; otherwise Gracil produces an MP4.~~ *Changed after the original specification
+(ADR 0012):* every output is an MP4, whatever the source format, carrying HEVC video and audio
+plus whatever metadata and additional streams MP4 can hold.
 
 # 46. Progress
 

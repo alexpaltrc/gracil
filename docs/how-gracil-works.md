@@ -45,11 +45,13 @@ shrink. With several videos done, **View files** offers **Replace all** and **Sa
 A finished video waits until you choose. If you take it off the list or exit Gracil without
 choosing, the smaller version is deleted and your original stays exactly as it was.
 
-If a video changes format when compressed (an AVI becomes MP4), replacing creates
-`Clip.mp4` and then removes `Clip.avi`. If a `Clip.mp4` already exists there, Gracil replaces
-nothing and a **!** explains why; you can still save a copy.
-- When something goes wrong, there's no message box. A small **!** appears beside the video;
-  point at it to read what happened.
+Every compressed video is an MP4 (see "One format: MP4" below). When that gives it a new name,
+Gracil shows it under the buttons before you choose: `IMG_0042.MOV → IMG_0042.mp4`. Replacing
+then creates `IMG_0042.mp4` and removes `IMG_0042.MOV`. If an `IMG_0042.mp4` already exists
+there, Gracil replaces nothing and a **!** explains why; you can still save a copy.
+
+When something goes wrong, there's no message box. A small **!** appears beside the video; point
+at it to read what happened.
 
 ## FFmpeg, the engine underneath
 
@@ -103,8 +105,23 @@ A compressed video should still feel like the same video. Gracil keeps:
 If a detail can't fit in the compressed file, Gracil leaves just that detail out and keeps the
 video.
 
-MP4, MOV and MKV videos keep their format. Videos in older or less common formats (such as AVI)
-become MP4, which plays everywhere.
+## One format: MP4
+
+Every video Gracil compresses comes out as an MP4, whatever it was before: MOV from an iPhone,
+MKV, AVI and the rest. MP4 plays everywhere (Windows, iPhone, Mac, Android, TVs and web
+browsers), so you never have to wonder whether the result will open.
+
+A few things only some formats can hold don't fit in MP4, so they are left out and the video is
+kept:
+
+- subtitles that are pictures rather than text (as on some movie rips) are left out; text
+  subtitles are kept, though fancy styling such as colors and fonts becomes plain text;
+- fonts packed inside the file are left out;
+- a few kinds of sound MP4 can't hold are converted to a format it can, and still sound the same
+  for normal listening.
+
+A video that was already an MP4 keeps its name. Any other video gets `.mp4` at the end of its
+name.
 
 ## Your original is safe
 

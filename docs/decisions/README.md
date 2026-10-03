@@ -16,3 +16,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0009](0009-choose-after-compressing.md) | The main window asks replace or copy after compressing |
 | [0010](0010-replacing-updates-modified-date.md) | Replacing keeps the creation date and updates the modified date |
 | [0011](0011-english-and-spanish.md) | Gracil speaks English and Spanish, following Windows |
+| [0012](0012-every-result-is-mp4.md) | Every compressed video is an MP4 |
