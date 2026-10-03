@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use gracil_core::compress::Engine;
 use gracil_core::encode::JobControl;
@@ -46,7 +46,7 @@ pub struct Gracil {
     /// The main window, while it is open.
     main: Option<window::Id>,
     /// Whether the main window was ever shown. A Gracil started only for background work leaves
-    /// on its own once that work is done (spec §53).
+    /// on its own once that work is done (spec Â§53).
     window_shown: bool,
     /// Whether any request has arrived yet; until then there is nothing to be done or finished.
     requested: bool,
@@ -62,14 +62,24 @@ pub struct Gracil {
     tray: Option<Tray>,
     /// What the tray icon was last told to show, so it is only told about changes.
     tray_shown: Option<(TrayState, String)>,
-    /// Exit was chosen while work was in progress; the window asks before stopping it (§54.1).
+    /// Exit was chosen while work was in progress; the window asks before stopping it (Â§54.1).
     pub confirming_exit: bool,
     /// Something went wrong while no window was open; the tray icon says so until one opens.
     unseen_problem: bool,
-    /// The mini-window next to the tray icon, while it is open (spec §55).
+    /// The mini-window next to the tray icon, while it is open (spec Â§55).
     mini: Option<window::Id>,
+    /// Windows just shown but still out of sight, until they have drawn themselves, so they never
+    /// appear blank (white) first: their handle, how many frames they have started and where
+    /// they belong.
+    revealing: HashMap<window::Id, (u64, u8, (i32, i32))>,
     settings: Settings,
 }
+
+/// Frames a new window starts before it comes into view: by the last, the first ones are drawn.
+const FRAMES_BEFORE_REVEAL: u8 = 3;
+
+/// If a new window draws no frames, it comes into view anyway after this long.
+const REVEAL_AT_THE_LATEST: Duration = Duration::from_millis(500);
 
 /// The mini-window's size, in logical pixels.
 const MINI_SIZE: Size = Size::new(340.0, 108.0);
@@ -106,8 +116,14 @@ pub enum Message {
     ToggleDrawer,
     ThemeChanged(Mode),
     ThemeFrame(Instant),
-    /// A window is open; its handle lets Windows give it Gracil's icon.
+    /// The main window exists, still hidden; it is given its icon and shown out of sight.
+    MainReady(window::Id, u64),
+    /// A window's icon is picked again for its new scale.
     WindowReady(u64),
+    /// A window is about to draw a frame; counted while it is being revealed.
+    Frame(window::Id),
+    /// A new window has drawn itself, or waited long enough: it comes into view.
+    Reveal(window::Id),
     /// A window moved to a screen with another scale, so its icon is picked again.
     Rescaled(window::Id),
     CloseRequested(window::Id),
@@ -128,7 +144,7 @@ pub enum Message {
 
 impl Gracil {
     /// Starts without a window: the first request (from the command line) decides whether one
-    /// is needed (spec §62).
+    /// is needed (spec Â§62).
     pub fn boot() -> (Self, Task<Message>) {
         let text = Text::get(Language::detect());
         let settings = Settings::load();
@@ -169,6 +185,7 @@ impl Gracil {
             confirming_exit: false,
             unseen_problem: false,
             mini: None,
+            revealing: HashMap::new(),
             settings,
         };
         let tasks = Task::batch([
@@ -202,11 +219,22 @@ impl Gracil {
             }),
             system::theme_changes().map(Message::ThemeChanged),
             outside::subscription().map(Message::Outside),
-            // Frames only while the theme is changing (spec §51).
+            // Frames only while the theme is changing (spec Â§51).
             if self.shift.is_some() {
                 window::frames().map(Message::ThemeFrame)
             } else {
                 Subscription::none()
+            },
+            // Frames only while a new window waits out of sight.
+            if self.revealing.is_empty() {
+                Subscription::none()
+            } else {
+                event::listen_raw(|event, _status, window| match event {
+                    Event::Window(window::Event::RedrawRequested(_)) => {
+                        Some(Message::Frame(window))
+                    }
+                    _ => None,
+                })
             },
         ])
     }
@@ -229,7 +257,7 @@ impl Gracil {
         task
     }
 
-    /// Tells the tray icon what to show, when that changed (spec §54).
+    /// Tells the tray icon what to show, when that changed (spec Â§54).
     fn sync_tray(&mut self) {
         let Some(tray) = &self.tray else {
             return;
@@ -355,10 +383,30 @@ impl Gracil {
                 self.shift_theme(now);
                 Task::none()
             }
+            Message::MainReady(id, handle) => {
+                if let Err(error) = gracil_windows::set_window_icon(handle) {
+                    warn!("could not set the window icon: {error}");
+                }
+                self.reveal(id, handle)
+            }
             Message::WindowReady(handle) => {
                 if let Err(error) = gracil_windows::set_window_icon(handle) {
                     warn!("could not set the window icon: {error}");
                 }
+                Task::none()
+            }
+            Message::Frame(id) => {
+                let Some((_, frames, _)) = self.revealing.get_mut(&id) else {
+                    return Task::none();
+                };
+                *frames += 1;
+                if *frames >= FRAMES_BEFORE_REVEAL {
+                    self.bring_into_view(id);
+                }
+                Task::none()
+            }
+            Message::Reveal(id) => {
+                self.bring_into_view(id);
                 Task::none()
             }
             Message::Rescaled(window) => {
@@ -370,11 +418,12 @@ impl Gracil {
                     // Without the icon there would be no way back, so closing exits instead.
                     return self.ask_to_exit();
                 }
-                // Closing only hides Gracil; the work goes on in the tray (spec §54.1).
+                // Closing only hides Gracil; the work goes on in the tray (spec Â§54.1).
                 if self.main == Some(id) {
                     self.main = None;
                     self.confirming_exit = false;
                 }
+                self.revealing.remove(&id);
                 dismiss(id)
             }
             Message::ConfirmExit => {
@@ -390,13 +439,16 @@ impl Gracil {
             Message::MiniReady(handle) => {
                 self.place_mini(handle);
                 match self.mini {
-                    Some(id) => window::set_mode::<Message>(id, window::Mode::Windowed)
+                    Some(id) => self
+                        .reveal(id, handle)
                         .chain(Task::done(Message::MiniShown(handle))),
                     None => Task::none(),
                 }
             }
             Message::MiniShown(handle) => {
-                self.place_mini(handle);
+                if !self.mini.is_some_and(|id| self.revealing.contains_key(&id)) {
+                    self.place_mini(handle);
+                }
                 Task::none()
             }
             Message::Outside(Outside::Request(request)) => self.on_request(request),
@@ -419,7 +471,7 @@ impl Gracil {
         }
     }
 
-    /// Opens the mini-window next to the tray icon (spec §55). It opens hidden, is put in place,
+    /// Opens the mini-window next to the tray icon (spec Â§55). It opens hidden, is put in place,
     /// and only then shown, so it never appears somewhere else first.
     fn open_mini(&mut self) -> Task<Message> {
         // What it shows includes whatever went wrong.
@@ -449,7 +501,10 @@ impl Gracil {
 
     fn close_mini(&mut self) -> Task<Message> {
         match self.mini.take() {
-            Some(id) => dismiss(id),
+            Some(id) => {
+                self.revealing.remove(&id);
+                dismiss(id)
+            }
             None => Task::none(),
         }
     }
@@ -465,7 +520,7 @@ impl Gracil {
         self.mini == Some(window)
     }
 
-    /// Exit (spec §54.1): straight away when nothing is in progress; otherwise the window opens
+    /// Exit (spec Â§54.1): straight away when nothing is in progress; otherwise the window opens
     /// and says what would stop.
     fn ask_to_exit(&mut self) -> Task<Message> {
         if self.running.is_none() && self.waiting_to_compress() == 0 {
@@ -512,7 +567,7 @@ impl Gracil {
             && self.main.is_none()
         {
             // Compressing from File Explorer: the mini-window shows it happening, unless Gracil's
-            // window already does (spec §56).
+            // window already does (spec Â§56).
             self.open_mini()
         } else {
             Task::none()
@@ -545,13 +600,48 @@ impl Gracil {
         let (id, open) = window::open(window::Settings {
             size: Size::new(440.0, 440.0),
             min_size: Some(Size::new(360.0, 340.0)),
+            visible: false,
             exit_on_close_request: false,
             ..window::Settings::default()
         });
         self.main = Some(id);
         self.window_shown = true;
         open.then(window::raw_id::<Message>)
-            .map(Message::WindowReady)
+            .map(move |handle| Message::MainReady(id, handle))
+    }
+
+    /// Shows a window that opened hidden, out of sight until it has drawn itself, so it never
+    /// appears white first (`gracil_windows::park`). If it can't be moved aside it is simply shown.
+    fn reveal(&mut self, id: window::Id, handle: u64) -> Task<Message> {
+        let show = window::set_mode::<Message>(id, window::Mode::Windowed);
+        let home = match gracil_windows::park(handle) {
+            Ok(home) => home,
+            Err(error) => {
+                warn!(%error, "could not move a new window aside");
+                return show;
+            }
+        };
+        self.revealing.insert(id, (handle, 0, home));
+        // Waited for on a thread of its own, so none of Iced's workers is held up.
+        let (done, waited) = iced::futures::channel::oneshot::channel();
+        std::thread::spawn(move || {
+            std::thread::sleep(REVEAL_AT_THE_LATEST);
+            let _ = done.send(());
+        });
+        let at_the_latest = Task::perform(waited, move |_| Message::Reveal(id));
+        Task::batch([show, at_the_latest])
+    }
+
+    fn bring_into_view(&mut self, id: window::Id) {
+        let Some((handle, _, home)) = self.revealing.remove(&id) else {
+            return;
+        };
+        if self.mini == Some(id) {
+            // Placed again: the screen's scale may have changed its size meanwhile.
+            self.place_mini(handle);
+        } else if let Err(error) = gracil_windows::unpark(handle, home) {
+            warn!(%error, "could not bring a new window into view");
+        }
     }
 
     /// Whether nothing is in the middle of being compressed or put in place, so leaving loses no
@@ -584,7 +674,7 @@ impl Gracil {
     }
 
     /// Whether this Gracil was started only for background work and that work is over: nothing
-    /// waiting or running, and no result left for anyone to decide on (spec §53). While the
+    /// waiting or running, and no result left for anyone to decide on (spec Â§53). While the
     /// mini-window is open, the user is still looking, so Gracil waits for it to close.
     fn background_work_done(&self) -> bool {
         self.requested
@@ -833,7 +923,7 @@ impl Gracil {
         }
     }
 
-    /// Freezes or thaws the running compression (spec §47). Only a compression that has started
+    /// Freezes or thaws the running compression (spec Â§47). Only a compression that has started
     /// can pause; a failure leaves it as it was and is only logged.
     fn pause(&mut self, paused: bool) {
         let Some((id, control)) = &self.running else {

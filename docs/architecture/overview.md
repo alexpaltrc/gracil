@@ -82,6 +82,13 @@ drag-and-drop tracks which window files hover over. Its setting lives in
 `settings.rs` (`%LOCALAPPDATA%\Gracil\settings.txt`) and is toggled from the tray menu. A
 finished result can be decided in it as in the main window.
 
+**Opening without white.** Iced's windows have no class background, so Windows shows a new one
+white until its first WGPU frame is presented, and cloaking doesn't help (presents to a cloaked
+window are discarded). Both windows therefore open hidden and are shown parked at -20000
+(`gracil_windows::park`). `listen_raw` counts their `RedrawRequested` events; after three frames,
+or 500 ms at the latest, the main window returns to where Windows put it and the mini-window is
+placed by the tray (`App::reveal`, `App::bring_into_view`).
+
 **Always.** The main window's foot holds a three-way pill (`pill.rs`, a small custom widget that
 slides its stone itself) for `settings.always`: replace, ask, or save a copy. When a job finishes,
 `on_report` places it with File Explorer's choice for that job if there is one, else with
