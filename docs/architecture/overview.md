@@ -30,23 +30,33 @@ Crates are created when they get real content, not ahead of time.
 
 ## Key flows
 
-**Compression.** A job is a lightweight record (path, size, probe summary, state, progress, output
-mode). The scheduler runs one job at a time: probe → choose backend (cached capabilities) → spawn
-FFmpeg writing to a temporary sibling file → parse `-progress pipe:1` → validate the output with
-FFprobe → finalize (replace or place new file without overwriting).
+**Compression.** A job is a lightweight record (path, state, progress) kept in
+`gracil_core::queue`. The scheduler runs one job at a time (ADR 0004): probe → plan the streams →
+spawn FFmpeg writing to a reserved temporary sibling (`<name>.gracil-<id>.part`) → parse
+`-progress pipe:1` → validate the output with FFprobe (HEVC, same duration) → finalize. A result
+that is not smaller than the original is discarded (spec §40.1).
 
 **Finding FFmpeg.** At startup, in the background: use an FFmpeg on `PATH` that has `ffprobe.exe`
 beside it and the `libx265` encoder; otherwise Gracil's private copy; otherwise download the pinned
 build, verify it and install it privately (ADR 0008).
 
-**Backend selection.** Capabilities are detected once per process and cached: `ffmpeg -encoders`
-must list `hevc_nvenc`, then a sub-second test encode of a synthetic source must succeed. If it does,
-NVENC is used; otherwise `libx265`. CUDA decoding is attempted first on NVENC jobs; if FFmpeg fails
-in a way attributable to hardware decoding, the same job is restarted once with software decoding.
+**Choosing how to encode.** Capabilities are detected once per process: `ffmpeg -encoders` must
+list `hevc_nvenc`, then a sub-second test encode must succeed. Each job then walks a ladder of
+attempts, from fastest to most forgiving: NVENC with CUDA decoding → NVENC with software decoding
+→ NVENC keeping only essential streams → `libx265` keeping only essential streams (without NVENC:
+`libx265` full, then essential). See [`../development/ffmpeg.md`](../development/ffmpeg.md).
+
+**The window.** `gracil-ui` is an Iced daemon. `app` holds the state and reacts to messages,
+`view` draws Focus + Drawer from that state alone, `work` runs the engine and each compression on
+their own threads and reports back as messages, and `style` holds every design token. Paths given
+on the command line are queued like dropped files.
 
 **Closing and exiting.** Closing a window hides it; the process keeps running in the tray. Only
 the tray menu's Exit quits. A process started from Explorer that never showed a window exits by
 itself when its work is finished (spec §53, §54.1).
+
+*Until the tray exists (M5), closing the window cancels the running compression and quits; until
+replacing exists (M4), every result is saved as a `Gracil-` copy.*
 
 **Single instance.** The first process creates a named mutex scoped to the user session and serves
 a named pipe. Any later invocation (new launch, Explorer) sends its request over the pipe and
@@ -56,7 +66,7 @@ exits.
 
 - Settings: `%LOCALAPPDATA%\Gracil\settings.json` (redirected into the package's private folder
   when running as MSIX).
-- Logs: `%LOCALAPPDATA%\Gracil\logs\`, daily rotation, a small number of files kept.
+- Logs: `%LOCALAPPDATA%\Gracil\logs\`, one plain-text file per day, the last seven kept.
 - No job history is persisted.
 
 See [`../decisions/`](../decisions/) for the reasoning behind the main choices.

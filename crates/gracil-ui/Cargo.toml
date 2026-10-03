@@ -1,0 +1,22 @@
+[package]
+name = "gracil-ui"
+description = "The Gracil desktop application."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "gracil"
+path = "src/main.rs"
+
+[dependencies]
+gracil-core.workspace = true
+iced.workspace = true
+rfd.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

@@ -12,6 +12,19 @@ Gracil is free and private. You don't need an account, and Gracil doesn't need t
 work. Your videos never leave your computer: Gracil sends no videos, file names or usage data
 anywhere.
 
+## Adding videos
+
+Drop videos onto the window, or choose them with **or choose files**. You can add more at any
+time, even while Gracil is working.
+
+- Gracil compresses one video at a time, in the order you added them. The one being compressed
+  is shown large, with its progress.
+- **View files**, under it, shows every video you added and how each one went: how much smaller
+  it became, or why it couldn't be compressed.
+- Adding a video that is already on the list does nothing. Folders are ignored for now.
+- When something goes wrong, there's no message box. A small **!** appears beside the video;
+  point at it to read what happened.
+
 ## FFmpeg, the engine underneath
 
 To compress video, Gracil relies on **FFmpeg**, the free, open-source tool trusted across the
@@ -78,18 +91,30 @@ Gracil never writes over your video while it works.
   it was.
 - *(in progress)* When you replace the original, the swap is done with Windows' own safe
   replacement. Even a power cut at the wrong moment cannot leave you without your video.
-- *(in progress)* If the compressed video isn't smaller than the original, Gracil doesn't save
-  it. The save buttons turn off and a small "!" explains why when you point at it.
+- If the compressed video isn't smaller than the original, Gracil doesn't save it. A small "!"
+  explains why when you point at it. *(in progress)* The save buttons will also turn off for that
+  video.
 
 ## Saving a copy instead
 
-*(in progress)* If you choose to keep your original, the compressed copy is saved next to it with
+If you choose to keep your original, the compressed copy is saved next to it with
 `Gracil-` in front of the name: `Vacation.mp4` becomes `Gracil-Vacation.mp4`. If that name is
 already taken, Gracil uses `Gracil-Vacation (2).mp4`, and so on. Gracil never overwrites an
 existing file.
+
+For now this is what Gracil always does. *(in progress)* Replacing the original will come next.
 
 ## Closing Gracil
 
 *(in progress)* Closing the window doesn't stop Gracil. It keeps working in the system tray, next to the clock,
 until you choose **Exit** there. If a video is compressing at that moment, Gracil tells you what
 will happen before it exits.
+
+For now, closing the window quits Gracil. If a video is compressing, Gracil stops it first and
+leaves the original untouched.
+
+## What Gracil writes down
+
+Gracil keeps a simple diary of what it did, such as which way it compressed each video, so
+problems can be understood later. It stays on your computer, in Gracil's own folder, and only the
+last seven days are kept.
