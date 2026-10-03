@@ -1,7 +1,7 @@
 //! Names for files produced by "Compress and save as new".
 //!
-//! `Vacation.mp4` becomes `Gracil_Vacation.mp4`. If that name is taken, Gracil uses the familiar
-//! Windows pattern `Gracil_Vacation (2).mp4`, `Gracil_Vacation (3).mp4`, and so on.
+//! `Vacation.mp4` becomes `Gracil-Vacation.mp4`. If that name is taken, Gracil uses the familiar
+//! Windows pattern `Gracil-Vacation (2).mp4`, `Gracil-Vacation (3).mp4`, and so on.
 //!
 //! Names are built from `OsStr` pieces so the original name is kept byte for byte: no
 //! transliteration, no Unicode normalization.
@@ -12,10 +12,10 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-const PREFIX: &str = "Gracil_";
+const PREFIX: &str = "Gracil-";
 
 /// The `attempt`-th candidate name for a compressed copy of `source`, in the same folder.
-/// Attempt 1 is `Gracil_<name>`; attempt `n > 1` adds ` (n)` before the extension.
+/// Attempt 1 is `Gracil-<name>`; attempt `n > 1` adds ` (n)` before the extension.
 pub fn save_as_new_candidate(source: &Path, attempt: u32) -> PathBuf {
     let mut name = OsString::from(PREFIX);
     if let Some(stem) = source.file_stem() {
@@ -53,7 +53,7 @@ mod tests {
     #[test]
     fn adds_prefix_in_same_folder() {
         let out = save_as_new_candidate(Path::new(r"C:\Videos\Vacation.mp4"), 1);
-        assert_eq!(out, Path::new(r"C:\Videos\Gracil_Vacation.mp4"));
+        assert_eq!(out, Path::new(r"C:\Videos\Gracil-Vacation.mp4"));
     }
 
     #[test]
@@ -61,17 +61,17 @@ mod tests {
         let cases = [
             (
                 r"C:\Videos\Mi cumpleaños 🎂.mp4",
-                "Gracil_Mi cumpleaños 🎂.mp4",
+                "Gracil-Mi cumpleaños 🎂.mp4",
             ),
-            (r"C:\日本語\動画.mp4", "Gracil_動画.mp4"),
-            (r"C:\Videos\José\Vacación.mp4", "Gracil_Vacación.mp4"),
+            (r"C:\日本語\動画.mp4", "Gracil-動画.mp4"),
+            (r"C:\Videos\José\Vacación.mp4", "Gracil-Vacación.mp4"),
             (
                 r"C:\V\Tom's (final) [v2].mov",
-                "Gracil_Tom's (final) [v2].mov",
+                "Gracil-Tom's (final) [v2].mov",
             ),
-            (r"C:\V\trip.2024.07.mkv", "Gracil_trip.2024.07.mkv"),
-            (r"C:\V\UPPER.MP4", "Gracil_UPPER.MP4"),
-            (r"C:\V\no_extension", "Gracil_no_extension"),
+            (r"C:\V\trip.2024.07.mkv", "Gracil-trip.2024.07.mkv"),
+            (r"C:\V\UPPER.MP4", "Gracil-UPPER.MP4"),
+            (r"C:\V\no_extension", "Gracil-no_extension"),
         ];
         for (source, expected) in cases {
             assert_eq!(
@@ -86,32 +86,32 @@ mod tests {
         // "e" followed by a combining acute accent must stay two code points.
         let source = PathBuf::from("C:\\V\\Jose\u{301}.mp4");
         let out = save_as_new_candidate(&source, 1);
-        assert_eq!(name_of(&out), "Gracil_Jose\u{301}.mp4");
+        assert_eq!(name_of(&out), "Gracil-Jose\u{301}.mp4");
     }
 
     #[test]
     fn numbered_candidates_go_before_extension() {
         let out = save_as_new_candidate(Path::new(r"C:\V\Vacation.mp4"), 3);
-        assert_eq!(name_of(&out), "Gracil_Vacation (3).mp4");
+        assert_eq!(name_of(&out), "Gracil-Vacation (3).mp4");
     }
 
     #[test]
     fn first_free_skips_taken_names() {
         let source = Path::new(r"C:\V\Vacation.mp4");
         let taken: HashSet<PathBuf> = [
-            PathBuf::from(r"C:\V\Gracil_Vacation.mp4"),
-            PathBuf::from(r"C:\V\Gracil_Vacation (2).mp4"),
+            PathBuf::from(r"C:\V\Gracil-Vacation.mp4"),
+            PathBuf::from(r"C:\V\Gracil-Vacation (2).mp4"),
         ]
         .into();
         let out = first_free_save_as_new_path(source, |p| taken.contains(p));
-        assert_eq!(out, Some(PathBuf::from(r"C:\V\Gracil_Vacation (3).mp4")));
+        assert_eq!(out, Some(PathBuf::from(r"C:\V\Gracil-Vacation (3).mp4")));
     }
 
     #[test]
     fn first_free_uses_plain_name_when_available() {
         let source = Path::new(r"C:\V\Vacation.mp4");
         let out = first_free_save_as_new_path(source, |_| false);
-        assert_eq!(out, Some(PathBuf::from(r"C:\V\Gracil_Vacation.mp4")));
+        assert_eq!(out, Some(PathBuf::from(r"C:\V\Gracil-Vacation.mp4")));
     }
 
     #[test]
@@ -119,11 +119,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("gracil-naming-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let source = dir.join("Mi cumpleaños 🎂.mp4");
-        std::fs::write(dir.join("Gracil_Mi cumpleaños 🎂.mp4"), b"").unwrap();
+        std::fs::write(dir.join("Gracil-Mi cumpleaños 🎂.mp4"), b"").unwrap();
 
         let out = first_free_save_as_new_path(&source, Path::exists);
 
         std::fs::remove_dir_all(&dir).unwrap();
-        assert_eq!(out, Some(dir.join("Gracil_Mi cumpleaños 🎂 (2).mp4")));
+        assert_eq!(out, Some(dir.join("Gracil-Mi cumpleaños 🎂 (2).mp4")));
     }
 }

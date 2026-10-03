@@ -1,4 +1,4 @@
-//! Compresses videos from the command line, saving each as `Gracil_<name>` beside the original.
+//! Compresses videos from the command line, saving each as `Gracil-<name>` beside the original.
 //!
 //! ```text
 //! cargo run --release -p gracil-core --example compress -- <video>...
