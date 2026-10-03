@@ -1,4 +1,4 @@
-//! Names for files produced by "Compress and save as new".
+//! Names for files produced by "Compress and save a copy".
 //!
 //! `Vacation.mp4` becomes `Gracil-Vacation.mp4`. If that name is taken, Gracil uses the familiar
 //! Windows pattern `Gracil-Vacation (2).mp4`, `Gracil-Vacation (3).mp4`, and so on.

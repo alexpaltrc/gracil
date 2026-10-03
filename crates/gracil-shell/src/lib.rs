@@ -172,7 +172,7 @@ impl IExplorerCommand_Impl for Compress_Impl {
         let words = selection::Words::get();
         duplicate(match self.action {
             Action::Replace => words.replace,
-            Action::SaveCopy => words.save_new,
+            Action::SaveCopy => words.save_copy,
         })
     }
 

@@ -4,7 +4,7 @@
 the package of [0005](0005-msix-packaging.md).
 
 **Context.** Spec §57–§62 ask for **Gracil (N)** in Windows 11's modern context menu, with
-**Compress and replace** and **Compress and save as new**, for one or many videos. The handler
+**Compress and replace** and **Compress and save a copy**, for one or many videos. The handler
 runs inside `explorer.exe`, must answer at once and must never take the shell down. §61 prefers
 Rust with `windows-rs`.
 

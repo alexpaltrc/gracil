@@ -430,8 +430,12 @@ Transitions are deterministic. The UI derives from state. Avoid scattered boolea
 
 # 37. Starting compression
 
-Two output intentions: **Compress and replace** and **Compress and save as new**. Do not expose
+Two output intentions: **Compress and replace** and **Compress and save a copy**. Do not expose
 codec choices. Do not require technical setup before starting.
+
+*Update (2026-10-03):* the second intention was first named "Compress and save as new"; at the
+product owner's request it now uses the more familiar wording "Compress and save a copy" (Spanish
+"Comprimir y guardar como copia") everywhere, matching the **Save copy** button.
 
 # 37.1 Choosing after compressing
 
@@ -464,7 +468,7 @@ out-of-space conditions, replacement errors, invalid output and interrupted fina
 
 The source must remain recoverable if final replacement fails. This is a hard requirement.
 
-# 40. Compress and save as new
+# 40. Compress and save a copy
 
 Create a new file in the same directory with the `Gracil-` prefix (`Vacation.mp4` →
 `Gracil-Vacation.mp4`). Do not silently overwrite an existing file; if the name exists, create a
@@ -641,7 +645,7 @@ implementing.
 # 58. Explorer multi-selection
 
 Selecting several videos and right-clicking shows approximately **Gracil (8)** with the
-subcommands **Compress and replace** and **Compress and save as new**. Support one and several
+subcommands **Compress and replace** and **Compress and save a copy**. Support one and several
 selected videos. Whether a single file shows "Gracil" or "Gracil (1)" is a small copy decision;
 keep it easy to change.
 
@@ -778,7 +782,7 @@ Every milestone compiles and is testable.
   handling, multiple job records, scheduler, temporary Focus + Drawer.
 - **M3 — File management UX**: individual removal, Clear, active-job protection, output-mode
   selection, polished Focus + Drawer.
-- **M4 — Safe output**: replace, save as new, safe replacement, collision-safe names, metadata,
+- **M4 — Safe output**: replace, save a copy, safe replacement, collision-safe names, metadata,
   stream and filesystem-metadata preservation, cancellation, pause/resume.
 - **M5 — Background architecture**: single instance, named-pipe IPC, background invocation, tray
   icon and states, clean process lifetime.

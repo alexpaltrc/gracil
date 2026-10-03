@@ -102,8 +102,8 @@ fn the_menu_counts_videos_and_offers_both_commands() {
             .map(|command| text(command.as_ref().unwrap().GetTitle(&mixed).unwrap()))
             .collect();
         assert!(
-            titles == ["Compress and replace", "Compress and save as new"]
-                || titles == ["Comprimir y reemplazar", "Comprimir y guardar como nuevo"],
+            titles == ["Compress and replace", "Compress and save a copy"]
+                || titles == ["Comprimir y reemplazar", "Comprimir y guardar como copia"],
             "{titles:?}"
         );
     }

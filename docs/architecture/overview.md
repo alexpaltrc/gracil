@@ -93,7 +93,7 @@ work in the background. A Gracil whose window never opened ends itself when that
 **File Explorer.** `gracil_shell.dll` gives Explorer one `IExplorerCommand`, titled "Gracil" or
 "Gracil (N)" by the number of selected files with a video extension
 (`gracil_core::media::looks_like_video`) and hidden when there are none, with **Compress and
-replace** and **Compress and save as new** under it. A click returns at once; a thread of the DLL
+replace** and **Compress and save a copy** under it. A click returns at once; a thread of the DLL
 forwards the paths over the pipe when Gracil is running, or starts Gracil with as many paths as
 fit on its command line and forwards the rest (ADR 0022). Packaged, it starts Gracil through the
 package's `gracil.exe` alias, so Gracil keeps the package's identity (ADR 0023); otherwise it

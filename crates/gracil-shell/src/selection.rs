@@ -15,7 +15,7 @@ pub fn title(count: usize) -> String {
 /// What the two commands are called, in the language Windows is shown in (ADR 0011).
 pub struct Words {
     pub replace: &'static str,
-    pub save_new: &'static str,
+    pub save_copy: &'static str,
 }
 
 impl Words {
@@ -23,12 +23,12 @@ impl Words {
         if gracil_windows::display_language_is_spanish() {
             Self {
                 replace: "Comprimir y reemplazar",
-                save_new: "Comprimir y guardar como nuevo",
+                save_copy: "Comprimir y guardar como copia",
             }
         } else {
             Self {
                 replace: "Compress and replace",
-                save_new: "Compress and save as new",
+                save_copy: "Compress and save a copy",
             }
         }
     }

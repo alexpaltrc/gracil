@@ -2,7 +2,7 @@
 
 **Status:** Accepted.
 
-**Context.** The specification defines two output intentions, replace and save as new (§37), but
+**Context.** The specification defines two output intentions, replace and save a copy (§37), but
 not when the main window asks for one. File Explorer chooses up front, with two commands (§57–§58).
 The product owner wants the save actions to turn off, with a quiet "!", when a result is not
 smaller (§40.1), which implies the actions are offered once the result is known.
