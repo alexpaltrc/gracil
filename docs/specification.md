@@ -801,8 +801,43 @@ Every milestone compiles and is testable.
   multi-selection, dynamic Gracil (N), both commands, IPC forwarding, shell stability testing.
 - **M8 — Packaging**: MSIX, manifest registration, clean install/update/uninstall, packaged FFmpeg
   and shell extension, versioning scripts, Store readiness.
+- **M9 — Image compression** *(planned, not started; added 2026-10-03 at the product owner's
+  request)*: compress photos and other images the way Gracil compresses video. See §77.1.
 
 Do not attempt to build every milestone in one giant pass.
+
+# 77.1 Next: image compression (planned)
+
+*Added 2026-10-03. Only a plan: nothing of it is built, and no code is written for it until the
+open decisions below are settled in an ADR.*
+
+Gracil will compress images with the same philosophy as video:
+
+- **One output format, always.** Like every video becomes an MP4 (ADR 0012), every image will
+  become the same single format, chosen once by Gracil for the widest compatibility at the
+  smallest size. The user never picks a format.
+- **One exact compression, always.** A fixed, tested quality setting, like the fixed H.265
+  settings for video. No sliders, presets or advanced options (§66).
+- **The same flows.** Drop images on the main window or the mini-window, or use File Explorer's
+  menu (which would then count images as well as videos, **Gracil (N)**). The same choices after
+  compressing: **Replace** or **Save copy**, and the **Always** setting (ADR 0025). The same safe
+  replacement (§39) and collision-safe names (§40).
+- **Never reject an image** because it is unusual; fall back to simpler ways first. A result that
+  is not smaller is not kept (§40.1).
+- **Keep what matters**: date taken, orientation, color profile and the other metadata people
+  expect a photo to keep, as for video (§41).
+- Everything stays local and private (§82).
+
+Open decisions, to settle before any work starts:
+
+1. **The final format.** Candidates to weigh, for compatibility on Windows, iPhone, Mac, Android
+   and web browsers against size: AVIF, HEIC/HEIF, JPEG XL, WebP, or an optimized JPEG.
+2. **The exact compression**: the encoder and its fixed settings, verified on a representative set
+   of photos, screenshots and graphics.
+3. **Which images are accepted** (JPEG, PNG, HEIC, WebP, TIFF, BMP, GIF, camera RAW…) and what
+   happens to transparency, animation, HDR and very large images.
+4. **The engine**: FFmpeg, which Gracil already relies on, or a dedicated image library.
+5. **How images and videos share the list**, the dial and the tray without adding complexity.
 
 # 78. Temporary UI decisions
 
