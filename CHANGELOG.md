@@ -20,9 +20,13 @@ Gracil is still being built, but you can already compress videos with it.
   the open Gracil forward and adds the videos to the same list.
 - Closing the window no longer stops Gracil: it keeps working next to the clock. Its marble there
   fills up as a video compresses, shows two bars when paused, and turns amber if something went
-  wrong while the window was closed. Click it to open Gracil again, or right-click it for
-  **Exit**. If a video is compressing or waiting, Gracil first asks, and tells you exactly what
-  would stop.
+  wrong while the window was closed. Right-click it for **Open Gracil** or **Exit**. If a video
+  is compressing or waiting, Gracil first asks, and tells you exactly what would stop.
+- Click the marble next to the clock and a small window opens beside it, wherever your taskbar
+  is. It shows the video being compressed and how far along it is, and its ring pauses and
+  resumes just like the big one. It also says how many videos are waiting and where a finished
+  one went, and you can drop more videos on it. It stays open while you do other things until you
+  close it or click the marble again; **Open Gracil** in it brings up the big window.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
   advances. The middle of the ring holds the controls, as symbols instead of words: the top part
   pauses (II) and turns into play (▶) to resume, and the bottom part stops (■). Pausing frees up

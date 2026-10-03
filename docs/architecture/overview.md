@@ -74,6 +74,13 @@ picture or tooltip would change. Exit with work running or waiting opens the win
 confirmation; with nothing running it cancels nothing and leaves at once. If the tray can't be
 created, closing the window behaves as Exit.
 
+**Mini-window.** A click on the tray icon opens a second Iced window (`view::mini`), undecorated,
+always on top and off the taskbar (ADR 0021). It opens hidden; `gracil_windows::place_near_tray`
+puts it against the taskbar's edge on the icon's screen, and only then is it shown. The app keeps
+its `window::Id` apart from the main window's, so closing it never counts as closing Gracil, and
+drag-and-drop tracks which window files hover over. Its one setting lives in
+`settings.rs` (`%LOCALAPPDATA%\Gracil\settings.txt`) and is toggled from the tray menu.
+
 **Single instance.** The first process creates the named mutex `Local\Gracil.SingleInstance`
 and serves the pipe `\\.\pipe\Gracil.<session>` (`gracil_windows::claim`, `serve`). Any later
 invocation (a new launch, "Open with", Explorer) sends its command line over the pipe

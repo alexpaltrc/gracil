@@ -14,8 +14,10 @@ use iced::{Color, Point, Rectangle, Renderer, Size, Theme, Vector, window};
 
 use crate::app::Message;
 
-/// Width and height of the dial, in logical pixels.
+/// Width and height of the dial, in logical pixels. Drawn smaller, everything shrinks with it.
 pub const SIZE: f32 = 148.0;
+/// The dial in the mini-window.
+pub const SMALL: f32 = 76.0;
 
 const PIPE_WIDTH: f32 = 13.0;
 /// Space between the pipe and the buttons in its middle.
@@ -175,9 +177,11 @@ impl canvas::Program<Message> for Dial {
         let palette = theme.palette();
         let mut frame = Frame::new(renderer, bounds.size());
         let center = frame.center();
-        let outer = SIZE.min(bounds.width).min(bounds.height) / 2.0 - 1.0;
-        let pipe = outer - PIPE_WIDTH / 2.0;
-        let inner = outer - PIPE_WIDTH;
+        let scale = scale(bounds.size());
+        let pipe_width = PIPE_WIDTH * scale;
+        let outer = SIZE * scale / 2.0 - 1.0;
+        let pipe = outer - pipe_width / 2.0;
+        let inner = outer - pipe_width;
         let radius = middle_radius(bounds.size());
         let wall = |alpha: f32| {
             Stroke::default()
@@ -189,7 +193,7 @@ impl canvas::Program<Message> for Dial {
         frame.stroke(
             &Path::circle(center, pipe),
             Stroke::default()
-                .with_width(PIPE_WIDTH)
+                .with_width(pipe_width)
                 .with_color(palette.text.scale_alpha(0.04)),
         );
         frame.stroke(&Path::circle(center, outer), wall(0.22));
@@ -210,7 +214,7 @@ impl canvas::Program<Message> for Dial {
             frame.stroke(
                 &trail,
                 Stroke::default()
-                    .with_width(PIPE_WIDTH - 5.0)
+                    .with_width(pipe_width - 5.0 * scale)
                     .with_line_cap(LineCap::Butt)
                     .with_color(palette.text.scale_alpha(0.85 - 0.3 * state.play)),
             );
@@ -219,9 +223,9 @@ impl canvas::Program<Message> for Dial {
         // The marble, edged in the background color so it stands apart from the trail, with a small
         // highlight so it reads as round.
         let marble = Point::new(center.x + pipe * head.cos(), center.y + pipe * head.sin());
-        let marble_radius = PIPE_WIDTH / 2.0 - 1.5;
+        let marble_radius = pipe_width / 2.0 - 1.5 * scale;
         frame.fill(
-            &Path::circle(marble, marble_radius + 1.5),
+            &Path::circle(marble, marble_radius + 1.5 * scale),
             palette.background,
         );
         frame.fill(&Path::circle(marble, marble_radius), palette.primary);
@@ -332,7 +336,13 @@ impl canvas::Program<Message> for Dial {
 
 /// The radius of the buttons in the middle of the pipe.
 fn middle_radius(bounds: Size) -> f32 {
-    SIZE.min(bounds.width).min(bounds.height) / 2.0 - 1.0 - PIPE_WIDTH - GAP
+    let scale = scale(bounds);
+    SIZE * scale / 2.0 - 1.0 - (PIPE_WIDTH + GAP) * scale
+}
+
+/// How much smaller than [SIZE] the dial is drawn, to fit its space.
+fn scale(bounds: Size) -> f32 {
+    SIZE.min(bounds.width).min(bounds.height) / SIZE
 }
 
 /// Four corners, as x and y.

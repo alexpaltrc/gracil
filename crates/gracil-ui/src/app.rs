@@ -11,12 +11,15 @@ use gracil_core::job::{JobEvent, JobState};
 use gracil_core::queue::{Job, JobId, Queue};
 use gracil_windows::{Tray, TrayEvent, TrayMenu, TrayState};
 use iced::theme::{Mode, Palette};
+use iced::window::settings::PlatformSpecific;
+use iced::window::settings::platform::CornerPreference;
 use iced::{Event, Size, Subscription, Task, Theme, event, system, window};
 use tracing::{info, warn};
 
 use crate::logging;
 use crate::outside::{self, Outside};
 use crate::request::Request;
+use crate::settings::Settings;
 use crate::style;
 use crate::text::{Language, Text};
 use crate::work::{self, Choice, Failure, Outcome, Report};
@@ -25,7 +28,8 @@ pub struct Gracil {
     pub queue: Queue,
     pub outcomes: HashMap<JobId, Outcome>,
     pub engine: EngineState,
-    pub hovering_files: bool,
+    /// The window files are being dragged over, if any.
+    pub hovering: Option<window::Id>,
     pub drawer_open: bool,
     /// The video the user picked in the drawer to look at, if any.
     pub selected: Option<JobId>,
@@ -57,9 +61,15 @@ pub struct Gracil {
     tray_shown: Option<(TrayState, String)>,
     /// Exit was chosen while work was in progress; the window asks before stopping it (§54.1).
     pub confirming_exit: bool,
-    /// Something went wrong while the window was closed; the tray icon says so until it opens.
+    /// Something went wrong while no window was open; the tray icon says so until one opens.
     unseen_problem: bool,
+    /// The mini-window next to the tray icon, while it is open (spec §55).
+    mini: Option<window::Id>,
+    settings: Settings,
 }
+
+/// The mini-window's size, in logical pixels.
+const MINI_SIZE: Size = Size::new(340.0, 108.0);
 
 #[derive(Debug, Clone)]
 pub enum EngineState {
@@ -73,8 +83,8 @@ pub enum EngineState {
 #[derive(Debug, Clone)]
 pub enum Message {
     EngineStarted(Option<Arc<Engine>>),
-    FilesHovered,
-    FilesHoveredLeft,
+    FilesHovered(window::Id),
+    FilesHoveredLeft(window::Id),
     FileDropped(PathBuf),
     ChooseFiles,
     FilesChosen(Vec<PathBuf>),
@@ -100,6 +110,14 @@ pub enum Message {
     ConfirmExit,
     /// Exit is called off.
     KeepWorking,
+    /// The mini-window's "Open Gracil".
+    OpenMain,
+    CloseMini,
+    /// The mini-window exists, still hidden, and can be put next to the tray icon.
+    MiniReady(u64),
+    /// The mini-window is on screen; it is put in place again in case the screen's scale
+    /// changed its size.
+    MiniShown(u64),
     Outside(Outside),
 }
 
@@ -108,8 +126,10 @@ impl Gracil {
     /// is needed (spec §62).
     pub fn boot() -> (Self, Task<Message>) {
         let text = Text::get(Language::detect());
+        let settings = Settings::load();
         let menu = TrayMenu {
             open: text.open_gracil.to_owned(),
+            explorer_mini_window: text.explorer_mini_window.to_owned(),
             exit: text.exit.to_owned(),
         };
         let tray = Tray::start(menu, &text.tray_tip(TrayState::Idle), |event| {
@@ -117,11 +137,14 @@ impl Gracil {
         })
         .inspect_err(|error| warn!(%error, "no tray icon; closing the window will exit"))
         .ok();
+        if let Some(tray) = &tray {
+            tray.check_explorer_mini_window(settings.explorer_mini_window);
+        }
         let state = Self {
             queue: Queue::default(),
             outcomes: HashMap::new(),
             engine: EngineState::Starting,
-            hovering_files: false,
+            hovering: None,
             drawer_open: false,
             selected: None,
             last_placed: None,
@@ -139,6 +162,8 @@ impl Gracil {
             tray_shown: None,
             confirming_exit: false,
             unseen_problem: false,
+            mini: None,
+            settings,
         };
         let tasks = Task::batch([
             system::theme().map(Message::ThemeChanged),
@@ -158,8 +183,10 @@ impl Gracil {
     pub fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
             event::listen_with(|event, _status, window| match event {
-                Event::Window(window::Event::FileHovered(_)) => Some(Message::FilesHovered),
-                Event::Window(window::Event::FilesHoveredLeft) => Some(Message::FilesHoveredLeft),
+                Event::Window(window::Event::FileHovered(_)) => Some(Message::FilesHovered(window)),
+                Event::Window(window::Event::FilesHoveredLeft) => {
+                    Some(Message::FilesHoveredLeft(window))
+                }
                 Event::Window(window::Event::FileDropped(path)) => Some(Message::FileDropped(path)),
                 Event::Window(window::Event::CloseRequested) => {
                     Some(Message::CloseRequested(window))
@@ -239,16 +266,18 @@ impl Gracil {
                 };
                 self.schedule()
             }
-            Message::FilesHovered => {
-                self.hovering_files = true;
+            Message::FilesHovered(window) => {
+                self.hovering = Some(window);
                 Task::none()
             }
-            Message::FilesHoveredLeft => {
-                self.hovering_files = false;
+            Message::FilesHoveredLeft(window) => {
+                if self.hovering == Some(window) {
+                    self.hovering = None;
+                }
                 Task::none()
             }
             Message::FileDropped(path) => {
-                self.hovering_files = false;
+                self.hovering = None;
                 self.add(vec![path])
             }
             Message::ChooseFiles => Task::perform(choose_files(self.text), Message::FilesChosen),
@@ -322,6 +351,7 @@ impl Gracil {
             Message::Rescaled(window) => {
                 window::raw_id::<Message>(window).map(Message::WindowReady)
             }
+            Message::CloseRequested(id) if self.mini == Some(id) => self.close_mini(),
             Message::CloseRequested(id) => {
                 if self.tray.is_none() {
                     // Without the icon there would be no way back, so closing exits instead.
@@ -342,10 +372,84 @@ impl Gracil {
                 self.confirming_exit = false;
                 Task::none()
             }
+            Message::OpenMain => self.show_main(),
+            Message::CloseMini => self.close_mini(),
+            Message::MiniReady(handle) => {
+                self.place_mini(handle);
+                match self.mini {
+                    Some(id) => window::set_mode::<Message>(id, window::Mode::Windowed)
+                        .chain(Task::done(Message::MiniShown(handle))),
+                    None => Task::none(),
+                }
+            }
+            Message::MiniShown(handle) => {
+                self.place_mini(handle);
+                Task::none()
+            }
             Message::Outside(Outside::Request(request)) => self.on_request(request),
+            Message::Outside(Outside::Tray(TrayEvent::Toggle)) => match self.mini {
+                Some(_) => self.close_mini(),
+                None => self.open_mini(),
+            },
             Message::Outside(Outside::Tray(TrayEvent::Open)) => self.show_main(),
+            Message::Outside(Outside::Tray(TrayEvent::ExplorerMiniWindow)) => {
+                self.settings.explorer_mini_window = !self.settings.explorer_mini_window;
+                if let Some(tray) = &self.tray {
+                    tray.check_explorer_mini_window(self.settings.explorer_mini_window);
+                }
+                if let Err(error) = self.settings.save() {
+                    warn!(%error, "could not save the settings");
+                }
+                Task::none()
+            }
             Message::Outside(Outside::Tray(TrayEvent::Exit)) => self.ask_to_exit(),
         }
+    }
+
+    /// Opens the mini-window next to the tray icon (spec §55). It opens hidden, is put in place,
+    /// and only then shown, so it never appears somewhere else first.
+    fn open_mini(&mut self) -> Task<Message> {
+        // What it shows includes whatever went wrong.
+        self.unseen_problem = false;
+        if let Some(id) = self.mini {
+            return window::gain_focus(id);
+        }
+        let (id, open) = window::open(window::Settings {
+            size: MINI_SIZE,
+            resizable: false,
+            minimizable: false,
+            decorations: false,
+            visible: false,
+            level: window::Level::AlwaysOnTop,
+            exit_on_close_request: false,
+            platform_specific: PlatformSpecific {
+                skip_taskbar: true,
+                undecorated_shadow: true,
+                corner_preference: CornerPreference::Round,
+                ..PlatformSpecific::default()
+            },
+            ..window::Settings::default()
+        });
+        self.mini = Some(id);
+        open.then(window::raw_id::<Message>).map(Message::MiniReady)
+    }
+
+    fn close_mini(&mut self) -> Task<Message> {
+        match self.mini.take() {
+            Some(id) => window::close(id),
+            None => Task::none(),
+        }
+    }
+
+    fn place_mini(&self, handle: u64) {
+        if let Err(error) = gracil_windows::place_near_tray(handle, self.tray.as_ref()) {
+            warn!(%error, "could not place the mini-window");
+        }
+    }
+
+    /// Whether `window` is the mini-window.
+    pub fn is_mini(&self, window: window::Id) -> bool {
+        self.mini == Some(window)
     }
 
     /// Exit (spec §54.1): straight away when nothing is in progress; otherwise the window opens
@@ -389,6 +493,13 @@ impl Gracil {
         self.requested = true;
         let show = if request.shows_window() {
             self.show_main()
+        } else if request.choice.is_some()
+            && self.settings.explorer_mini_window
+            && self.main.is_none()
+        {
+            // Compressing from File Explorer: the mini-window shows it happening, unless Gracil's
+            // window already does (spec §56).
+            self.open_mini()
         } else {
             Task::none()
         };
@@ -459,10 +570,12 @@ impl Gracil {
     }
 
     /// Whether this Gracil was started only for background work and that work is over: nothing
-    /// waiting or running, and no result left for anyone to decide on (spec §53).
+    /// waiting or running, and no result left for anyone to decide on (spec §53). While the
+    /// mini-window is open, the user is still looking, so Gracil waits for it to close.
     fn background_work_done(&self) -> bool {
         self.requested
             && !self.window_shown
+            && self.mini.is_none()
             && self.running.is_none()
             && !self
                 .queue
@@ -586,9 +699,9 @@ impl Gracil {
         }
     }
 
-    /// Marks a problem the user hasn't seen, when the window is closed.
+    /// Marks a problem the user hasn't seen, when no window is open.
     fn note_problem(&mut self) {
-        if self.main.is_none() {
+        if self.main.is_none() && self.mini.is_none() {
             self.unseen_problem = true;
         }
     }
@@ -653,8 +766,6 @@ impl Gracil {
         }
     }
 
-    /// Freezes or thaws the running compression (spec §47). Only a compression that has started
-    /// can pause; a failure leaves it as it was and is only logged.
     /// Follows Windows between light and dark. The first answer is applied at once, so Gracil
     /// opens in the right colors; later changes fade softly (ADR 0015).
     fn follow_theme(&mut self, mode: Mode, now: Instant) {
@@ -686,6 +797,8 @@ impl Gracil {
         }
     }
 
+    /// Freezes or thaws the running compression (spec §47). Only a compression that has started
+    /// can pause; a failure leaves it as it was and is only logged.
     fn pause(&mut self, paused: bool) {
         let Some((id, control)) = &self.running else {
             return;

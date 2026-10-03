@@ -3,12 +3,14 @@
 //! This is one of the two crates allowed to use `unsafe`, and only to call Windows functions.
 //! Every call explains why it is sound.
 
+mod flyout;
 mod icon;
 mod instance;
 mod lifetime;
 mod process;
 mod tray;
 
+pub use flyout::place_near_tray;
 pub use icon::set_window_icon;
 pub use instance::{claim, forward, serve};
 pub use lifetime::end_children_with_this_process;

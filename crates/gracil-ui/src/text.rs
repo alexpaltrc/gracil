@@ -57,9 +57,11 @@ pub struct Text {
     pub exit: &'static str,
     pub exit_question: &'static str,
     pub keep_working: &'static str,
+    pub explorer_mini_window: &'static str,
     smaller: fn(u32) -> String,
     videos: fn(usize) -> String,
     ready: fn(usize) -> String,
+    in_line: fn(usize) -> String,
     saved_as: fn(&str) -> String,
     replaced_by: fn(&str) -> String,
     tray_tip: fn(TrayState) -> String,
@@ -95,6 +97,11 @@ impl Text {
 
     pub fn ready(&self, count: usize) -> String {
         (self.ready)(count)
+    }
+
+    /// How many videos are waiting their turn.
+    pub fn in_line(&self, count: usize) -> String {
+        (self.in_line)(count)
     }
 
     pub fn saved_as(&self, name: &str) -> String {
@@ -169,6 +176,8 @@ static ENGLISH: Text = Text {
     exit: "Exit",
     exit_question: "Exit Gracil?",
     keep_working: "Keep working",
+    explorer_mini_window: "Show mini-window when compressing from File Explorer",
+    in_line: |count| format!("{count} waiting"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
         TrayState::Processing(done) => format!("Gracil · compressing {}%", percent(done)),
@@ -242,6 +251,8 @@ static SPANISH: Text = Text {
     exit: "Salir",
     exit_question: "¿Salir de Gracil?",
     keep_working: "Seguir trabajando",
+    explorer_mini_window: "Mostrar miniventana al comprimir desde el Explorador de archivos",
+    in_line: |count| format!("{count} en espera"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
         TrayState::Processing(done) => format!("Gracil · comprimiendo {}%", percent(done)),

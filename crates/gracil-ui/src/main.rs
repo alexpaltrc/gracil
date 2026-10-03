@@ -9,6 +9,7 @@ mod dial;
 mod logging;
 mod outside;
 mod request;
+mod settings;
 mod style;
 mod text;
 mod view;

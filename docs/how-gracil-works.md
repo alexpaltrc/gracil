@@ -194,8 +194,19 @@ tells you how things are going:
 - an amber marble: something went wrong while the window was closed. Open Gracil to see what;
   the marble turns back to normal.
 
-Pointing at the marble says the same in words. Click it to open Gracil again. Right-click it for
-**Open Gracil** and **Exit**.
+Pointing at the marble says the same in words. Right-click it for **Open Gracil** and **Exit**.
+
+Click the marble and a small window opens right next to it, wherever your taskbar is. It shows
+the video being compressed and how far along it is; click its circle to pause or carry on, just
+like in the big window. It also tells you how many videos are waiting and, once one is done,
+where it went. You can drop more videos on it. It stays open while you do other things; close it
+with its **×** or by clicking the marble again, and use **Open Gracil** in it to get the big
+window.
+
+*(in progress)* When you compress from File Explorer, this small window opens by itself so you can see the work
+happen. If you'd rather it didn't, right-click the marble and untick **Show mini-window when
+compressing from File Explorer**. Gracil remembers your choice, and it never changes how videos
+are compressed.
 
 **Exit** is how you quit Gracil. If nothing is compressing or waiting, Gracil quits straight away.
 Otherwise it first asks, and tells you exactly what will happen: the video being compressed stops

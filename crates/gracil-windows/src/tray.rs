@@ -1,7 +1,8 @@
 //! Gracil's icon in the notification area, next to the clock (spec §54, §54.1, ADR 0020).
 //!
 //! The icon lives on a thread of its own with a hidden window that receives the taskbar's
-//! messages: a click opens Gracil, the right-click menu offers Open and Exit. The icon follows the
+//! messages: a click shows or hides the mini-window, the right-click menu offers Open, the
+//! File Explorer setting and Exit. The icon follows the
 //! taskbar between light and dark, and comes back if File Explorer restarts. Gracil tells it what
 //! to show with [`Tray::show`]; it never polls.
 
@@ -13,20 +14,21 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock, mpsc};
 use std::thread;
 
-use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
 use windows_sys::Win32::UI::HiDpi::{GetDpiForSystem, GetSystemMetricsForDpi};
 use windows_sys::Win32::UI::Shell::{
     NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NIM_SETVERSION,
-    NIN_SELECT, NINF_KEY, NOTIFYICON_VERSION_4, NOTIFYICONDATAW, Shell_NotifyIconW,
+    NIN_SELECT, NINF_KEY, NOTIFYICON_VERSION_4, NOTIFYICONDATAW, NOTIFYICONIDENTIFIER,
+    Shell_NotifyIconGetRect, Shell_NotifyIconW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreateIcon, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon,
-    DestroyMenu, DispatchMessageW, GetMessageW, HICON, MF_SEPARATOR, MF_STRING, MSG, PostMessageW,
-    RegisterClassExW, RegisterWindowMessageW, SM_CXSMICON, SetForegroundWindow, SetMenuDefaultItem,
-    TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP, WM_CONTEXTMENU,
-    WM_NULL, WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPED,
+    DestroyMenu, DispatchMessageW, GetMessageW, HICON, MF_CHECKED, MF_SEPARATOR, MF_STRING, MSG,
+    PostMessageW, RegisterClassExW, RegisterWindowMessageW, SM_CXSMICON, SetForegroundWindow,
+    SetMenuDefaultItem, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP,
+    WM_CONTEXTMENU, WM_NULL, WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPED,
 };
 
 /// What the icon shows. It is driven by Gracil's work, never by a timer (spec §54).
@@ -45,8 +47,12 @@ pub enum TrayState {
 /// What the user asked for through the icon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayEvent {
-    /// Show Gracil's window: a click on the icon, or Open in its menu.
+    /// A click on the icon: show or hide the mini-window.
+    Toggle,
+    /// Open in the icon's menu: show Gracil's window.
     Open,
+    /// The menu's File Explorer setting was clicked, to turn it the other way.
+    ExplorerMiniWindow,
     /// Exit in the icon's menu.
     Exit,
 }
@@ -54,6 +60,8 @@ pub enum TrayEvent {
 /// The words of the icon's menu, in the interface's language.
 pub struct TrayMenu {
     pub open: String,
+    /// The setting for showing the mini-window when compressing from File Explorer.
+    pub explorer_mini_window: String,
     pub exit: String,
 }
 
@@ -71,10 +79,12 @@ const REFRESH: u32 = WM_APP + 2;
 /// Menu commands.
 const OPEN: usize = 1;
 const EXIT: usize = 2;
+const EXPLORER_MINI_WINDOW: usize = 3;
 
 /// Everything the icon's window needs, shared with the rest of Gracil.
 struct Shared {
     open: Vec<u16>,
+    explorer_mini_window: Vec<u16>,
     exit: Vec<u16>,
     on_event: Box<dyn Fn(TrayEvent) + Send + Sync>,
     current: Mutex<Current>,
@@ -90,6 +100,8 @@ struct Current {
     /// Gracil is leaving: the icon is gone and must not come back.
     gone: bool,
     light_taskbar: bool,
+    /// Whether the menu shows the File Explorer setting as on.
+    explorer_mini_window: bool,
 }
 
 static SHARED: OnceLock<Shared> = OnceLock::new();
@@ -106,6 +118,7 @@ impl Tray {
     ) -> io::Result<Self> {
         let shared = Shared {
             open: wide(&menu.open),
+            explorer_mini_window: wide(&menu.explorer_mini_window),
             exit: wide(&menu.exit),
             on_event: Box::new(on_event),
             current: Mutex::new(Current {
@@ -115,6 +128,7 @@ impl Tray {
                 added: false,
                 gone: false,
                 light_taskbar: light_taskbar(),
+                explorer_mini_window: false,
             }),
         };
         if SHARED.set(shared).is_err() {
@@ -145,6 +159,28 @@ impl Tray {
         unsafe {
             PostMessageW(self.window as HWND, REFRESH, 0, 0)
         };
+    }
+
+    /// Whether the menu shows the File Explorer setting as on.
+    pub fn check_explorer_mini_window(&self, on: bool) {
+        if let Some(shared) = SHARED.get() {
+            lock(shared).explorer_mini_window = on;
+        }
+    }
+
+    /// Where the icon is on the screen, in physical pixels, when the taskbar shows it.
+    pub(crate) fn anchor(&self) -> Option<crate::flyout::Area> {
+        let identifier = NOTIFYICONIDENTIFIER {
+            cbSize: size_of::<NOTIFYICONIDENTIFIER>() as u32,
+            hWnd: self.window as HWND,
+            uID: ICON_ID,
+            ..NOTIFYICONIDENTIFIER::default()
+        };
+        let mut place = RECT::default();
+        // SAFETY: `identifier` names this process's icon; `place` receives a rectangle.
+        #[allow(unsafe_code)]
+        let status = unsafe { Shell_NotifyIconGetRect(&identifier, &mut place) };
+        (status == 0).then(|| place.into())
     }
 
     /// Takes the icon away for good. Call it just before Gracil ends, so no stale icon lingers.
@@ -252,7 +288,7 @@ unsafe extern "system" fn window_procedure(
             // the click's position in `wparam`.
             let event = (lparam as u32) & 0xFFFF;
             if event == NIN_SELECT || event == NIN_SELECT | NINF_KEY {
-                notify(TrayEvent::Open);
+                notify(TrayEvent::Toggle);
             } else if event == WM_CONTEXTMENU {
                 let x = i32::from((wparam & 0xFFFF) as u16 as i16);
                 let y = i32::from(((wparam >> 16) & 0xFFFF) as u16 as i16);
@@ -295,6 +331,11 @@ fn show_menu(window: HWND, x: i32, y: i32) {
     let Some(shared) = SHARED.get() else {
         return;
     };
+    let explorer_check = if lock(shared).explorer_mini_window {
+        MF_CHECKED
+    } else {
+        0
+    };
     // SAFETY: the menu is created, used and destroyed here; the labels are NUL-terminated UTF-16
     // buffers that outlive it. Bringing the hidden window forward first, and posting it an empty
     // message after, is what lets the menu close when the user clicks elsewhere.
@@ -305,6 +346,12 @@ fn show_menu(window: HWND, x: i32, y: i32) {
             return;
         }
         AppendMenuW(menu, MF_STRING, OPEN, shared.open.as_ptr());
+        AppendMenuW(
+            menu,
+            MF_STRING | explorer_check,
+            EXPLORER_MINI_WINDOW,
+            shared.explorer_mini_window.as_ptr(),
+        );
         AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
         AppendMenuW(menu, MF_STRING, EXIT, shared.exit.as_ptr());
         SetMenuDefaultItem(menu, OPEN as u32, 0);
@@ -324,6 +371,7 @@ fn show_menu(window: HWND, x: i32, y: i32) {
     };
     match chosen as usize {
         OPEN => notify(TrayEvent::Open),
+        EXPLORER_MINI_WINDOW => notify(TrayEvent::ExplorerMiniWindow),
         EXIT => notify(TrayEvent::Exit),
         _ => {}
     }

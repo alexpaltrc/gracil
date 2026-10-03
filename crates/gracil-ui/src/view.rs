@@ -17,18 +17,23 @@ const FOCUS_NAME_CHARS: usize = 28;
 const DRAWER_NAME_CHARS: usize = 26;
 const TOOLTIP_WIDTH: f32 = 240.0;
 const DRAWER_MAX_HEIGHT: f32 = 148.0;
+const MINI_NAME_CHARS: usize = 22;
 
-pub fn view(state: &Gracil, _window: window::Id) -> Element<'_, Message> {
+pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
+    if state.is_mini(window) {
+        return mini(state, window);
+    }
+    let hovering = state.hovering == Some(window);
     if state.confirming_exit {
         return container(exit_question(state))
             .center(Fill)
             .padding(space::L)
             .into();
     }
-    let focus = container(focus(state))
+    let focus = container(focus(state, hovering))
         .center(Fill)
         .padding(space::L)
-        .style(move |theme| style::drop_zone(theme, state.hovering_files));
+        .style(move |theme| style::drop_zone(theme, hovering));
 
     let mut content = column![focus].spacing(space::M);
     if !state.queue.is_empty() {
@@ -40,8 +45,8 @@ pub fn view(state: &Gracil, _window: window::Id) -> Element<'_, Message> {
     container(content).padding(space::M).into()
 }
 
-fn focus(state: &Gracil) -> Element<'_, Message> {
-    if state.hovering_files {
+fn focus(state: &Gracil, hovering: bool) -> Element<'_, Message> {
+    if hovering {
         return text(state.text.release_to_add).size(size::TITLE).into();
     }
     match state.focused() {
@@ -95,6 +100,64 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         _ => {}
     }
     content.push(details).into()
+}
+
+/// The mini-window next to the tray icon (spec §55): the video being worked on, with its dial
+/// to pause it, and a way into Gracil. Videos can be dropped on it too.
+fn mini(state: &Gracil, window: window::Id) -> Element<'_, Message> {
+    let hovering = state.hovering == Some(window);
+    let body: Element<'_, Message> = if hovering {
+        text(state.text.release_to_add).size(size::BODY).into()
+    } else {
+        match state.queue.active().or_else(|| state.focused()) {
+            Some(job) => mini_job(state, job),
+            None => text(state.text.drop_videos_here).size(size::BODY).into(),
+        }
+    };
+    let side = column![
+        button(text("×").size(size::BODY))
+            .style(style::quiet_button)
+            .on_press(Message::CloseMini),
+        Space::new().height(Fill),
+        button(text(state.text.open_gracil).size(size::CAPTION))
+            .style(style::quiet_button)
+            .on_press(Message::OpenMain),
+    ]
+    .align_x(iced::Right);
+    container(
+        row![container(body).width(Fill).center_y(Fill), side]
+            .spacing(space::S)
+            .height(Fill),
+    )
+    .padding(space::S)
+    .style(move |theme| style::drop_zone(theme, hovering))
+    .into()
+}
+
+fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
+    let mut details = column![
+        name(job, MINI_NAME_CHARS, size::BODY),
+        status_line(&status(state, job), size::CAPTION),
+    ]
+    .spacing(space::XS);
+    if let Some(Outcome::Placed { choice, path, .. }) = state.outcomes.get(&job.id) {
+        details = details.push(caption(placed_caption(state, job, *choice, path)));
+    }
+    match state.waiting_to_compress() {
+        0 => {}
+        n => details = details.push(caption(state.text.in_line(n))),
+    }
+    let mut line = row![].spacing(space::M).align_y(Center);
+    if job.state.is_active() {
+        let dial = Dial {
+            job: job.id,
+            fraction: job.fraction,
+            paused: job.state == JobState::Paused,
+            can_pause: job.state == JobState::Compressing,
+        };
+        line = line.push(Canvas::new(dial).width(dial::SMALL).height(dial::SMALL));
+    }
+    line.push(details).into()
 }
 
 /// Exit asked while work is in progress: what would stop, in so many words, and the two ways out
