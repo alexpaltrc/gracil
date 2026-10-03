@@ -809,13 +809,18 @@ Do not attempt to build every milestone in one giant pass.
 # 77.1 Next: image compression (planned)
 
 *Added 2026-10-03. Only a plan: nothing of it is built, and no code is written for it until the
-open decisions below are settled in an ADR.*
+open decisions below are settled in an ADR. It waits until video compression has been refined
+into Gracil's own quality standard, whose philosophy images will then follow.*
 
 Gracil will compress images with the same philosophy as video:
 
-- **One output format, always.** Like every video becomes an MP4 (ADR 0012), every image will
-  become the same single format, chosen once by Gracil for the widest compatibility at the
-  smallest size. The user never picks a format.
+- **Two output formats, chosen by Gracil, never by the user** *(decided 2026-10-03 by the product
+  owner)*. A PNG stays a PNG, made smaller without losing anything (a lossless optimizer such as
+  oxipng), so screenshots, graphics and transparency stay exactly as they were. Every other image
+  (JPEG, WebP, HEIC, TIFF, BMP and the rest) becomes a JPEG, made with Google's jpegli encoder at
+  a quality where the difference can't be seen. JPEG opens everywhere, the way MP4 does for video
+  (ADR 0012), and a JPEG keeps its name. An image that would come out bigger, as an iPhone's HEIC
+  often would, is not kept (§40.1).
 - **One exact compression, always.** A fixed, tested quality setting, like the fixed H.265
   settings for video. No sliders, presets or advanced options (§66).
 - **The same flows.** Drop images on the main window or the mini-window, or use File Explorer's
@@ -830,10 +835,10 @@ Gracil will compress images with the same philosophy as video:
 
 Open decisions, to settle before any work starts:
 
-1. **The final format.** Candidates to weigh, for compatibility on Windows, iPhone, Mac, Android
-   and web browsers against size: AVIF, HEIC/HEIF, JPEG XL, WebP, or an optimized JPEG.
-2. **The exact compression**: the encoder and its fixed settings, verified on a representative set
-   of photos, screenshots and graphics.
+1. ~~The final format~~: decided above (PNG stays PNG; everything else becomes JPEG).
+2. **The exact compression**: jpegli's fixed quality and the PNG optimizer's settings, verified on a
+   representative set of photos, screenshots and graphics, following in spirit the quality
+   standard Gracil first settles on for video.
 3. **Which images are accepted** (JPEG, PNG, HEIC, WebP, TIFF, BMP, GIF, camera RAW…) and what
    happens to transparency, animation, HDR and very large images.
 4. **The engine**: FFmpeg, which Gracil already relies on, or a dedicated image library.
