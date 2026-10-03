@@ -17,6 +17,16 @@ anywhere.
 Gracil speaks English and Spanish. It uses the language Windows is shown in, so there's nothing
 to set: if Windows is in Spanish, Gracil is too; otherwise it's in English.
 
+## Light and dark
+
+Gracil follows Windows' light or dark mode, with nothing to set. Its colors are soft mineral greys
+and ivory. If you switch Windows between light and dark while Gracil is open, Gracil follows right
+away, fading gently from one to the other instead of flashing.
+
+Gracil's symbol is a marble resting on a support: the marble is your video, and the support is
+Gracil, which takes care of the technical work. *(in progress)* The symbol will appear as the
+app's icon, in the taskbar and next to the clock.
+
 ## Adding videos
 
 Drop videos onto the window, or choose them with **or choose files**. You can add more at any

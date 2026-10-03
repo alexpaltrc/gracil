@@ -84,6 +84,9 @@ The final application icon has not been designed yet. Use a clearly temporary de
 Do not invent or finalize the permanent icon. The final icon will later be designed according to
 current Windows 11 iconography and visual guidelines.
 
+*Update (ADR 0015):* the icon has been designed: the "La canica · Piedra" identity, in
+`assets/icons/`.
+
 # 4. Supported platform
 
 Target: Windows 11, x86-64 / 64-bit Windows initially. Do not build a 32-bit application.
@@ -788,6 +791,9 @@ Do not attempt to build every milestone in one giant pass.
 Intentionally unfinished: final icon, colors, typography, animation language, detailed styling,
 marketing copy, final localized wording. Use clean temporary solutions; do not couple core logic
 to them.
+
+*Update (ADR 0015):* the icon and the colors are now decided (Piedra), and Gracil follows Windows'
+light or dark theme with a soft fade.
 
 # 79. Focus + Drawer is not temporary
 

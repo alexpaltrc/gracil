@@ -192,10 +192,11 @@ impl canvas::Program<Message> for Dial {
                 .with_width(PIPE_WIDTH)
                 .with_color(palette.text.scale_alpha(0.04)),
         );
-        frame.stroke(&Path::circle(center, outer), wall(0.16));
-        frame.stroke(&Path::circle(center, inner), wall(0.16));
+        frame.stroke(&Path::circle(center, outer), wall(0.22));
+        frame.stroke(&Path::circle(center, inner), wall(0.22));
 
-        // What has gone through the pipe, from twelve o'clock clockwise, behind the marble.
+        // What has gone through the pipe, from twelve o'clock clockwise, behind the marble. Like the
+        // logo, it is the support color, and the stone-grey marble rests on it.
         let head = -FRAC_PI_2 + TAU * state.fill;
         if state.fill > 0.001 {
             let trail = Path::new(|path| {
@@ -211,20 +212,25 @@ impl canvas::Program<Message> for Dial {
                 Stroke::default()
                     .with_width(PIPE_WIDTH - 5.0)
                     .with_line_cap(LineCap::Butt)
-                    .with_color(palette.primary.scale_alpha(0.32 - 0.1 * state.play)),
+                    .with_color(palette.text.scale_alpha(0.85 - 0.3 * state.play)),
             );
         }
 
-        // The marble, with a small highlight so it reads as round.
+        // The marble, edged in the background color so it stands apart from the trail, with a small
+        // highlight so it reads as round.
         let marble = Point::new(center.x + pipe * head.cos(), center.y + pipe * head.sin());
         let marble_radius = PIPE_WIDTH / 2.0 - 1.5;
+        frame.fill(
+            &Path::circle(marble, marble_radius + 1.5),
+            palette.background,
+        );
         frame.fill(&Path::circle(marble, marble_radius), palette.primary);
         frame.fill(
             &Path::circle(
                 marble + Vector::new(-marble_radius * 0.35, -marble_radius * 0.35),
                 marble_radius * 0.35,
             ),
-            Color::WHITE.scale_alpha(0.45),
+            Color::WHITE.scale_alpha(0.3),
         );
 
         // The middle: two buttons that light up softly under the pointer.
@@ -249,11 +255,8 @@ impl canvas::Program<Message> for Dial {
             });
             path.close();
         });
-        frame.fill(&top, palette.primary.scale_alpha(0.06 * state.hover_top));
-        frame.fill(
-            &bottom,
-            palette.primary.scale_alpha(0.06 * state.hover_bottom),
-        );
+        frame.fill(&top, palette.text.scale_alpha(0.06 * state.hover_top));
+        frame.fill(&bottom, palette.text.scale_alpha(0.06 * state.hover_bottom));
         frame.stroke(
             &Path::line(
                 Point::new(center.x - side * 0.7, divider_y),
@@ -264,7 +267,7 @@ impl canvas::Program<Message> for Dial {
 
         let symbol = |hover: f32, enabled: bool| {
             if enabled {
-                mix(palette.text.scale_alpha(0.6), palette.primary, hover)
+                mix(palette.text.scale_alpha(0.65), palette.text, hover)
             } else {
                 palette.text.scale_alpha(0.25)
             }

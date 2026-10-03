@@ -3,12 +3,13 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use gracil_core::compress::Engine;
 use gracil_core::encode::JobControl;
 use gracil_core::job::{JobEvent, JobState};
 use gracil_core::queue::{Job, JobId, Queue};
-use iced::theme::Mode;
+use iced::theme::{Mode, Palette};
 use iced::{Event, Size, Subscription, Task, Theme, event, system, window};
 use tracing::warn;
 
@@ -29,6 +30,10 @@ pub struct Gracil {
     /// The interface's words, in the Windows display language.
     pub text: &'static Text,
     theme: Theme,
+    /// The Windows theme being followed; unknown until Windows first answers.
+    mode: Option<Mode>,
+    /// A change between light and dark in progress: where it started, where it goes and when.
+    shift: Option<(Palette, Palette, Instant)>,
     running: Option<(JobId, JobControl)>,
 }
 
@@ -61,6 +66,7 @@ pub enum Message {
     Clear,
     ToggleDrawer,
     ThemeChanged(Mode),
+    ThemeFrame(Instant),
     CloseRequested,
 }
 
@@ -81,7 +87,9 @@ impl Gracil {
             selected: None,
             last_placed: None,
             text: Text::get(Language::detect()),
-            theme: style::theme(Mode::Light),
+            theme: style::theme(style::palette(Mode::Light)),
+            mode: None,
+            shift: None,
             running: None,
         };
         // Videos opened with Gracil from File Explorer arrive as arguments; they start once the
@@ -115,6 +123,12 @@ impl Gracil {
                 _ => None,
             }),
             system::theme_changes().map(Message::ThemeChanged),
+            // Frames only while the theme is changing (spec §51).
+            if self.shift.is_some() {
+                window::frames().map(Message::ThemeFrame)
+            } else {
+                Subscription::none()
+            },
         ])
     }
 
@@ -194,7 +208,11 @@ impl Gracil {
                 Task::none()
             }
             Message::ThemeChanged(mode) => {
-                self.theme = style::theme(mode);
+                self.follow_theme(mode, Instant::now());
+                Task::none()
+            }
+            Message::ThemeFrame(now) => {
+                self.shift_theme(now);
                 Task::none()
             }
             Message::CloseRequested => {
@@ -372,6 +390,37 @@ impl Gracil {
 
     /// Freezes or thaws the running compression (spec §47). Only a compression that has started
     /// can pause; a failure leaves it as it was and is only logged.
+    /// Follows Windows between light and dark. The first answer is applied at once, so Gracil
+    /// opens in the right colors; later changes fade softly (ADR 0015).
+    fn follow_theme(&mut self, mode: Mode, now: Instant) {
+        if self.mode == Some(mode) {
+            return;
+        }
+        let first = self.mode.is_none();
+        self.mode = Some(mode);
+        let target = style::palette(mode);
+        if first {
+            self.theme = style::theme(target);
+            self.shift = None;
+        } else {
+            // Starting from what is on screen, so changing back halfway is still smooth.
+            self.shift = Some((self.theme.palette(), target, now));
+        }
+    }
+
+    fn shift_theme(&mut self, now: Instant) {
+        let Some((from, to, start)) = self.shift else {
+            return;
+        };
+        let progress = (now.saturating_duration_since(start).as_secs_f32()
+            / style::THEME_SHIFT.as_secs_f32())
+        .min(1.0);
+        self.theme = style::theme(style::blend(from, to, ease_in_out(progress)));
+        if progress >= 1.0 {
+            self.shift = None;
+        }
+    }
+
     fn pause(&mut self, paused: bool) {
         let Some((id, control)) = &self.running else {
             return;
@@ -421,4 +470,9 @@ async fn choose_files(text: &'static Text) -> Vec<PathBuf> {
         .into_iter()
         .map(|file| file.path().to_owned())
         .collect()
+}
+
+/// Slow at both ends, so the change of theme settles in rather than snapping.
+fn ease_in_out(t: f32) -> f32 {
+    t * t * (3.0 - 2.0 * t)
 }

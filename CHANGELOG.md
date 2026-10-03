@@ -10,6 +10,8 @@ Gracil is still being built, but you can already compress videos with it.
 
 - Gracil is in English and Spanish. It uses the language Windows is shown in, so there is nothing
   to set.
+- Gracil is dressed in soft mineral greys and ivory, in light and dark. It follows Windows' light
+  or dark mode, and when you switch it, Gracil fades gently from one to the other.
 - Drop videos onto the window, or choose them, and Gracil compresses them one after another. You
   can keep adding videos while it works.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
