@@ -35,6 +35,15 @@ concepts in the normal UI. The application makes technical decisions automatical
 Gracil should be ultra minimalistic in everything it does. Minimalism here means removing
 unnecessary complexity, not removing useful functionality.
 
+# 2.1 Seamless by default
+
+*Added after the original specification.*
+
+Everything in Gracil must feel seamless. The user never sets anything up, never waits on a
+technical step they can see, and never meets a dialog that exists only because of how Gracil works
+inside. The bar is high and applies everywhere: subtle but elegant design and animation, and code
+and directories that are just as elegant, optimized, organized and functional.
+
 # 3. Product identity
 
 Application name: **Gracil** — always written without an accent.
@@ -247,12 +256,29 @@ output behavior the user requested; when the next job begins; how the result is 
 
 # 20. FFmpeg distribution
 
-Users must not need to install FFmpeg separately. Bundle known-compatible builds of `ffmpeg.exe`
-and `ffprobe.exe`. Do not depend on PATH; resolve Gracil's bundled binaries explicitly. Document
-FFmpeg version, build source/provenance, enabled capabilities and licensing obligations.
+Users must not need to install FFmpeg separately. ~~Bundle known-compatible builds of `ffmpeg.exe`
+and `ffprobe.exe`. Do not depend on PATH; resolve Gracil's bundled binaries explicitly.~~
+*Superseded by §20.1.* Document FFmpeg version, build source/provenance, enabled capabilities and
+licensing obligations.
 
 Keep FFmpeg as an external process. Do not link FFmpeg libraries directly without discussing the
 change first.
+
+# 20.1 Detect FFmpeg, or install it invisibly
+
+*Added after the original specification; replaces bundling.*
+
+Gracil first detects whether FFmpeg is already installed on the computer. An installation is only
+used if FFmpeg itself confirms it has what Gracil needs (at least the CPU HEVC encoder) and
+`ffprobe.exe` sits next to `ffmpeg.exe`.
+
+If no suitable FFmpeg exists, Gracil installs its own copy automatically into its private
+per-user folder. This is invisible: no window, no prompt, no progress the user has to watch. The
+copy is a pinned, documented build verified by SHA-256 before use. Gracil never installs FFmpeg
+system-wide and never changes PATH.
+
+Gracil starts this preparation as soon as it launches, so it is normally finished before the first
+video arrives. Videos added before it finishes simply wait in their normal waiting state.
 
 # 21. Reference NVIDIA compression behavior
 
@@ -406,8 +432,13 @@ non-conflicting name using a simple predictable strategy.
 
 Preserve source metadata as completely as the output format allows: container/global metadata,
 creation metadata, rotation/orientation, chapters, language tags, title, artist, comments,
-location metadata, relevant stream metadata. Do not silently discard metadata. Do not fabricate
-metadata that cannot legitimately survive the operation.
+location metadata, relevant stream metadata. Do not fabricate metadata that cannot legitimately
+survive the operation.
+
+*Clarified after the original specification:* metadata preservation is best effort and never a
+reason to reject a video. Gracil keeps everything that can be kept reliably. Whatever cannot be
+carried over without complication is dropped, and what was dropped is recorded in the log, not
+shown to the user.
 
 # 42. Filesystem metadata
 
@@ -422,15 +453,22 @@ compatibility requires different handling, use the safest compatible strategy.
 
 # 44. Other streams
 
-Do not silently discard subtitles, chapters, attached artwork, language information or secondary
-streams. Inspect the source with FFprobe and preserve compatible streams. If a source cannot
-safely be processed while honoring Gracil's guarantees, fail gracefully with a human-readable
-explanation without muxer terminology.
+Inspect the source with FFprobe and preserve compatible subtitles, chapters, attached artwork,
+language information and secondary streams.
+
+*Clarified after the original specification:* like metadata (§41), stream preservation is best
+effort. Gracil never rejects a video because a secondary stream cannot be kept; it keeps the video
+and audio and drops only what cannot be carried over, recording that in the log. A video fails
+only when it cannot be compressed at all (for example, it is not a readable video), with a
+human-readable explanation without muxer terminology.
 
 # 45. Containers
 
-Do not pretend to support every format. Use a deliberately safe supported set. Ensure the output
-container can safely contain HEVC video, preserved audio, metadata and additional streams.
+~~Do not pretend to support every format. Use a deliberately safe supported set.~~
+*Clarified after the original specification:* aim for wide compatibility. Any video FFmpeg can
+read is accepted. The output keeps the source's container when that container can hold HEVC
+properly; otherwise Gracil produces an MP4. Ensure the output container can safely contain HEVC
+video and audio, plus whatever metadata and additional streams it can hold.
 
 # 46. Progress
 
@@ -497,6 +535,11 @@ Closing Gracil's window always minimizes Gracil to the system tray. This is not 
 must always behave this way. Closing the window never stops, pauses or cancels work.
 
 The tray icon offers an **Exit** option on right-click. Exit is how the user fully quits Gracil.
+
+If a compression is in progress, Exit first asks for confirmation, and the question must tell the
+user exactly what will happen: the current compression stops, the original video stays exactly as
+it was, and videos still waiting will not be compressed. With nothing in progress, Exit quits
+immediately.
 
 Consequences for other sections:
 
@@ -574,8 +617,8 @@ instances.
 
 Gracil is an installed application, not portable. Use MSIX from the beginning, designed for local
 development, sideload testing, signed direct distribution and eventual Microsoft Store
-submission. The package includes Gracil, FFmpeg, FFprobe, Explorer integration components,
-assets and manifest configuration.
+submission. The package includes Gracil, Explorer integration components, assets and manifest
+configuration. *FFmpeg and FFprobe are no longer packaged; see §20.1.*
 
 # 65. Future Microsoft Store distribution
 

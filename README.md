@@ -32,7 +32,8 @@ added in the milestones that need them; see [docs/architecture/overview.md](docs
 ## Main dependencies
 
 - [Iced](https://iced.rs) with WGPU for the interface
-- [FFmpeg](https://ffmpeg.org) and FFprobe, bundled, for the actual video work
+- [FFmpeg](https://ffmpeg.org) and FFprobe for the actual video work. Gracil uses an FFmpeg already
+  installed on the PC, or installs its own private copy invisibly.
 - [windows-rs](https://github.com/microsoft/windows-rs) for Windows integration
 
 Gracil works fully offline. It never uploads videos, file names or any other data.

@@ -1,6 +1,6 @@
 # 0002 — FFmpeg runs as a bundled external process
 
-**Status:** Accepted
+**Status:** Accepted. The bundling part is superseded by [0008](0008-ffmpeg-detected-or-provisioned.md); running FFmpeg as an external process still stands.
 
 **Context.** Linking FFmpeg libraries would put codec crashes inside Gracil's process, tie Gracil
 to FFmpeg's C API and complicate licensing. Gracil only needs to start, observe, suspend and stop

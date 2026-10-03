@@ -14,7 +14,7 @@ Gracil is one Rust process (`gracil.exe`) that owns a job scheduler and drives e
  │ gracil-core      jobs, scheduler, probe, encode, finalize    │
  └───────────────────────────────┬─────────────────────────────┘
                                  │ std::process::Command (no shell)
-                      ffmpeg.exe / ffprobe.exe (bundled)
+                      ffmpeg.exe / ffprobe.exe (found on the PC, or installed privately)
 ```
 
 ## Crates
@@ -34,6 +34,10 @@ Crates are created when they get real content, not ahead of time.
 mode). The scheduler runs one job at a time: probe → choose backend (cached capabilities) → spawn
 FFmpeg writing to a temporary sibling file → parse `-progress pipe:1` → validate the output with
 FFprobe → finalize (replace or place new file without overwriting).
+
+**Finding FFmpeg.** At startup, in the background: use an FFmpeg on `PATH` that has `ffprobe.exe`
+beside it and the `libx265` encoder; otherwise Gracil's private copy; otherwise download the pinned
+build, verify it and install it privately (ADR 0008).
 
 **Backend selection.** Capabilities are detected once per process and cached: `ffmpeg -encoders`
 must list `hevc_nvenc`, then a sub-second test encode of a synthetic source must succeed. If it does,

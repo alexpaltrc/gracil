@@ -12,3 +12,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0005](0005-msix-packaging.md) | MSIX packaging |
 | [0006](0006-explorer-extension-forwards-only.md) | The Explorer extension only forwards requests |
 | [0007](0007-close-to-tray.md) | Closing the window always minimizes to the tray |
+| [0008](0008-ffmpeg-detected-or-provisioned.md) | FFmpeg is detected or provisioned, not bundled |
