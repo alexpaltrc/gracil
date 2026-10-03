@@ -2,7 +2,8 @@
 
 *A plain-language explanation of what Gracil does behind its simple window. Written for anyone
 who uses Gracil, and kept up to date as Gracil changes. Parts marked "(in progress)" describe
-decided behavior that is still being built.*
+decided behavior that is still being built. Short answers to common questions are in
+[Questions and answers](faq.md).*
 
 ---
 
