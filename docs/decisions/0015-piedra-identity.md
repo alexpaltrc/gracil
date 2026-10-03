@@ -35,7 +35,6 @@ those names so they match the delivery's checksums.
 
 **Consequences.**
 
-- The window and executable use the icon ([0016](0016-app-icon.md)). The tray and the MSIX
-  manifest are still to be done; the tray must swap
-  its icon when the taskbar's theme changes (see `docs/design/piedra/LEEME.md`).
+- The window and executable use the icon ([0016](0016-app-icon.md)). The tray icon follows
+  the taskbar's theme ([0020](0020-tray.md)). The MSIX manifest is still to be done.
 - The marble grey on ivory is low contrast (3.2:1), so it is used for shapes only, never for text.

@@ -18,6 +18,11 @@ Gracil is still being built, but you can already compress videos with it.
   can keep adding videos while it works.
 - Gracil runs only once. Opening it again, or opening videos with it while it is running, brings
   the open Gracil forward and adds the videos to the same list.
+- Closing the window no longer stops Gracil: it keeps working next to the clock. Its marble there
+  fills up as a video compresses, shows two bars when paused, and turns amber if something went
+  wrong while the window was closed. Click it to open Gracil again, or right-click it for
+  **Exit**. If a video is compressing or waiting, Gracil first asks, and tells you exactly what
+  would stop.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
   advances. The middle of the ring holds the controls, as symbols instead of words: the top part
   pauses (II) and turns into play (▶) to resume, and the bottom part stops (■). Pausing frees up
@@ -34,7 +39,7 @@ Gracil is still being built, but you can already compress videos with it.
   quit, the compression it was doing stops with it instead of carrying on unseen. Gracil tidies
   away what it left half done the next time it starts. If it was replacing a video at that moment, it puts
   your original back. It only ever removes files it made itself.
-- If you take a finished video off the list or close Gracil without choosing, the smaller version
+- If you take a finished video off the list or exit Gracil without choosing, the smaller version
   is deleted and your original stays as it was.
 - Every compressed video is an MP4, so it plays everywhere: on Windows, iPhone, Mac, Android, TVs
   and in web browsers. When that changes a video's name, Gracil shows it before you choose, for

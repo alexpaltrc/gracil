@@ -5,6 +5,7 @@
 
 use std::sync::{LazyLock, Mutex};
 
+use gracil_windows::TrayEvent;
 use iced::Subscription;
 use iced::futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use iced::futures::stream::{self, BoxStream, StreamExt};
@@ -14,6 +15,7 @@ use crate::request::Request;
 #[derive(Debug, Clone)]
 pub enum Outside {
     Request(Request),
+    Tray(TrayEvent),
 }
 
 type Channel = (

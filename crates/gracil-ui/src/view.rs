@@ -19,6 +19,12 @@ const TOOLTIP_WIDTH: f32 = 240.0;
 const DRAWER_MAX_HEIGHT: f32 = 148.0;
 
 pub fn view(state: &Gracil, _window: window::Id) -> Element<'_, Message> {
+    if state.confirming_exit {
+        return container(exit_question(state))
+            .center(Fill)
+            .padding(space::L)
+            .into();
+    }
     let focus = container(focus(state))
         .center(Fill)
         .padding(space::L)
@@ -89,6 +95,36 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         _ => {}
     }
     content.push(details).into()
+}
+
+/// Exit asked while work is in progress: what would stop, in so many words, and the two ways out
+/// (spec §54.1). Shown in the window itself, never as a dialog (spec §2.3).
+fn exit_question(state: &Gracil) -> Element<'_, Message> {
+    let explanation = state
+        .text
+        .exit_explanation(state.compressing(), state.waiting_to_compress());
+    column![
+        text(state.text.exit_question).size(size::TITLE),
+        text(explanation)
+            .size(size::BODY)
+            .style(style::muted)
+            .align_x(Center),
+        row![
+            button(text(state.text.exit).size(size::BODY))
+                .padding([space::XS, space::M])
+                .style(style::action_button)
+                .on_press(Message::ConfirmExit),
+            button(text(state.text.keep_working).size(size::BODY))
+                .padding([space::XS, space::M])
+                .style(style::quiet_button)
+                .on_press(Message::KeepWorking),
+        ]
+        .spacing(space::S),
+    ]
+    .spacing(space::M)
+    .align_x(Center)
+    .max_width(320)
+    .into()
 }
 
 /// Replace and Save copy, the two things to do with a finished result (ADR 0009).

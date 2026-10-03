@@ -37,6 +37,6 @@ must leave once its work is done (§53).
 - A video added in the window and later sent with an Explorer command takes that command's
   choice; if it is already done, it is placed straight away.
 - A result an Explorer command could not place (for example, a name already taken) keeps a
-  background Gracil running so the result isn't lost; the tray will show it (M5).
+  background Gracil running so the result isn't lost; the tray icon shows that something needs attention ([0020](0020-tray.md)).
 - The pipe is reachable by other programs of the same user. They can only ask for what the user
   could ask for on the command line, and every path is still checked.

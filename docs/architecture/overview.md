@@ -66,8 +66,13 @@ Save copy; `work::place` then calls `gracil_core::output` on its own thread, wit
 the tray menu's Exit quits. A process started from Explorer that never showed a window exits by
 itself when its work is finished (spec §53, §54.1).
 
-*Until the tray exists (M5), closing the window cancels the running compression, deletes results
-nobody chose for, and quits.*
+**Tray.** `gracil_windows::Tray` owns the notification icon on a thread of its own, with a hidden
+window for its messages, and draws each state (Idle, Processing, Paused, Error) itself
+(`tray/picture.rs`, ADR 0020). Menu choices arrive through `outside` like pipe requests. After
+every update the app derives the tray state from the queue and refreshes the icon only when the
+picture or tooltip would change. Exit with work running or waiting opens the window on a
+confirmation; with nothing running it cancels nothing and leaves at once. If the tray can't be
+created, closing the window behaves as Exit.
 
 **Single instance.** The first process creates the named mutex `Local\Gracil.SingleInstance`
 and serves the pipe `\\.\pipe\Gracil.<session>` (`gracil_windows::claim`, `serve`). Any later

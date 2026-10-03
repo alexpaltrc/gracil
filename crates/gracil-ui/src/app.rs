@@ -9,6 +9,7 @@ use gracil_core::compress::Engine;
 use gracil_core::encode::JobControl;
 use gracil_core::job::{JobEvent, JobState};
 use gracil_core::queue::{Job, JobId, Queue};
+use gracil_windows::{Tray, TrayEvent, TrayMenu, TrayState};
 use iced::theme::{Mode, Palette};
 use iced::{Event, Size, Subscription, Task, Theme, event, system, window};
 use tracing::{info, warn};
@@ -50,6 +51,14 @@ pub struct Gracil {
     intents: HashMap<JobId, Choice>,
     /// Leaving was asked for; Gracil leaves as soon as nothing is half done.
     exiting: bool,
+    /// The icon next to the clock, unless Windows refused it.
+    tray: Option<Tray>,
+    /// What the tray icon was last told to show, so it is only told about changes.
+    tray_shown: Option<(TrayState, String)>,
+    /// Exit was chosen while work was in progress; the window asks before stopping it (§54.1).
+    pub confirming_exit: bool,
+    /// Something went wrong while the window was closed; the tray icon says so until it opens.
+    unseen_problem: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -86,7 +95,11 @@ pub enum Message {
     WindowReady(u64),
     /// A window moved to a screen with another scale, so its icon is picked again.
     Rescaled(window::Id),
-    CloseRequested,
+    CloseRequested(window::Id),
+    /// Exit stands, even though work stops.
+    ConfirmExit,
+    /// Exit is called off.
+    KeepWorking,
     Outside(Outside),
 }
 
@@ -94,6 +107,16 @@ impl Gracil {
     /// Starts without a window: the first request (from the command line) decides whether one
     /// is needed (spec §62).
     pub fn boot() -> (Self, Task<Message>) {
+        let text = Text::get(Language::detect());
+        let menu = TrayMenu {
+            open: text.open_gracil.to_owned(),
+            exit: text.exit.to_owned(),
+        };
+        let tray = Tray::start(menu, &text.tray_tip(TrayState::Idle), |event| {
+            outside::send(Outside::Tray(event));
+        })
+        .inspect_err(|error| warn!(%error, "no tray icon; closing the window will exit"))
+        .ok();
         let state = Self {
             queue: Queue::default(),
             outcomes: HashMap::new(),
@@ -102,7 +125,7 @@ impl Gracil {
             drawer_open: false,
             selected: None,
             last_placed: None,
-            text: Text::get(Language::detect()),
+            text,
             theme: style::theme(style::palette(Mode::Light)),
             mode: None,
             shift: None,
@@ -112,6 +135,10 @@ impl Gracil {
             requested: false,
             intents: HashMap::new(),
             exiting: false,
+            tray,
+            tray_shown: None,
+            confirming_exit: false,
+            unseen_problem: false,
         };
         let tasks = Task::batch([
             system::theme().map(Message::ThemeChanged),
@@ -134,7 +161,9 @@ impl Gracil {
                 Event::Window(window::Event::FileHovered(_)) => Some(Message::FilesHovered),
                 Event::Window(window::Event::FilesHoveredLeft) => Some(Message::FilesHoveredLeft),
                 Event::Window(window::Event::FileDropped(path)) => Some(Message::FileDropped(path)),
-                Event::Window(window::Event::CloseRequested) => Some(Message::CloseRequested),
+                Event::Window(window::Event::CloseRequested) => {
+                    Some(Message::CloseRequested(window))
+                }
                 Event::Window(window::Event::Rescaled(_)) => Some(Message::Rescaled(window)),
                 _ => None,
             }),
@@ -151,6 +180,11 @@ impl Gracil {
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         let task = self.handle(message);
+        // The work finished while Exit was being asked about: nothing is left to stop, so the
+        // question goes away.
+        if self.confirming_exit && self.running.is_none() && self.waiting_to_compress() == 0 {
+            self.confirming_exit = false;
+        }
         if self.exiting && self.settled() {
             self.leave();
         }
@@ -158,7 +192,42 @@ impl Gracil {
             info!("background work done; leaving");
             self.leave();
         }
+        self.sync_tray();
         task
+    }
+
+    /// Tells the tray icon what to show, when that changed (spec §54).
+    fn sync_tray(&mut self) {
+        let Some(tray) = &self.tray else {
+            return;
+        };
+        let state = match &self.running {
+            Some((id, _)) => match self.queue.get(*id) {
+                Some(job) if job.state == JobState::Paused => TrayState::Paused,
+                Some(job) => {
+                    // Steps of 1/40 are plenty for a ring 16 pixels wide.
+                    let done = job.fraction.unwrap_or(0.0).clamp(0.0, 1.0) as f32;
+                    TrayState::Processing((done * 40.0).floor() / 40.0)
+                }
+                None => TrayState::Processing(0.0),
+            },
+            None if self.unseen_problem => TrayState::Error,
+            None => TrayState::Idle,
+        };
+        // The tip shows whole percentages, so it follows the work more finely than the picture.
+        let tip = match (state, self.running.as_ref()) {
+            (TrayState::Processing(_), Some((id, _))) => {
+                let done = self.queue.get(*id).and_then(|job| job.fraction);
+                self.text
+                    .tray_tip(TrayState::Processing(done.unwrap_or(0.0) as f32))
+            }
+            _ => self.text.tray_tip(state),
+        };
+        let look = (state, tip);
+        if self.tray_shown.as_ref() != Some(&look) {
+            tray.show(look.0, &look.1);
+            self.tray_shown = Some(look);
+        }
     }
 
     fn handle(&mut self, message: Message) -> Task<Message> {
@@ -253,17 +322,65 @@ impl Gracil {
             Message::Rescaled(window) => {
                 window::raw_id::<Message>(window).map(Message::WindowReady)
             }
-            Message::CloseRequested => {
-                // Until the tray arrives, closing quits: the running compression is cancelled and
-                // Gracil leaves once it has tidied up (see `update`).
-                self.exiting = true;
-                if let Some((_, control)) = &self.running {
-                    control.cancel();
+            Message::CloseRequested(id) => {
+                if self.tray.is_none() {
+                    // Without the icon there would be no way back, so closing exits instead.
+                    return self.ask_to_exit();
                 }
+                // Closing only hides Gracil; the work goes on in the tray (spec §54.1).
+                if self.main == Some(id) {
+                    self.main = None;
+                    self.confirming_exit = false;
+                }
+                window::close(id)
+            }
+            Message::ConfirmExit => {
+                self.exit_now();
+                Task::none()
+            }
+            Message::KeepWorking => {
+                self.confirming_exit = false;
                 Task::none()
             }
             Message::Outside(Outside::Request(request)) => self.on_request(request),
+            Message::Outside(Outside::Tray(TrayEvent::Open)) => self.show_main(),
+            Message::Outside(Outside::Tray(TrayEvent::Exit)) => self.ask_to_exit(),
         }
+    }
+
+    /// Exit (spec §54.1): straight away when nothing is in progress; otherwise the window opens
+    /// and says what would stop.
+    fn ask_to_exit(&mut self) -> Task<Message> {
+        if self.running.is_none() && self.waiting_to_compress() == 0 {
+            self.exit_now();
+            return Task::none();
+        }
+        self.confirming_exit = true;
+        self.show_main()
+    }
+
+    /// Stops the running compression, leaving its original as it was, and leaves once it has
+    /// tidied up (see `update`). Videos still waiting are not started.
+    fn exit_now(&mut self) {
+        self.exiting = true;
+        self.confirming_exit = false;
+        if let Some((_, control)) = &self.running {
+            control.cancel();
+        }
+    }
+
+    /// Videos on the list that haven't started compressing yet.
+    pub fn waiting_to_compress(&self) -> usize {
+        self.queue
+            .jobs()
+            .iter()
+            .filter(|job| job.state == JobState::Pending)
+            .count()
+    }
+
+    /// Whether a compression is under way, so Exit would stop it.
+    pub fn compressing(&self) -> bool {
+        self.running.is_some()
     }
 
     /// Adds what was asked for, and shows the window when the request wants it. A choice made in
@@ -295,6 +412,8 @@ impl Gracil {
 
     /// Opens the main window, or brings it forward if it is open already.
     fn show_main(&mut self) -> Task<Message> {
+        // Whatever went wrong is in plain view now.
+        self.unseen_problem = false;
         if let Some(id) = self.main {
             return Task::batch([window::minimize(id, false), window::gain_focus(id)]);
         }
@@ -330,6 +449,9 @@ impl Gracil {
             if let Outcome::Ready { temp, .. } = outcome {
                 work::discard(temp);
             }
+        }
+        if let Some(tray) = &self.tray {
+            tray.remove();
         }
         info!("Gracil exited");
         logging::finish();
@@ -441,6 +563,7 @@ impl Gracil {
             Err(failure) => {
                 *placing = false;
                 *problem = Some(failure);
+                self.note_problem();
             }
         }
     }
@@ -463,8 +586,19 @@ impl Gracil {
         }
     }
 
-    /// Starts the next video when the engine is ready and nothing is running.
+    /// Marks a problem the user hasn't seen, when the window is closed.
+    fn note_problem(&mut self) {
+        if self.main.is_none() {
+            self.unseen_problem = true;
+        }
+    }
+
+    /// Starts the next video when the engine is ready and nothing is running. Nothing new starts
+    /// once Gracil is exiting.
     fn schedule(&mut self) -> Task<Message> {
+        if self.exiting {
+            return Task::none();
+        }
         let EngineState::Ready(engine) = &self.engine else {
             return Task::none();
         };
@@ -503,6 +637,10 @@ impl Gracil {
                 for &event in events {
                     // Events that already happened (e.g. compressing had begun) are skipped.
                     let _ = self.queue.apply(id, event);
+                }
+                // A result that isn't smaller is no fault; the original simply stays.
+                if matches!(outcome, Outcome::Failed(failure) if failure != Failure::NotSmaller) {
+                    self.note_problem();
                 }
                 self.outcomes.insert(id, outcome);
                 self.running = None;

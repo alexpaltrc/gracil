@@ -3,6 +3,8 @@
 //! Gracil follows the Windows display language and has no language setting. Screens never spell
 //! out text themselves; they ask [`Text`], so adding a language only touches this file.
 
+use gracil_windows::TrayState;
+
 use crate::work::Failure;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,11 +53,17 @@ pub struct Text {
     pub choose_videos: &'static str,
     pub videos_filter: &'static str,
     pub all_files_filter: &'static str,
+    pub open_gracil: &'static str,
+    pub exit: &'static str,
+    pub exit_question: &'static str,
+    pub keep_working: &'static str,
     smaller: fn(u32) -> String,
     videos: fn(usize) -> String,
     ready: fn(usize) -> String,
     saved_as: fn(&str) -> String,
     replaced_by: fn(&str) -> String,
+    tray_tip: fn(TrayState) -> String,
+    exit_explanation: fn(bool, usize) -> String,
     failures: Failures,
 }
 
@@ -95,6 +103,17 @@ impl Text {
 
     pub fn replaced_by(&self, name: &str) -> String {
         (self.replaced_by)(name)
+    }
+
+    /// What the tray icon says when the pointer rests on it.
+    pub fn tray_tip(&self, state: TrayState) -> String {
+        (self.tray_tip)(state)
+    }
+
+    /// What Exit will do to the work in progress (spec §54.1): whether a compression stops, and
+    /// how many videos waiting won't be compressed.
+    pub fn exit_explanation(&self, stops_one: bool, waiting: usize) -> String {
+        (self.exit_explanation)(stops_one, waiting)
     }
 
     /// Why something went wrong, as the "!" explains it.
@@ -146,6 +165,31 @@ static ENGLISH: Text = Text {
     ready: |count| format!("{count} ready"),
     saved_as: |name| format!("Saved as {name}"),
     replaced_by: |name| format!("Replaced by {name}"),
+    open_gracil: "Open Gracil",
+    exit: "Exit",
+    exit_question: "Exit Gracil?",
+    keep_working: "Keep working",
+    tray_tip: |state| match state {
+        TrayState::Idle => "Gracil".to_owned(),
+        TrayState::Processing(done) => format!("Gracil · compressing {}%", percent(done)),
+        TrayState::Paused => "Gracil · paused".to_owned(),
+        TrayState::Error => "Gracil · something needs your attention".to_owned(),
+    },
+    exit_explanation: |stops_one, waiting| {
+        let mut parts = Vec::new();
+        if stops_one {
+            parts.push(
+                "The video being compressed stops, and its original stays exactly as it was."
+                    .to_owned(),
+            );
+        }
+        match waiting {
+            0 => {}
+            1 => parts.push("1 video waiting won't be compressed.".to_owned()),
+            n => parts.push(format!("{n} videos waiting won't be compressed.")),
+        }
+        parts.join(" ")
+    },
     failures: Failures {
         no_video: "This file has no video",
         unreadable: "This file can't be opened as a video",
@@ -194,6 +238,32 @@ static SPANISH: Text = Text {
     },
     saved_as: |name| format!("Guardado como {name}"),
     replaced_by: |name| format!("Reemplazado por {name}"),
+    open_gracil: "Abrir Gracil",
+    exit: "Salir",
+    exit_question: "¿Salir de Gracil?",
+    keep_working: "Seguir trabajando",
+    tray_tip: |state| match state {
+        TrayState::Idle => "Gracil".to_owned(),
+        TrayState::Processing(done) => format!("Gracil · comprimiendo {}%", percent(done)),
+        TrayState::Paused => "Gracil · en pausa".to_owned(),
+        TrayState::Error => "Gracil · algo necesita tu atención".to_owned(),
+    },
+    exit_explanation: |stops_one, waiting| {
+        let mut parts = Vec::new();
+        if stops_one {
+            parts.push(
+                "El video que se está comprimiendo se detiene, y su original queda exactamente \
+                 como estaba."
+                    .to_owned(),
+            );
+        }
+        match waiting {
+            0 => {}
+            1 => parts.push("1 video en espera no se comprimirá.".to_owned()),
+            n => parts.push(format!("{n} videos en espera no se comprimirán.")),
+        }
+        parts.join(" ")
+    },
     failures: Failures {
         no_video: "Este archivo no tiene video",
         unreadable: "Este archivo no se puede abrir como video",
@@ -204,9 +274,43 @@ static SPANISH: Text = Text {
     },
 };
 
+/// A share from 0 to 1 as a whole percentage, never above 100.
+fn percent(share: f32) -> u32 {
+    (share.clamp(0.0, 1.0) * 100.0).floor() as u32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exit_says_exactly_what_stops() {
+        let en = Text::get(Language::English);
+        assert!(
+            en.exit_explanation(true, 0)
+                .starts_with("The video being compressed stops")
+        );
+        assert!(!en.exit_explanation(true, 0).contains("waiting"));
+        assert_eq!(
+            en.exit_explanation(false, 2),
+            "2 videos waiting won't be compressed."
+        );
+        let es = Text::get(Language::Spanish);
+        assert!(
+            es.exit_explanation(true, 1)
+                .ends_with("1 video en espera no se comprimirá.")
+        );
+    }
+
+    #[test]
+    fn the_tray_tip_says_how_far_along() {
+        let en = Text::get(Language::English);
+        assert_eq!(en.tray_tip(TrayState::Idle), "Gracil");
+        assert_eq!(
+            en.tray_tip(TrayState::Processing(0.429)),
+            "Gracil · compressing 42%"
+        );
+    }
 
     #[test]
     fn counts_agree_with_their_number() {

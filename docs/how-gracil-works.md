@@ -25,8 +25,7 @@ away, fading gently from one to the other instead of flashing.
 
 Gracil's symbol is a marble resting on a support: the marble is your video, and the support is
 Gracil, which takes care of the technical work. It is Gracil's icon in the window, the taskbar
-and File Explorer. *(in progress)* It will also appear next to the clock, in a version that suits
-a light or dark taskbar.
+and File Explorer, and it sits next to the clock, in a version that suits a light or dark taskbar.
 
 ## Adding videos
 
@@ -185,13 +184,26 @@ only for that, it closes by itself once the work is done.
 
 ## Closing Gracil
 
-*(in progress)* Closing the window doesn't stop Gracil. It keeps working in the system tray, next to the clock,
-until you choose **Exit** there. If a video is compressing at that moment, Gracil tells you what
-will happen before it exits.
+Closing the window doesn't stop Gracil. It keeps working next to the clock, where its marble
+tells you how things are going:
 
-For now, closing the window quits Gracil. If a video is compressing, Gracil stops it first and
-leaves the original untouched. Finished videos you didn't choose for are deleted; their
-originals stay as they were.
+- the whole marble: nothing is compressing;
+- a ring filling up around the marble: a video is compressing, and the ring shows how far along
+  it is;
+- two bars: the compression is paused;
+- an amber marble: something went wrong while the window was closed. Open Gracil to see what;
+  the marble turns back to normal.
+
+Pointing at the marble says the same in words. Click it to open Gracil again. Right-click it for
+**Open Gracil** and **Exit**.
+
+**Exit** is how you quit Gracil. If nothing is compressing or waiting, Gracil quits straight away.
+Otherwise it first asks, and tells you exactly what will happen: the video being compressed stops
+and its original stays exactly as it was, and videos still waiting won't be compressed. Choose
+**Keep working** to carry on. If the work finishes while you decide, the question goes away.
+
+When Gracil quits, finished videos you didn't choose for are deleted; their originals stay as
+they were.
 
 ## What Gracil writes down
 
