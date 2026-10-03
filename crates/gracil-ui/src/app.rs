@@ -78,8 +78,10 @@ pub struct Gracil {
 /// Frames a new window starts before it comes into view: by the last, the first ones are drawn.
 const FRAMES_BEFORE_REVEAL: u8 = 3;
 
-/// If a new window draws no frames, it comes into view anyway after this long.
-const REVEAL_AT_THE_LATEST: Duration = Duration::from_millis(500);
+/// If a new window draws no frames, it comes into view anyway after this long. Generous, since the
+/// very first frame after starting the computer can take a while, and a white window is worse
+/// than one that appears a moment later.
+const REVEAL_AT_THE_LATEST: Duration = Duration::from_secs(3);
 
 /// The mini-window's size, in logical pixels.
 const MINI_SIZE: Size = Size::new(340.0, 108.0);
@@ -406,6 +408,9 @@ impl Gracil {
                 Task::none()
             }
             Message::Reveal(id) => {
+                if let Some((_, frames, _)) = self.revealing.get(&id) {
+                    warn!(frames, "a new window took too long to draw; shown anyway");
+                }
                 self.bring_into_view(id);
                 Task::none()
             }

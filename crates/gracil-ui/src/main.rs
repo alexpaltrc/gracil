@@ -50,6 +50,15 @@ fn main() -> iced::Result {
     }
     outside::send(Outside::Request(request));
 
+    // Iced reads Windows' list of fonts the first time it draws text, which after a fresh start
+    // of the computer can take most of a second. Read it now, alongside the rest of starting up,
+    // so the first window is ready to draw sooner.
+    std::thread::spawn(|| {
+        let started = std::time::Instant::now();
+        let _ = iced::advanced::graphics::text::font_system();
+        info!(took = ?started.elapsed(), "fonts ready");
+    });
+
     let result = iced::daemon(Gracil::boot, Gracil::update, view::view)
         .title(Gracil::title)
         .theme(Gracil::theme)
