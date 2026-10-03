@@ -51,6 +51,8 @@ pub enum Message {
     FilesChosen(Vec<PathBuf>),
     Job(JobId, Report),
     Cancel,
+    Pause,
+    Resume,
     Choose(JobId, Choice),
     ChooseAll(Choice),
     Placed(JobId, Choice, Result<PathBuf, Failure>),
@@ -144,6 +146,14 @@ impl Gracil {
                 if let Some((_, control)) = &self.running {
                     control.cancel();
                 }
+                Task::none()
+            }
+            Message::Pause => {
+                self.pause(true);
+                Task::none()
+            }
+            Message::Resume => {
+                self.pause(false);
                 Task::none()
             }
             Message::Choose(id, choice) => self.choose(id, choice),
@@ -340,6 +350,8 @@ impl Gracil {
             Report::Done(outcome) => {
                 let events: &[JobEvent] = match outcome {
                     Outcome::Ready { .. } | Outcome::Placed { .. } => &[
+                        // It may have finished just as it was paused.
+                        JobEvent::Resume,
                         JobEvent::BeginCompressing,
                         JobEvent::BeginFinalizing,
                         JobEvent::Complete,
@@ -355,6 +367,28 @@ impl Gracil {
                 self.running = None;
                 self.schedule()
             }
+        }
+    }
+
+    /// Freezes or thaws the running compression (spec §47). Only a compression that has started
+    /// can pause; a failure leaves it as it was and is only logged.
+    fn pause(&mut self, paused: bool) {
+        let Some((id, control)) = &self.running else {
+            return;
+        };
+        let id = *id;
+        let state = self.queue.get(id).map(|job| job.state);
+        let (result, event) = match (paused, state) {
+            (true, Some(JobState::Compressing)) => (
+                control.pause(gracil_windows::set_suspended),
+                JobEvent::Pause,
+            ),
+            (false, Some(JobState::Paused)) => (control.resume(), JobEvent::Resume),
+            _ => return,
+        };
+        match result {
+            Ok(()) => self.transition(id, event),
+            Err(error) => warn!(%error, paused, "could not pause or resume"),
         }
     }
 

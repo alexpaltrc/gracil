@@ -1,6 +1,6 @@
 //! Running one FFmpeg encode and reporting its progress.
 
-use std::io::{BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader, Read};
 use std::process::{Child, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
@@ -11,18 +11,24 @@ use crate::plan::EncodePlan;
 use crate::progress::{Progress, ProgressParser};
 use crate::toolchain::Toolchain;
 
-/// Lets another thread cancel a running compression. Cheap to clone.
+/// Suspends (`true`) or resumes (`false`) a process by id. Provided by the Windows layer; a
+/// parameter here so the core stays free of Windows code.
+pub type Suspend = fn(process_id: u32, suspended: bool) -> io::Result<()>;
+
+/// Lets another thread pause, resume or cancel a running compression. Cheap to clone.
 #[derive(Debug, Clone, Default)]
 pub struct JobControl(Arc<Mutex<Slot>>);
 
 #[derive(Debug, Default)]
 struct Slot {
     cancelled: bool,
+    /// Set while paused, with the way to resume. A process started meanwhile starts paused.
+    paused: Option<Suspend>,
     child: Option<Child>,
 }
 
 impl JobControl {
-    /// Stops the current FFmpeg process, if any, and every attempt after it.
+    /// Stops the current FFmpeg process, if any, and every attempt after it. Works while paused.
     pub fn cancel(&self) {
         let mut slot = self.lock();
         slot.cancelled = true;
@@ -37,9 +43,34 @@ impl JobControl {
         self.lock().cancelled
     }
 
-    /// Process id of the running FFmpeg, used to pause it.
-    pub fn process_id(&self) -> Option<u32> {
-        self.lock().child.as_ref().map(Child::id)
+    /// Freezes the running FFmpeg where it is (spec §47). Nothing is lost; [`Self::resume`] carries
+    /// on from the same frame.
+    pub fn pause(&self, suspend: Suspend) -> io::Result<()> {
+        let mut slot = self.lock();
+        if slot.cancelled || slot.paused.is_some() {
+            return Ok(());
+        }
+        if let Some(child) = &slot.child {
+            suspend(child.id(), true)?;
+        }
+        slot.paused = Some(suspend);
+        Ok(())
+    }
+
+    pub fn resume(&self) -> io::Result<()> {
+        let mut slot = self.lock();
+        let Some(suspend) = slot.paused else {
+            return Ok(());
+        };
+        if let Some(child) = &slot.child {
+            suspend(child.id(), false)?;
+        }
+        slot.paused = None;
+        Ok(())
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.lock().paused.is_some()
     }
 
     fn lock(&self) -> MutexGuard<'_, Slot> {
@@ -98,6 +129,12 @@ pub fn run(
             let _ = child.kill();
             let _ = child.wait();
             return EncodeOutcome::Cancelled;
+        }
+        // Paused between attempts: the next one starts paused too.
+        if let Some(suspend) = slot.paused
+            && let Err(error) = suspend(child.id(), true)
+        {
+            warn!(%error, "could not pause the next attempt");
         }
         slot.child = Some(child);
     }
@@ -176,6 +213,26 @@ mod tests {
         assert!(!control.is_cancelled());
         control.cancel();
         assert!(control.is_cancelled());
-        assert_eq!(control.process_id(), None);
+    }
+
+    fn never_called(_: u32, _: bool) -> io::Result<()> {
+        unreachable!("there is no process to suspend")
+    }
+
+    #[test]
+    fn pausing_between_processes_is_remembered() {
+        let control = JobControl::default();
+        control.pause(never_called).unwrap();
+        assert!(control.is_paused());
+        control.resume().unwrap();
+        assert!(!control.is_paused());
+    }
+
+    #[test]
+    fn a_cancelled_job_does_not_pause() {
+        let control = JobControl::default();
+        control.cancel();
+        control.pause(never_called).unwrap();
+        assert!(!control.is_paused());
     }
 }

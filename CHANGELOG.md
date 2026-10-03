@@ -12,7 +12,9 @@ Gracil is still being built, but you can already compress videos with it.
   to set.
 - Drop videos onto the window, or choose them, and Gracil compresses them one after another. You
   can keep adding videos while it works.
-- The video being compressed is shown large, with its progress and a **Cancel** button.
+- The video being compressed is shown large, with its progress and **Pause** and **Cancel**
+  buttons. **Pause** frees up your computer while keeping the work done so far; **Resume** carries
+  on from the same point.
   **View files** shows every other video and how much smaller each one became. Click one to show
   it large, or take it off the list with **×** or **Clear**.
 - When a video is done, you see how much smaller it became and choose: **Replace** puts it in

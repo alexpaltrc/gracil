@@ -3,6 +3,10 @@
 //! This is one of the two crates allowed to use `unsafe`, and only to call Windows functions.
 //! Every call explains why it is sound.
 
+mod process;
+
+pub use process::set_suspended;
+
 use std::ffi::OsStr;
 use std::io;
 use std::iter;

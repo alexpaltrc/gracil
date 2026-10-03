@@ -71,11 +71,19 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         .spacing(space::S)
         .align_x(Center);
     if job.state.is_active() {
-        details = details.push(
-            button(text(state.text.cancel).size(size::CAPTION))
+        let quiet = |label: &'static str, message: Option<Message>| {
+            button(text(label).size(size::CAPTION))
                 .style(style::quiet_button)
-                .on_press(Message::Cancel),
-        );
+                .on_press_maybe(message)
+        };
+        // Pause only once FFmpeg is compressing; before that there is nothing to hold.
+        let pause = match job.state {
+            JobState::Paused => quiet(state.text.resume, Some(Message::Resume)),
+            JobState::Compressing => quiet(state.text.pause, Some(Message::Pause)),
+            _ => quiet(state.text.pause, None),
+        };
+        details = details
+            .push(row![pause, quiet(state.text.cancel, Some(Message::Cancel))].spacing(space::S));
     }
     match state.outcomes.get(&job.id) {
         Some(Outcome::Ready { placing, .. }) => {

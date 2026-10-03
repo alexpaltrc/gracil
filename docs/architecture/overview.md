@@ -33,7 +33,8 @@ Crates are created when they get real content, not ahead of time.
 **Compression.** A job is a lightweight record (path, state, progress) kept in
 `gracil_core::queue`. The scheduler runs one job at a time (ADR 0004): probe → plan the streams →
 spawn FFmpeg writing to a reserved temporary sibling (`<name>.gracil-<id>.part`) → parse
-`-progress pipe:1` → validate the output with FFprobe (HEVC, same duration) → finalize. A result
+`-progress pipe:1` (Pause suspends FFmpeg's threads through `gracil_windows::set_suspended`,
+ADR 0013) → validate the output with FFprobe (HEVC, same duration) → finalize. A result
 that is not smaller than the original is discarded (spec §40.1).
 
 **Finding FFmpeg.** At startup, in the background: use an FFmpeg on `PATH` that has `ffprobe.exe`
