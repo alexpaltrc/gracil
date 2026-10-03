@@ -60,9 +60,9 @@ pub struct Text {
     pub explorer_mini_window: &'static str,
     /// "Always", before the pill that picks what to do with every finished video (ADR 0025).
     pub always: &'static str,
-    /// The pill's three choices: always replace, ask each time (the middle, "off"), always save a
-    /// copy.
-    pub always_choices: [&'static str; 3],
+    /// The pill's two ends: always replace, always save a copy. Its middle, "ask each time", is a
+    /// small circle rather than a word.
+    pub always_choices: [&'static str; 2],
     smaller: fn(u32) -> String,
     videos: fn(usize) -> String,
     ready: fn(usize) -> String,
@@ -183,7 +183,7 @@ static ENGLISH: Text = Text {
     keep_working: "Keep working",
     explorer_mini_window: "Show mini-window when compressing from File Explorer",
     always: "Always",
-    always_choices: ["Replace", "Or", "Save a copy"],
+    always_choices: ["Replace", "Save a copy"],
     in_line: |count| format!("{count} waiting"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
@@ -260,7 +260,7 @@ static SPANISH: Text = Text {
     keep_working: "Seguir trabajando",
     explorer_mini_window: "Mostrar miniventana al comprimir desde el Explorador de archivos",
     always: "Siempre",
-    always_choices: ["Reemplazar", "O", "Guardar como copia"],
+    always_choices: ["Reemplazar", "Guardar como copia"],
     in_line: |count| format!("{count} en espera"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),

@@ -47,7 +47,7 @@ pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     container(content).padding(space::M).into()
 }
 
-/// "Always (Replace / Or / Save a copy)": what to do with every finished video, or, in the
+/// "Always (Replace / ○ / Save a copy)": what to do with every finished video, or, in the
 /// middle, ask each time (ADR 0025).
 fn always(state: &Gracil) -> Element<'_, Message> {
     let selected = match state.always() {

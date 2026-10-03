@@ -48,9 +48,9 @@ Gracil is still being built, but you can already compress videos with it.
   original and saves the smaller one next to it as `Gracil-` followed by its name. With several
   videos done, **Replace all** and **Save all copies** handle them in one go.
 - If you always answer the same way, the line at the foot of the window lets you say so once:
-  **Always**, then **Replace**, **Or** or **Save a copy**. Pick either end and Gracil does that
-  with every video that finishes from then on. In the middle, where it starts, Gracil asks each
-  time.
+  **Always**, then **Replace**, a small circle, and **Save a copy**. Pick either end and Gracil
+  does that with every video that finishes from then on. On the circle in the middle, where it
+  starts, Gracil asks each time.
 - Replacing is done safely: if anything goes wrong, your original is put back. No other file is
   ever overwritten.
 - If Gracil is closed suddenly, for example when the computer loses power or it is forced to

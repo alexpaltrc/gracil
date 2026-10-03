@@ -61,9 +61,9 @@ You decide after seeing the result, so you never trade your original for a video
 shrink. With several videos done, **View files** offers **Replace all** and **Save all copies**.
 
 If you always answer the same way, use the line at the foot of the window: **Always**, followed
-by **Replace**, **Or** and **Save a copy**. Pick **Replace** or **Save a copy** and Gracil does
-that with every video that finishes from then on, without asking. In the middle, **Or**, the
-setting is off and Gracil asks each time; that is how it starts. Videos already waiting for you
+by **Replace**, a small circle and **Save a copy**. Pick **Replace** or **Save a copy** and Gracil
+does that with every video that finishes from then on, without asking. On the circle in the
+middle, the setting is off and Gracil asks each time; that is how it starts. Videos already waiting for you
 keep waiting, and if Gracil can't do what you picked for a video (for example replacing would
 overwrite another file), that video waits for you with a **!** that explains why. When you
 compress from File Explorer, the command you clicked decides instead.

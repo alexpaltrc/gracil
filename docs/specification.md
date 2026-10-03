@@ -708,7 +708,7 @@ Settings stay intentionally small. Currently required: **Show mini-window when c
 File Explorer** (default ON). Do not add GPU/CPU/codec selection, bitrate, FFmpeg arguments,
 thread count or advanced encoder configuration.
 
-*Update (ADR 0025):* a second setting, requested by the product owner: **Always (Replace / Or /
+*Update (ADR 0025):* a second setting, requested by the product owner: **Always (Replace / ○ /
 Save a copy)** in the main window. The middle, the default, asks after each video as in §37.1; an
 end answers that question ahead of time for every video that finishes afterwards.
 

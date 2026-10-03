@@ -1,6 +1,6 @@
 //! The pill: one capsule holding three choices, with a soft stone that slides to the one picked.
-//! Its middle choice means "off", so there the stone fades almost away; it fills in as it slides
-//! towards either end.
+//! Its middle choice means "off": a small ring instead of a word, where the stone fades almost
+//! away; it fills in as it slides towards either end.
 //!
 //! Like the dial, it animates itself and only asks for frames while the stone is moving.
 
@@ -9,7 +9,7 @@ use std::time::Instant;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::widget::{Tree, tree};
 use iced::advanced::{Clipboard, Shell, Widget, renderer};
-use iced::widget::{container, row, text};
+use iced::widget::{Space, container, row, text};
 use iced::{
     Background, Border, Element, Event, Length, Rectangle, Renderer, Size, Theme, mouse, window,
 };
@@ -19,36 +19,44 @@ use crate::style::{size, space};
 /// How quickly the stone catches up, in seconds (the time to cover about two thirds).
 const EASE: f32 = 0.07;
 
+/// The middle ring's diameter, in logical pixels.
+const RING: f32 = 7.0;
+
 pub struct Pill<'a, Message> {
     content: Element<'a, Message>,
     selected: usize,
     on_select: Box<dyn Fn(usize) -> Message + 'a>,
 }
 
-/// Three choices; `selected` is the one picked, and the middle one means "off".
+/// Three choices: the two `ends`, and between them "off", drawn as a small ring rather than a
+/// word. `selected` is the one picked, from 0 to 2.
 pub fn pill<'a, Message: 'a>(
-    labels: [&'a str; 3],
+    ends: [&'a str; 2],
     selected: usize,
     on_select: impl Fn(usize) -> Message + 'a,
 ) -> Pill<'a, Message> {
-    let segments = labels.into_iter().enumerate().map(|(index, label)| {
+    let label = move |index: usize, label: &'a str| -> Element<'a, Message> {
         let picked = index == selected;
-        let off = index == 1;
         container(text(label).size(size::CAPTION).style(move |theme: &Theme| {
             let color = theme.palette().text;
             text::Style {
-                color: Some(match (picked, off) {
-                    (true, false) => color,
-                    (true, true) => color.scale_alpha(0.6),
-                    (false, _) => color.scale_alpha(0.5),
+                color: Some(if picked {
+                    color
+                } else {
+                    color.scale_alpha(0.5)
                 }),
             }
         }))
         .padding([2.0, space::S + 2.0])
         .into()
-    });
+    };
+    // The ring's room: as tall as a word, a little narrower.
+    let ring: Element<'a, Message> =
+        container(Space::new().width(RING + 8.0).height(size::CAPTION * 1.3))
+            .padding([2.0, space::S])
+            .into();
     Pill {
-        content: row(segments).into(),
+        content: row![label(0, ends[0]), ring, label(2, ends[1])].into(),
         selected,
         on_select: Box::new(on_select),
     }
@@ -232,6 +240,27 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
                     ..renderer::Quad::default()
                 },
                 Background::Color(fill),
+            );
+
+            // The middle choice: a small empty ring, like a marble's outline. It is clearer while
+            // picked and fades back when an end is.
+            let middle = parts[1].center();
+            let ring = Rectangle {
+                x: middle.x - RING / 2.0,
+                y: middle.y - RING / 2.0,
+                width: RING,
+                height: RING,
+            };
+            renderer.fill_quad(
+                renderer::Quad {
+                    bounds: ring,
+                    border: Border::default()
+                        .rounded(RING / 2.0)
+                        .width(1.2)
+                        .color(palette.text.scale_alpha(0.5 + 0.15 * (1.0 - lit))),
+                    ..renderer::Quad::default()
+                },
+                Background::Color(iced::Color::TRANSPARENT),
             );
         }
 

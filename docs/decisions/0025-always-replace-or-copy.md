@@ -12,9 +12,12 @@ technical ones; this one is about the user's files, not about encoding.
 **Decision.**
 
 1. The main window has one more line at its foot: **Always**, followed by a pill with three
-   positions: **Replace**, **Or** and **Save a copy** (Spanish: **Siempre**, **Reemplazar**,
-   **O**, **Guardar como copia**). It reads as a sentence: "Always replace", "Always save a copy",
-   or, in the middle, "replace or save a copy", meaning Gracil asks.
+   positions: **Replace**, a small ring, and **Save a copy** (Spanish: **Siempre**, **Reemplazar**,
+   ○, **Guardar como copia**). It reads as a sentence: "Always replace", "Always save a copy",
+   or, in the middle, "replace or save a copy", meaning Gracil asks. The middle was first the
+   word **Or** (**O**); the product owner had pictured a circle, so it is a small empty ring
+   drawn by the pill itself, like the marble's outline: it needs no translation and reads as
+   "neither, ask me".
 2. The middle is the default and looks switched off: its stone is barely visible. Picking an end
    slides the stone there over a fraction of a second and fills it with the marble's grey
    (`pill.rs`, which animates itself like the dial and only asks for frames while moving).
