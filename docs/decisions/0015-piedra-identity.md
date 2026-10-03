@@ -31,6 +31,7 @@ icon in every Windows size, tray versions for light and dark taskbars, and MSIX 
 
 **Consequences.**
 
-- Using the icon (window, executable, tray, MSIX manifest) is still to be done; the tray must swap
+- The window and executable use the icon ([0016](0016-app-icon.md)). The tray and the MSIX
+  manifest are still to be done; the tray must swap
   its icon when the taskbar's theme changes (see `docs/design/piedra/LEEME.md`).
 - The marble grey on ivory is low contrast (3.2:1), so it is used for shapes only, never for text.

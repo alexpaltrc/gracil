@@ -1,0 +1,3 @@
+// Resources linked into gracil.exe. Icon 1 is the one File Explorer and the window show
+// (ADR 0016): the neutral Piedra mark, drawn to read on light and dark surfaces alike.
+1 ICON "../../assets/icons/ico/piedra-app.ico"

@@ -3,8 +3,10 @@
 //! This is one of the two crates allowed to use `unsafe`, and only to call Windows functions.
 //! Every call explains why it is sound.
 
+mod icon;
 mod process;
 
+pub use icon::set_window_icon;
 pub use process::set_suspended;
 
 use std::ffi::OsStr;

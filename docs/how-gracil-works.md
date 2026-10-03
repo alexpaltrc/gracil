@@ -24,8 +24,9 @@ and ivory. If you switch Windows between light and dark while Gracil is open, Gr
 away, fading gently from one to the other instead of flashing.
 
 Gracil's symbol is a marble resting on a support: the marble is your video, and the support is
-Gracil, which takes care of the technical work. *(in progress)* The symbol will appear as the
-app's icon, in the taskbar and next to the clock.
+Gracil, which takes care of the technical work. It is Gracil's icon in the window, the taskbar
+and File Explorer. *(in progress)* It will also appear next to the clock, in a version that suits
+a light or dark taskbar.
 
 ## Adding videos
 

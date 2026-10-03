@@ -10,6 +10,9 @@ publish.workspace = true
 name = "gracil"
 path = "src/main.rs"
 
+[build-dependencies]
+embed-resource.workspace = true
+
 [dependencies]
 gracil-core.workspace = true
 gracil-windows.workspace = true

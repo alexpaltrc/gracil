@@ -67,6 +67,10 @@ pub enum Message {
     ToggleDrawer,
     ThemeChanged(Mode),
     ThemeFrame(Instant),
+    /// A window is open; its handle lets Windows give it Gracil's icon.
+    WindowReady(u64),
+    /// A window moved to a screen with another scale, so its icon is picked again.
+    Rescaled(window::Id),
     CloseRequested,
 }
 
@@ -98,7 +102,8 @@ impl Gracil {
             .queue
             .add(files(std::env::args_os().skip(1).map(PathBuf::from)));
         let tasks = Task::batch([
-            open.discard(),
+            open.then(window::raw_id::<Message>)
+                .map(Message::WindowReady),
             system::theme().map(Message::ThemeChanged),
             work::start_engine().map(Message::EngineStarted),
         ]);
@@ -115,11 +120,12 @@ impl Gracil {
 
     pub fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
-            event::listen_with(|event, _status, _window| match event {
+            event::listen_with(|event, _status, window| match event {
                 Event::Window(window::Event::FileHovered(_)) => Some(Message::FilesHovered),
                 Event::Window(window::Event::FilesHoveredLeft) => Some(Message::FilesHoveredLeft),
                 Event::Window(window::Event::FileDropped(path)) => Some(Message::FileDropped(path)),
                 Event::Window(window::Event::CloseRequested) => Some(Message::CloseRequested),
+                Event::Window(window::Event::Rescaled(_)) => Some(Message::Rescaled(window)),
                 _ => None,
             }),
             system::theme_changes().map(Message::ThemeChanged),
@@ -214,6 +220,15 @@ impl Gracil {
             Message::ThemeFrame(now) => {
                 self.shift_theme(now);
                 Task::none()
+            }
+            Message::WindowReady(handle) => {
+                if let Err(error) = gracil_windows::set_window_icon(handle) {
+                    warn!("could not set the window icon: {error}");
+                }
+                Task::none()
+            }
+            Message::Rescaled(window) => {
+                window::raw_id::<Message>(window).map(Message::WindowReady)
             }
             Message::CloseRequested => {
                 // Until the tray arrives (M5), closing quits. FFmpeg must not outlive Gracil, and
