@@ -405,6 +405,22 @@ fn gracil_exe() -> Option<PathBuf> {
     Some(dll.with_file_name("gracil.exe"))
 }
 
+/// What to start Gracil with. From its package (a manifest beside it), Gracil must be started
+/// through the package's alias: started by its path it would run without the package's identity,
+/// and its settings and files would end up somewhere else (ADR 0023). Outside a package, the
+/// `gracil.exe` beside this DLL.
+fn launcher() -> Option<PathBuf> {
+    let gracil = gracil_exe()?;
+    let packaged = gracil.with_file_name("AppxManifest.xml").is_file();
+    let alias = std::env::var_os("LOCALAPPDATA")
+        .map(|local| PathBuf::from(local).join(r"Microsoft\WindowsApps\gracil.exe"));
+    match alias {
+        // The alias is a link with no size, so only its presence is checked.
+        Some(alias) if packaged && alias.symlink_metadata().is_ok() => Some(alias),
+        _ => Some(gracil),
+    }
+}
+
 /// Hands the videos to Gracil on a thread of its own, so Explorer's menu closes at once (spec §60).
 /// Gracil running gets them through the pipe; otherwise it is started with them, and any that
 /// don't fit on its command line follow through the pipe once it is up.
@@ -419,7 +435,7 @@ fn deliver(action: Action, videos: Vec<PathBuf>) {
             let rest = if gracil_windows::is_running() {
                 &paths[..]
             } else {
-                let Some(gracil) = gracil_exe() else {
+                let Some(gracil) = launcher() else {
                     return;
                 };
                 let (first, rest) =

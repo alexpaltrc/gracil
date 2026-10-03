@@ -7,6 +7,8 @@
 //! cargo run -p gracil-shell --example invoke -- save-copy C:\Videos\a.mp4 C:\Videos\b.mov
 //! cargo run -p gracil-shell --example invoke -- replace C:\Videos\Holidays
 //! ```
+//!
+//! Set `GRACIL_SHELL_DLL` to the DLL in `packaging/msix/out/layout` to try the registered package's.
 
 // A development tool that drives COM by hand; every call uses objects created right here.
 #![allow(unsafe_code, clippy::unwrap_used, clippy::expect_used)]
@@ -46,13 +48,19 @@ fn main() {
         })
         .collect();
 
-    let dll = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("gracil_shell.dll");
+    // `GRACIL_SHELL_DLL` picks another build, such as the one in the registered package.
+    let dll = std::env::var_os("GRACIL_SHELL_DLL").map_or_else(
+        || {
+            std::env::current_exe()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join("gracil_shell.dll")
+        },
+        PathBuf::from,
+    );
     unsafe {
         CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().unwrap();
         let module = LoadLibraryW(&HSTRING::from(dll.as_path())).expect("built DLL");

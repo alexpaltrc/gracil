@@ -23,7 +23,8 @@ Rust with `windows-rs`.
    one place.
 4. A click hands the videos over on a thread of the DLL, so Explorer's menu closes at once. If
    Gracil is running (its single-instance mutex exists, ADR 0019), the request goes through the
-   pipe. Otherwise `gracil.exe` next to the DLL is started with `--replace` or `--save-copy` and
+   pipe. Otherwise Gracil is started (since ADR 0023, through the package's alias when the DLL is
+   packaged; `gracil.exe` next to the DLL otherwise) with `--replace` or `--save-copy` and
    as many paths as fit in 30,000 characters of command line, passed as separate arguments, never
    as a shell string; the rest follow through the pipe once Gracil is listening. The DLL stays
    loaded while that thread or any of its objects lives (`DllCanUnloadNow`).
