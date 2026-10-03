@@ -11,3 +11,8 @@
 - Versioning, MSIX mapping, changelog style and commit rules: `docs/development/versioning.md`.
   The changelog is user-facing, plain language, no technical terms.
 - Tests that touch the filesystem use fresh temporary directories only.
+- `docs/how-gracil-works.md` is the user-facing explanation of how Gracil works. Update it in the
+  same commit as any change to behavior a user could notice or ask about. Plain language, no
+  jargon; mark decided-but-unbuilt behavior "(in progress)" and remove the mark once it ships.
+- When something goes wrong, Gracil shows it quietly in the interface instead of opening a dialog
+  (spec §2.3).
