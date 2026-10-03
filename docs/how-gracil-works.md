@@ -50,6 +50,10 @@ Gracil shows it under the buttons before you choose: `IMG_0042.MOV → IMG_0042.
 then creates `IMG_0042.mp4` and removes `IMG_0042.MOV`. If an `IMG_0042.mp4` already exists
 there, Gracil replaces nothing and a **!** explains why; you can still save a copy.
 
+Good to know: because the name changes, other apps that remembered the old file (for example a
+video editing project, or a playlist) won't find it under its old name. If that matters for a
+video, choose **Save copy** instead; your original stays exactly where it was.
+
 When something goes wrong, there's no message box. A small **!** appears beside the video; point
 at it to read what happened.
 

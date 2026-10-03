@@ -24,6 +24,8 @@ pub struct Gracil {
     pub drawer_open: bool,
     /// The video the user picked in the drawer to look at, if any.
     pub selected: Option<JobId>,
+    /// The last video put in place, so the window stays on it once nothing else needs a choice.
+    last_placed: Option<JobId>,
     /// The interface's words, in the Windows display language.
     pub text: &'static Text,
     theme: Theme,
@@ -75,6 +77,7 @@ impl Gracil {
             hovering_files: false,
             drawer_open: false,
             selected: None,
+            last_placed: None,
             text: Text::get(Language::detect()),
             theme: style::theme(Mode::Light),
             running: None,
@@ -201,7 +204,8 @@ impl Gracil {
     }
 
     /// The video shown large: the one the user picked; otherwise the running one; otherwise a
-    /// result waiting for a choice; otherwise the next one waiting; otherwise the last one done.
+    /// result waiting for a choice; otherwise the next one waiting; otherwise the one just put in
+    /// place; otherwise the last one done.
     pub fn focused(&self) -> Option<&Job> {
         let jobs = self.queue.jobs();
         self.selected
@@ -212,6 +216,7 @@ impl Gracil {
                     .find(|job| self.outcomes.get(&job.id).is_some_and(Outcome::is_waiting))
             })
             .or_else(|| jobs.iter().find(|job| job.state == JobState::Pending))
+            .or_else(|| self.last_placed.and_then(|id| self.queue.get(id)))
             .or_else(|| jobs.iter().rev().find(|job| job.state.is_finished()))
     }
 
@@ -276,6 +281,7 @@ impl Gracil {
         match placed {
             Ok(path) => {
                 let smaller_by = *smaller_by;
+                self.last_placed = Some(id);
                 *outcome = Outcome::Placed {
                     choice,
                     path,
@@ -300,6 +306,9 @@ impl Gracil {
         }
         if self.selected == Some(id) {
             self.selected = None;
+        }
+        if self.last_placed == Some(id) {
+            self.last_placed = None;
         }
     }
 
