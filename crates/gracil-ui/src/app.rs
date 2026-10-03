@@ -11,8 +11,11 @@ use gracil_core::job::{JobEvent, JobState};
 use gracil_core::queue::{Job, JobId, Queue};
 use iced::theme::{Mode, Palette};
 use iced::{Event, Size, Subscription, Task, Theme, event, system, window};
-use tracing::warn;
+use tracing::{info, warn};
 
+use crate::logging;
+use crate::outside::{self, Outside};
+use crate::request::Request;
 use crate::style;
 use crate::text::{Language, Text};
 use crate::work::{self, Choice, Failure, Outcome, Report};
@@ -35,6 +38,18 @@ pub struct Gracil {
     /// A change between light and dark in progress: where it started, where it goes and when.
     shift: Option<(Palette, Palette, Instant)>,
     running: Option<(JobId, JobControl)>,
+    /// The main window, while it is open.
+    main: Option<window::Id>,
+    /// Whether the main window was ever shown. A Gracil started only for background work leaves
+    /// on its own once that work is done (spec §53).
+    window_shown: bool,
+    /// Whether any request has arrived yet; until then there is nothing to be done or finished.
+    requested: bool,
+    /// Choices made before compressing, by File Explorer's commands: the result is placed as soon
+    /// as it is ready.
+    intents: HashMap<JobId, Choice>,
+    /// Leaving was asked for; Gracil leaves as soon as nothing is half done.
+    exiting: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -72,17 +87,14 @@ pub enum Message {
     /// A window moved to a screen with another scale, so its icon is picked again.
     Rescaled(window::Id),
     CloseRequested,
+    Outside(Outside),
 }
 
 impl Gracil {
+    /// Starts without a window: the first request (from the command line) decides whether one
+    /// is needed (spec §62).
     pub fn boot() -> (Self, Task<Message>) {
-        let (_, open) = window::open(window::Settings {
-            size: Size::new(440.0, 440.0),
-            min_size: Some(Size::new(360.0, 340.0)),
-            exit_on_close_request: false,
-            ..window::Settings::default()
-        });
-        let mut state = Self {
+        let state = Self {
             queue: Queue::default(),
             outcomes: HashMap::new(),
             engine: EngineState::Starting,
@@ -95,15 +107,13 @@ impl Gracil {
             mode: None,
             shift: None,
             running: None,
+            main: None,
+            window_shown: false,
+            requested: false,
+            intents: HashMap::new(),
+            exiting: false,
         };
-        // Videos opened with Gracil from File Explorer arrive as arguments; they start once the
-        // engine is ready.
-        state
-            .queue
-            .add(files(std::env::args_os().skip(1).map(PathBuf::from)));
         let tasks = Task::batch([
-            open.then(window::raw_id::<Message>)
-                .map(Message::WindowReady),
             system::theme().map(Message::ThemeChanged),
             work::start_engine().map(Message::EngineStarted),
         ]);
@@ -129,6 +139,7 @@ impl Gracil {
                 _ => None,
             }),
             system::theme_changes().map(Message::ThemeChanged),
+            outside::subscription().map(Message::Outside),
             // Frames only while the theme is changing (spec §51).
             if self.shift.is_some() {
                 window::frames().map(Message::ThemeFrame)
@@ -139,6 +150,18 @@ impl Gracil {
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        let task = self.handle(message);
+        if self.exiting && self.settled() {
+            self.leave();
+        }
+        if self.background_work_done() {
+            info!("background work done; leaving");
+            self.leave();
+        }
+        task
+    }
+
+    fn handle(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::EngineStarted(engine) => {
                 self.engine = match engine {
@@ -231,19 +254,103 @@ impl Gracil {
                 window::raw_id::<Message>(window).map(Message::WindowReady)
             }
             Message::CloseRequested => {
-                // Until the tray arrives (M5), closing quits. FFmpeg must not outlive Gracil, and
-                // results nobody chose for are not left behind (ADR 0009).
+                // Until the tray arrives, closing quits: the running compression is cancelled and
+                // Gracil leaves once it has tidied up (see `update`).
+                self.exiting = true;
                 if let Some((_, control)) = &self.running {
                     control.cancel();
                 }
-                for outcome in self.outcomes.values() {
-                    if let Outcome::Ready { temp, .. } = outcome {
-                        work::discard(temp);
-                    }
+                Task::none()
+            }
+            Message::Outside(Outside::Request(request)) => self.on_request(request),
+        }
+    }
+
+    /// Adds what was asked for, and shows the window when the request wants it. A choice made in
+    /// advance applies to each of its videos, including one already on the list.
+    fn on_request(&mut self, request: Request) -> Task<Message> {
+        self.requested = true;
+        let show = if request.shows_window() {
+            self.show_main()
+        } else {
+            Task::none()
+        };
+        let paths: Vec<PathBuf> = files(request.paths).collect();
+        let added = self.add(paths.clone());
+        let mut tasks = vec![show, added];
+        if let Some(choice) = request.choice {
+            let ids: Vec<JobId> = paths
+                .iter()
+                .filter_map(|path| self.queue.find(path).map(|job| job.id))
+                .collect();
+            for id in ids {
+                self.intents.insert(id, choice);
+                if self.outcomes.get(&id).is_some_and(Outcome::is_waiting) {
+                    tasks.push(self.choose(id, choice));
                 }
-                iced::exit()
             }
         }
+        Task::batch(tasks)
+    }
+
+    /// Opens the main window, or brings it forward if it is open already.
+    fn show_main(&mut self) -> Task<Message> {
+        if let Some(id) = self.main {
+            return Task::batch([window::minimize(id, false), window::gain_focus(id)]);
+        }
+        let (id, open) = window::open(window::Settings {
+            size: Size::new(440.0, 440.0),
+            min_size: Some(Size::new(360.0, 340.0)),
+            exit_on_close_request: false,
+            ..window::Settings::default()
+        });
+        self.main = Some(id);
+        self.window_shown = true;
+        open.then(window::raw_id::<Message>)
+            .map(Message::WindowReady)
+    }
+
+    /// Whether nothing is in the middle of being compressed or put in place, so leaving loses no
+    /// work and leaves no half-written file.
+    fn settled(&self) -> bool {
+        self.running.is_none()
+            && !self
+                .outcomes
+                .values()
+                .any(|outcome| matches!(outcome, Outcome::Ready { placing: true, .. }))
+    }
+
+    /// Ends Gracil. Results nobody chose for are deleted; their originals stay as they were
+    /// (ADR 0009).
+    ///
+    /// The process ends here rather than through `iced::exit`: Iced 0.14's daemon does not return
+    /// from `run` once it has no window, so a Gracil working only in the background would stay.
+    fn leave(&self) -> ! {
+        for outcome in self.outcomes.values() {
+            if let Outcome::Ready { temp, .. } = outcome {
+                work::discard(temp);
+            }
+        }
+        info!("Gracil exited");
+        logging::finish();
+        std::process::exit(0)
+    }
+
+    /// Whether this Gracil was started only for background work and that work is over: nothing
+    /// waiting or running, and no result left for anyone to decide on (spec §53).
+    fn background_work_done(&self) -> bool {
+        self.requested
+            && !self.window_shown
+            && self.running.is_none()
+            && !self
+                .queue
+                .jobs()
+                .iter()
+                .any(|job| job.state == JobState::Pending)
+            && !self
+                .outcomes
+                .values()
+                .any(|outcome| matches!(outcome, Outcome::Ready { .. }))
     }
 
     /// The video shown large: the one the user picked; otherwise the running one; otherwise a
@@ -344,6 +451,7 @@ impl Gracil {
         if !removable || !self.queue.remove(id) {
             return;
         }
+        self.intents.remove(&id);
         if let Some(Outcome::Ready { temp, .. }) = self.outcomes.remove(&id) {
             work::discard(&temp);
         }
@@ -398,7 +506,11 @@ impl Gracil {
                 }
                 self.outcomes.insert(id, outcome);
                 self.running = None;
-                self.schedule()
+                let place = match self.intents.remove(&id) {
+                    Some(choice) => self.choose(id, choice),
+                    None => Task::none(),
+                };
+                Task::batch([place, self.schedule()])
             }
         }
     }

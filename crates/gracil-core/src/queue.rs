@@ -70,6 +70,12 @@ impl Queue {
         self.jobs.iter().find(|job| job.id == id)
     }
 
+    /// The job for `path`, matched the way adding matches duplicates.
+    pub fn find(&self, path: &Path) -> Option<&Job> {
+        let wanted = key(path);
+        self.jobs.iter().find(|job| key(&job.path) == wanted)
+    }
+
     /// The job being worked on, if any. At most one job is active at a time.
     pub fn active(&self) -> Option<&Job> {
         self.jobs.iter().find(|job| job.state.is_active())
@@ -161,6 +167,14 @@ mod tests {
         let mut queue = Queue::default();
         queue.add(paths(names));
         queue
+    }
+
+    #[test]
+    fn finds_a_job_by_path_whatever_its_case() {
+        let queue = queue(&["Clip.MOV", "b.mp4"]);
+        let found = queue.find(&PathBuf::from(r"c:\v\clip.mov")).unwrap();
+        assert_eq!(found.file_name(), "Clip.MOV");
+        assert!(queue.find(&PathBuf::from(r"C:\V\other.mp4")).is_none());
     }
 
     fn finish(queue: &mut Queue, event: JobEvent) -> JobId {

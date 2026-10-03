@@ -16,6 +16,8 @@ Gracil is still being built, but you can already compress videos with it.
   Explorer. It stays sharp at any screen size.
 - Drop videos onto the window, or choose them, and Gracil compresses them one after another. You
   can keep adding videos while it works.
+- Gracil runs only once. Opening it again, or opening videos with it while it is running, brings
+  the open Gracil forward and adds the videos to the same list.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
   advances. The middle of the ring holds the controls, as symbols instead of words: the top part
   pauses (II) and turns into play (▶) to resume, and the bottom part stops (■). Pausing frees up

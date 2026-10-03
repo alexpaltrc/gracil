@@ -58,8 +58,8 @@ attempts, from fastest to most forgiving: NVENC with CUDA decoding → NVENC wit
 `view` draws Focus + Drawer from that state alone (`dial` draws the progress ring and its
 controls, ADR 0014), `work` runs the engine and each compression on
 their own threads and reports back as messages, `style` holds every design token, and `text` every
-word shown, in English and Spanish (ADR 0011). Paths given on the command line are queued like
-dropped files. A finished result waits in its temporary file until the user chooses Replace or
+word shown, in English and Spanish (ADR 0011). Paths given on the command line or forwarded
+by a later launch are queued like dropped files. A finished result waits in its temporary file until the user chooses Replace or
 Save copy; `work::place` then calls `gracil_core::output` on its own thread, with `gracil_windows::replace_file` (`ReplaceFileW`) for the swap (ADR 0009).
 
 **Closing and exiting.** Closing a window hides it; the process keeps running in the tray. Only
@@ -69,9 +69,14 @@ itself when its work is finished (spec §53, §54.1).
 *Until the tray exists (M5), closing the window cancels the running compression, deletes results
 nobody chose for, and quits.*
 
-**Single instance.** The first process creates a named mutex scoped to the user session and serves
-a named pipe. Any later invocation (new launch, Explorer) sends its request over the pipe and
-exits.
+**Single instance.** The first process creates the named mutex `Local\Gracil.SingleInstance`
+and serves the pipe `\\.\pipe\Gracil.<session>` (`gracil_windows::claim`, `serve`). Any later
+invocation (a new launch, "Open with", Explorer) sends its command line over the pipe
+(`gracil_windows::forward`) and exits. `gracil-ui`'s `request` parses the command line and pipe
+messages alike, and `outside` turns them, from any thread, into messages for the app. Gracil
+starts with no window; a request without a choice opens it, while `--replace` and `--save-copy`
+work in the background. A Gracil whose window never opened ends itself when that work is done
+(ADR 0019).
 
 ## Data on disk
 

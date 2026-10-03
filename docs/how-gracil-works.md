@@ -174,6 +174,15 @@ When you choose **Save copy**, the compressed copy is saved next to it with
 already taken, Gracil uses `Gracil-Vacation (2).mp4`, and so on. Gracil never overwrites an
 existing file.
 
+## Only one Gracil
+
+Gracil runs once. If you open it again, or open videos with it while it is already running, the
+Gracil you have comes forward and the videos join the same list.
+
+*(in progress)* File Explorer's Gracil commands will compress the videos you picked without
+opening the window, and replace them or save copies as you chose there. When Gracil was opened
+only for that, it closes by itself once the work is done.
+
 ## Closing Gracil
 
 *(in progress)* Closing the window doesn't stop Gracil. It keeps working in the system tray, next to the clock,
