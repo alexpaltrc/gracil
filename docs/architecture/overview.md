@@ -24,7 +24,7 @@ Gracil is one Rust process (`gracil.exe`) that owns a job scheduler and drives e
 | `gracil-core` | lib | Job state model, output naming, FFprobe inspection, capability detection, FFmpeg argument construction, progress parsing, scheduler, output validation. No UI dependency. | M0 |
 | `gracil-windows` | lib | Everything that needs `windows-rs`: single-instance mutex, named-pipe IPC, process suspend/resume, `ReplaceFileW`, timestamps, tray, taskbar geometry. The only crate (besides the shell DLL) allowed `unsafe`. | M4/M5 |
 | `gracil-ui` | bin `gracil` | Iced + WGPU application: main window (Focus + Drawer), mini-window, settings, wiring core ↔ Windows layer. | M2 |
-| `gracil-shell` | cdylib | `IExplorerCommand` COM server for the Windows 11 context menu. Depends on nothing heavy; only counts supported files and forwards them. | M7 |
+| `gracil-shell` | cdylib | `gracil_shell.dll`, the `IExplorerCommand` COM server for the Windows 11 context menu, built with the `windows` crate's `#[implement]` (ADR 0022). Depends only on `gracil-core` (the video extension list) and `gracil-windows`; counts videos and forwards them. | M7 |
 
 Crates are created when they get real content, not ahead of time.
 
@@ -89,6 +89,13 @@ messages alike, and `outside` turns them, from any thread, into messages for the
 starts with no window; a request without a choice opens it, while `--replace` and `--save-copy`
 work in the background. A Gracil whose window never opened ends itself when that work is done
 (ADR 0019).
+
+**File Explorer.** `gracil_shell.dll` gives Explorer one `IExplorerCommand`, titled "Gracil" or
+"Gracil (N)" by the number of selected files with a video extension
+(`gracil_core::media::looks_like_video`) and hidden when there are none, with **Compress and
+replace** and **Compress and save as new** under it. A click returns at once; a thread of the DLL
+forwards the paths over the pipe when Gracil is running, or starts `gracil.exe` from the DLL's
+folder with as many paths as fit on its command line and forwards the rest (ADR 0022).
 
 ## Data on disk
 

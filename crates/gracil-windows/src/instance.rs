@@ -28,7 +28,7 @@ use windows_sys::Win32::System::Pipes::{
     PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT, WaitNamedPipeW,
 };
 use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
-use windows_sys::Win32::System::Threading::{CreateMutexW, GetCurrentProcessId};
+use windows_sys::Win32::System::Threading::{CreateMutexW, GetCurrentProcessId, OpenMutexW};
 use windows_sys::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow};
 
 /// The mutex's name. `Local\` scopes it to the user's session.
@@ -63,6 +63,25 @@ pub fn claim() -> io::Result<bool> {
     // The handle is kept for the life of the process; Windows releases it when the process ends,
     // however it ends, so a crashed Gracil never blocks the next one.
     Ok(true)
+}
+
+/// Whether a Gracil is running in this session, without becoming it. For File Explorer, which must
+/// decide between starting Gracil and handing it the request.
+pub fn is_running() -> bool {
+    /// The right to wait on the mutex, which is all opening it needs.
+    const SYNCHRONIZE: u32 = 0x0010_0000;
+    let name = wide(MUTEX);
+    // SAFETY: the name is a NUL-terminated UTF-16 buffer that outlives the call; the handle is
+    // checked, and closed once if it was opened.
+    #[allow(unsafe_code)]
+    unsafe {
+        let mutex = OpenMutexW(SYNCHRONIZE, 0, name.as_ptr());
+        if mutex.is_null() {
+            return false;
+        }
+        CloseHandle(mutex);
+    }
+    true
 }
 
 /// Serves the pipe on a thread of its own, calling `on_request` with each request's arguments.

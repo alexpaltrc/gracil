@@ -178,9 +178,14 @@ existing file.
 Gracil runs once. If you open it again, or open videos with it while it is already running, the
 Gracil you have comes forward and the videos join the same list.
 
-*(in progress)* File Explorer's Gracil commands will compress the videos you picked without
-opening the window, and replace them or save copies as you chose there. When Gracil was opened
-only for that, it closes by itself once the work is done.
+*(in progress)* Right-click videos in File Explorer and you'll find **Gracil** in the menu, with
+the number of videos in brackets when you picked more than one, for example **Gracil (3)**. Other
+files you picked along with them are left alone, and if none of them is a video the menu doesn't
+show Gracil at all. Inside are two choices: **Compress and replace** and **Compress and save as
+new**. Either one compresses the videos without opening the big window, and replaces them or
+saves copies as you chose. If Gracil is already running, the videos join its list. When Gracil
+was opened only for that, it closes by itself once the work is done. This arrives with Gracil's
+installer.
 
 ## Closing Gracil
 

@@ -831,16 +831,11 @@ fn files(paths: impl IntoIterator<Item = PathBuf>) -> impl Iterator<Item = PathB
     paths.into_iter().filter(|path| path.is_file())
 }
 
-/// What the file picker shows by default. Only a convenience: any file FFmpeg reads is accepted.
-const VIDEO_EXTENSIONS: &[&str] = &[
-    "mp4", "m4v", "mov", "mkv", "avi", "wmv", "webm", "mts", "m2ts", "ts", "3gp", "flv", "mpg",
-    "mpeg",
-];
-
+/// The picker shows videos by default. Only a convenience: any file FFmpeg reads is accepted.
 async fn choose_files(text: &'static Text) -> Vec<PathBuf> {
     rfd::AsyncFileDialog::new()
         .set_title(text.choose_videos)
-        .add_filter(text.videos_filter, VIDEO_EXTENSIONS)
+        .add_filter(text.videos_filter, gracil_core::media::VIDEO_EXTENSIONS)
         .add_filter(text.all_files_filter, &["*"])
         .pick_files()
         .await

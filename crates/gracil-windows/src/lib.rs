@@ -12,7 +12,7 @@ mod tray;
 
 pub use flyout::place_near_tray;
 pub use icon::set_window_icon;
-pub use instance::{claim, forward, serve};
+pub use instance::{claim, forward, is_running, serve};
 pub use lifetime::end_children_with_this_process;
 pub use process::set_suspended;
 pub use tray::{Tray, TrayEvent, TrayMenu, TrayState};

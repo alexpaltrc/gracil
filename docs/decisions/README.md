@@ -26,3 +26,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0019](0019-single-instance.md) | One Gracil per session: a named mutex and a named pipe |
 | [0020](0020-tray.md) | The tray icon is drawn by Gracil, on a thread of its own |
 | [0021](0021-mini-window.md) | The mini-window opens from the tray icon, and its one setting lives in the tray menu |
+| [0022](0022-explorer-command.md) | File Explorer's menu is one Rust `IExplorerCommand` with two subcommands |
