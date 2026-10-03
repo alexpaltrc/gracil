@@ -12,8 +12,9 @@ Gracil is still being built, but you can already compress videos with it.
   to set.
 - Gracil is dressed in soft mineral greys and ivory, in light and dark. It follows Windows' light
   or dark mode, and when you switch it, Gracil fades gently from one to the other.
-- Gracil has its own icon, a marble resting on a support, in the window, the taskbar and File
-  Explorer. It stays sharp at any screen size.
+- Gracil has its own icon, a marble resting on a support, in the window, the taskbar, the Start
+  menu and File Explorer. On the taskbar it sits on a small tile in Gracil's own colours, dark or
+  light to match your taskbar. It stays sharp at any screen size.
 - Drop videos onto the window, or choose them, and Gracil compresses them one after another. You
   can keep adding videos while it works.
 - Gracil runs only once. Opening it again, or opening videos with it while it is running, brings

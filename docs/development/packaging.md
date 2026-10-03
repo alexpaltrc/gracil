@@ -37,7 +37,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1 -Pack -C
 
 This writes `packaging/msix/out/Gracil_<version>_x64.msix`, signed. Without `-Certificate` the
 package is created but not signed, which is only useful to check that it builds. The Windows SDK
-(MakeAppx and SignTool) must be installed.
+(MakeAppx, MakePri and SignTool) must be installed.
 
 The certificate's subject must match `Publisher` in `identity.psd1` exactly. A computer installs
 the package only if it trusts that certificate; for a self-made test certificate, that means
@@ -56,3 +56,13 @@ the old one first.
 
 The script maps `X.Y.Z` and `X.Y.Z-dev` to `X.Y.Z.0`
 ([versioning](versioning.md#msix-version-mapping)). Never edit the version in the manifest.
+
+## Icons
+
+`scripts/icons.ps1` draws the app-list icons in `packaging/msix/Assets` from the marble's shapes
+and the Piedra palette: a graphite tile for a dark taskbar, an ivory one for a light taskbar
+([ADR 0026](../decisions/0026-icon-tile.md)). The PNGs are committed; run the script again only
+when the artwork or the palette changes. `package.ps1` indexes them in `resources.pri` with
+MakePri (Windows SDK), so Windows can pick the right one; without that index it would show the
+plain icon on the accent colour. Windows keeps icons in a cache, so a changed icon may only show
+after signing out.
