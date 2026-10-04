@@ -872,10 +872,14 @@ Open decisions, to settle before any work starts:
      neither photo nor video. They are left exactly as they are, and are a plan for the future.
    - **Camera RAW** files are not accepted: they are a photographer's negative, and turning one
      into a JPEG is developing it, not compressing it.
+   - **JPEG XL** files are not accepted either: the format never became common, and whoever made
+     one already has a well-compressed image.
    - Still open: HDR photos and very large images.
 4. **The engine**: FFmpeg, which Gracil already relies on, or a dedicated image library.
    *Proposed (2026-10-03):* Windows itself (WIC) reads images, with FFmpeg as a fallback; jpegli
    makes the JPEGs (FFmpeg has no jpegli and a weak JPEG encoder); oxipng optimizes PNGs.
+   *Decided:* the JPEG encoder is jpegli only (Google's, the newest and the best at high
+   quality), taken from the official libjxl release; JPEG XL itself is not used.
 5. **How images and videos share the list**, the dial and the tray without adding complexity.
 
 # 78. Temporary UI decisions
