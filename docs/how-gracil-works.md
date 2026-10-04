@@ -112,7 +112,8 @@ exists: it runs a tiny test compression to be sure.
 - **Without one**, Gracil uses the processor. It is slower but just as good.
 
 You never choose between these. Gracil picks the best one available. The test also tells Gracil
-which of the graphics card's quality features work, and it uses every one that does.
+which of the graphics card's quality features work, and it uses the ones that make videos
+smaller without making them look worse.
 
 ## Each video gets its own amount of compression
 
@@ -131,6 +132,31 @@ see a difference. So instead of squeezing every video the same amount, Gracil me
 
 The picture is stored in a finer format than most phones use (10-bit), which keeps skies and
 shadows smooth instead of banded.
+
+The same short moments also tell Gracil how big the whole video will come out, before it
+compresses anything. Gracil exists to make videos lighter, never heavier: it only goes ahead when
+the result will be clearly smaller, about a fifth smaller or more.
+
+## Videos that are already compressed
+
+Some videos have already been squeezed hard, like most downloads from the web or a video Gracil
+already compressed once. Compressing them again without any visible change would barely make them
+smaller, so Gracil doesn't spend minutes doing it. Instead it says **Already compressed** and
+offers two lighter versions, each with the size it will roughly have:
+
+- **Keep 1080p, compress more** keeps the picture's size and compresses harder. It may look a
+  little less sharp.
+- **Make it 720p** also makes the picture one size smaller: Full HD becomes 720p, 720p becomes
+  480p. Nothing ever goes below 480p, and videos that small don't get this choice.
+
+Pick one and the video goes back in line and compresses that way, with no more waiting to
+measure. Gracil only offers a version that will really make the video lighter, and the second one
+only when it is lighter than the first. If neither would, the video stays as it is, and a small
+"!" says it is already about as small as it can get.
+
+Finding these versions takes a little longer than usual, up to about a minute and a half for a
+long Full HD video. Losing some sharpness is only ever your choice: Gracil never does it on its
+own.
 
 ## Size and smoothness
 
@@ -261,7 +287,8 @@ Click the marble and a small window opens right next to it, wherever your taskba
 the video being compressed and how far along it is; click its circle to pause or carry on, just
 like in the big window. When a video is done, it shows how much smaller it became with
 **Replace** and **Save copy**, so you can choose right there without opening the big window
-(unless **Always** already chose for you). If more videos finish while another is compressing, it
+(unless **Always** already chose for you). If a video is already compressed, its two lighter versions
+show up here too, as short buttons with their sizes, so you can pick one right away. If more videos finish while another is compressing, it
 says how many are ready and shows them one by one when the work is done. It also tells you how many videos are waiting and, once one is placed,
 where it went. You can drop more videos on it. It stays open while you do other things; close it
 with its **×** or by clicking the marble again, and use **Open Gracil** in it to get the big

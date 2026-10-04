@@ -66,12 +66,22 @@ Gracil is still being built, but you can already compress videos with it.
 - Compressed videos keep their recording date, orientation, chapters, subtitles, audio languages
   and cover art. The few things an MP4 can't hold, such as subtitles that are pictures rather
   than text, are left out, and the video is still kept.
-- With a recent NVIDIA graphics card, Gracil uses it to compress much faster, with every quality
-  feature the card supports. Without one, it uses the processor.
+- With a recent NVIDIA graphics card, Gracil uses it to compress much faster, with the card's
+  quality features that make videos smaller without making them look worse. Without one, it uses
+  the processor.
 - Each video gets its own amount of compression. Gracil first tries a few short moments of the
   video and picks the strongest compression that still looks the same as the original, so easy
   videos come out much smaller and demanding ones keep their detail. This takes a few seconds
   while Gracil is getting ready, and you can stop it at any time.
+- Gracil makes videos lighter, never heavier. Those same short moments tell it how big the video
+  will come out, so it only compresses when the result will be clearly smaller, instead of working
+  for minutes to find out it isn't.
+- Videos that are already compressed, like most web downloads, show **Already compressed** with
+  two lighter versions and the size each will roughly have: **Keep 1080p, compress more**, or
+  **Make it 720p** (one size smaller, never below 480p). They may look a little less sharp, so
+  Gracil only does it if you pick one. You can choose in the big window or in the small one next
+  to the clock. If neither would make the video lighter, it stays as it is and a small "!" says
+  it's already about as small as it can get.
 - Colours are stored more finely, so skies and shadows stay smooth instead of banded.
 - Videos larger than Full HD, such as 4K, become Full HD; smaller videos keep their size. Videos
   with more than 30 frames per second become 30; slower ones keep exactly the rate they had. Slow
