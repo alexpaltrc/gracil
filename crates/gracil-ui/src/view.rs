@@ -162,13 +162,14 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         .align_x(Center)
         .max_width(320);
 
-    if job.state.is_active() {
+    if state.shows_dial(job) {
         let dial = Dial {
             job: job.id,
             fraction: job.fraction,
-            paused: job.state == JobState::Paused,
-            // Pause only once FFmpeg is compressing; before that there is nothing to hold.
-            can_pause: job.state == JobState::Compressing,
+            paused: state.paused,
+            // Pause and resume act on every file being worked on (ADR 0040); only putting a
+            // result in place can't be held.
+            can_pause: job.state != JobState::Finalizing,
         };
         content = content.push(Canvas::new(dial).width(dial::SIZE).height(dial::SIZE));
     }
@@ -284,12 +285,12 @@ fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         details = details.push(caption(later.join("  ·  ")));
     }
     let mut line = row![].spacing(space::M).align_y(Center);
-    if job.state.is_active() {
+    if state.shows_dial(job) {
         let dial = Dial {
             job: job.id,
             fraction: job.fraction,
-            paused: job.state == JobState::Paused,
-            can_pause: job.state == JobState::Compressing,
+            paused: state.paused,
+            can_pause: job.state != JobState::Finalizing,
         };
         line = line.push(Canvas::new(dial).width(dial::SMALL).height(dial::SMALL));
     }
@@ -301,7 +302,7 @@ fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
 fn exit_question(state: &Gracil) -> Element<'_, Message> {
     let explanation = state
         .text
-        .exit_explanation(state.compressing(), state.waiting_to_compress());
+        .exit_explanation(state.being_worked_on(), state.waiting_to_compress());
     column![
         text(state.text.exit_question).size(size::TITLE),
         text(explanation)
@@ -417,7 +418,10 @@ impl Status {
 
 fn status(state: &Gracil, job: &Job) -> Status {
     match job.state {
-        JobState::Pending => match state.engine {
+        JobState::Pending | JobState::Preparing | JobState::Prepared if state.paused => {
+            Status::plain(state.text.paused)
+        }
+        JobState::Pending | JobState::Prepared => match state.engine {
             EngineState::Starting => Status::plain(state.text.getting_ready),
             EngineState::Ready(_) => Status::plain(state.text.waiting),
             EngineState::Unavailable => Status {

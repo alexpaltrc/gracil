@@ -145,10 +145,52 @@ impl Format {
     }
 }
 
+/// An image read and ready to compress (ADR 0040): its bytes, and its size in pixels when its
+/// header tells.
+#[derive(Debug)]
+pub struct PreparedImage {
+    data: Vec<u8>,
+    pixels: Option<u64>,
+}
+
+impl PreparedImage {
+    /// How many pixels the picture has, when it could be told without decoding it.
+    pub fn pixels(&self) -> Option<u64> {
+        self.pixels
+    }
+}
+
 /// Compresses the image at `source` into a temporary file next to it. The source is never touched.
 pub fn compress(
     engine: &Engine,
     source: &Path,
+    control: &JobControl,
+    on_update: &mut dyn FnMut(Update),
+) -> Result<CompressedImage, ImageError> {
+    let prepared = prepare(source)?;
+    compress_prepared(engine, source, prepared, control, on_update)
+}
+
+/// The first stage: reads the file, which on a network or cloud drive is mostly waiting.
+pub fn prepare(source: &Path) -> Result<PreparedImage, ImageError> {
+    // A camera RAW file can start like a TIFF; its name decides before its bytes are read.
+    if crate::media::is_refused_image(source) {
+        return Err(ImageError::NotAccepted);
+    }
+    let data = fs::read(source).map_err(|e| ImageError::Unreadable(e.to_string()))?;
+    let pixels = ImageReader::new(Cursor::new(&data))
+        .with_guessed_format()
+        .ok()
+        .and_then(|reader| reader.into_dimensions().ok())
+        .map(|(width, height)| u64::from(width) * u64::from(height));
+    Ok(PreparedImage { data, pixels })
+}
+
+/// The second stage: compresses an image [`prepare`] read.
+pub fn compress_prepared(
+    engine: &Engine,
+    source: &Path,
+    prepared: PreparedImage,
     control: &JobControl,
     on_update: &mut dyn FnMut(Update),
 ) -> Result<CompressedImage, ImageError> {
@@ -159,11 +201,7 @@ pub fn compress(
         });
     };
     report(on_update, 0.0);
-    // A camera RAW file can start like a TIFF; its name decides before its bytes are read.
-    if crate::media::is_refused_image(source) {
-        return Err(ImageError::NotAccepted);
-    }
-    let data = fs::read(source).map_err(|e| ImageError::Unreadable(e.to_string()))?;
+    let data = prepared.data;
     let limit = (data.len() as f64 * WORTH_IT) as u64;
     let mut job = Job {
         engine,

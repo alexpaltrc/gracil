@@ -19,8 +19,15 @@ Gracil is still being built, but you can already compress videos and images with
   menu and File Explorer. It sits on a small tile in Windows' own greys, always the opposite of
   Windows: dark when Windows is light, light when Windows is dark, so it stands out in both. It
   stays sharp at any screen size.
-- Drop videos or images onto the window, or choose them, and Gracil compresses them one after
-  another. You can keep adding files while it works.
+- Drop videos or images onto the window, or choose them, and Gracil compresses them. You can keep
+  adding files while it works.
+- Gracil works on several files at once: while one video compresses, the next one gets ready, so
+  there is no wait between them, and images compress a few at a time alongside it. Two videos are
+  never compressed at the same time.
+- Gracil never gets in your way: it works below your other programs and never uses the whole
+  processor, so the computer stays responsive and quiet. It takes on more when you leave the
+  computer alone and less as soon as you come back, and fewer large images at once so memory
+  never runs short.
 - Gracil runs only once. Opening it again, or opening videos with it while it is running, brings
   the open Gracil forward and adds the videos to the same list.
 - Closing the window no longer stops Gracil: it keeps working next to the clock. Its marble there
@@ -54,13 +61,12 @@ Gracil is still being built, but you can already compress videos and images with
   JPEG is made with jpegli, Google's modern photo compressor, which comes inside Gracil. The first
   time, a photo looks the same as before and keeps its full size, its date, camera, place,
   captions, colors and which way is up. Nothing pops up while Gracil works on images.
-- Images go before videos that are still waiting, since they take seconds and videos minutes.
 - Moving images (such as GIF), camera RAW files, JPEG XL and photos stored in HDR aren't
   compressed: they are left exactly as they are, and a small "!" says why.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
   advances, filling an invisible circle with color behind it. The middle of the ring holds the
   controls, as symbols instead of words: the top part pauses (II) and turns into play (▶) to
-  resume, and the bottom part stops (■). Pausing frees up your computer while keeping the work
+  resume, and the bottom part stops (■). Both act on everything being worked on at once. Pausing frees up your computer while keeping the work
   done so far; resuming carries on from the same point. **View files**, which opens at once even
   with thousands of files, shows every other video and image, how much smaller each one became
   and where it went, for example **−35% · Replaced**. With two or more done, it adds them all up, for example

@@ -7,7 +7,9 @@ chosen from the measurements below. Settles open decisions 2–5 of spec §77.1.
 day, before any of it was built:* `cjpegli` now reads JPEG directly (item 9), and item 13 was
 added. *Amended when built (2026-10-04):* images are read inside Gracil and by FFmpeg, not by
 Windows (item 9); every descriptive PNG chunk is kept (item 5); palettes are measured from the
-most colors down (item 5); the file types are listed (item 1).
+most colors down (item 5); the file types are listed (item 1). *Superseded in part by ADR 0040 (2026-10-04):*
+images no longer go before waiting videos; they compress beside the video being compressed
+(item 13).
 
 **Context.** Images follow the video standard (ADR 0028, 0029, 0033): a file's first compression
 looks the same as the original; when that would not be clearly smaller, the file was already

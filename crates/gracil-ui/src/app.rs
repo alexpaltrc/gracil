@@ -5,9 +5,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use gracil_core::capabilities::VideoEncoder;
 use gracil_core::compress::Engine;
 use gracil_core::encode::JobControl;
 use gracil_core::job::{JobEvent, JobState};
+use gracil_core::media::Kind;
+use gracil_core::plan;
 use gracil_core::queue::{Job, JobId, Queue};
 use gracil_windows::{Tray, TrayEvent, TrayMenu, TrayState};
 use iced::theme::{Mode, Palette};
@@ -18,6 +21,7 @@ use tracing::{info, warn};
 
 use crate::logging;
 use crate::outside::{self, Outside};
+use crate::pace;
 use crate::request::Request;
 use crate::settings::Settings;
 use crate::style;
@@ -48,7 +52,12 @@ pub struct Gracil {
     accent: style::Accent,
     /// A change of colors in progress: where it started, where it goes and when.
     shift: Option<(Palette, Palette, Instant)>,
-    running: Option<(JobId, JobControl)>,
+    /// Files with work in flight, getting ready or compressing, and how to pause or stop each.
+    running: HashMap<JobId, JobControl>,
+    /// Files got ready and waiting their turn to compress (ADR 0040).
+    prepared: HashMap<JobId, work::Prepared>,
+    /// Pause holds every file being worked on, and nothing new starts until Resume.
+    pub paused: bool,
     /// The main window, while it is open.
     main: Option<window::Id>,
     /// Whether the main window was ever shown. A Gracil started only for background work leaves
@@ -216,7 +225,9 @@ impl Gracil {
             mode,
             accent,
             shift: None,
-            running: None,
+            running: HashMap::new(),
+            prepared: HashMap::new(),
+            paused: false,
             main: None,
             window_shown: false,
             requested: false,
@@ -287,7 +298,7 @@ impl Gracil {
         let task = self.handle(message);
         // The work finished while Exit was being asked about: nothing is left to stop, so the
         // question goes away.
-        if self.confirming_exit && self.running.is_none() && self.waiting_to_compress() == 0 {
+        if self.confirming_exit && self.running.is_empty() && self.waiting_to_compress() == 0 {
             self.confirming_exit = false;
         }
         if self.exiting && self.settled() {
@@ -306,26 +317,22 @@ impl Gracil {
         let Some(tray) = &self.tray else {
             return;
         };
-        let state = match &self.running {
-            Some((id, _)) => match self.queue.get(*id) {
-                Some(job) if job.state == JobState::Paused => TrayState::Paused,
-                Some(job) => {
-                    // Steps of 1/40 are plenty for a ring 16 pixels wide.
-                    let done = job.fraction.unwrap_or(0.0).clamp(0.0, 1.0) as f32;
-                    TrayState::Processing((done * 40.0).floor() / 40.0)
-                }
-                None => TrayState::Processing(0.0),
-            },
+        let working = self.working();
+        let state = match working {
+            Some(_) if self.paused => TrayState::Paused,
+            Some(job) => {
+                // Steps of 1/40 are plenty for a ring 16 pixels wide.
+                let done = job.fraction.unwrap_or(0.0).clamp(0.0, 1.0) as f32;
+                TrayState::Processing((done * 40.0).floor() / 40.0)
+            }
             None if self.unseen_problem => TrayState::Error,
             None => TrayState::Idle,
         };
         // The tip shows whole percentages, so it follows the work more finely than the picture.
-        let tip = match (state, self.running.as_ref()) {
-            (TrayState::Processing(_), Some((id, _))) => {
-                let done = self.queue.get(*id).and_then(|job| job.fraction);
-                self.text
-                    .tray_tip(TrayState::Processing(done.unwrap_or(0.0) as f32))
-            }
+        let tip = match (state, working) {
+            (TrayState::Processing(_), Some(job)) => self
+                .text
+                .tray_tip(TrayState::Processing(job.fraction.unwrap_or(0.0) as f32)),
             _ => self.text.tray_tip(state),
         };
         let look = (state, tip);
@@ -362,7 +369,8 @@ impl Gracil {
             Message::FilesChosen(paths) => self.add(paths),
             Message::Job(id, report) => self.on_report(id, report),
             Message::Cancel => {
-                if let Some((_, control)) = &self.running {
+                // Stop acts on every file being worked on; the files still waiting go on.
+                for control in self.running.values() {
                     control.cancel();
                 }
                 Task::none()
@@ -373,7 +381,7 @@ impl Gracil {
             }
             Message::Resume => {
                 self.pause(false);
-                Task::none()
+                self.schedule()
             }
             Message::Choose(id, choice) => self.choose(id, choice),
             Message::Always(always) => {
@@ -597,7 +605,7 @@ impl Gracil {
     /// Exit (spec §54.1): straight away when nothing is in progress; otherwise the window opens
     /// and says what would stop.
     fn ask_to_exit(&mut self) -> Task<Message> {
-        if self.running.is_none() && self.waiting_to_compress() == 0 {
+        if self.running.is_empty() && self.waiting_to_compress() == 0 {
             self.exit_now();
             return Task::none();
         }
@@ -605,28 +613,35 @@ impl Gracil {
         self.show_main()
     }
 
-    /// Stops the running compression, leaving its original as it was, and leaves once it has
-    /// tidied up (see `update`). Videos still waiting are not started.
+    /// Stops every file being worked on, leaving their originals as they were, and leaves once
+    /// they have tidied up (see `update`). Files still waiting are not started.
     fn exit_now(&mut self) {
         self.exiting = true;
         self.confirming_exit = false;
-        if let Some((_, control)) = &self.running {
+        for control in self.running.values() {
             control.cancel();
         }
     }
 
-    /// Videos on the list that haven't started compressing yet.
+    /// Whether `job` is shown with the ring: while it is worked on, and, while paused, while it
+    /// waits, so Resume is always at hand.
+    pub fn shows_dial(&self, job: &Job) -> bool {
+        job.state.is_active()
+            || (self.paused && matches!(job.state, JobState::Pending | JobState::Prepared))
+    }
+
+    /// Files on the list that haven't started compressing yet, including those already got ready.
     pub fn waiting_to_compress(&self) -> usize {
         self.queue
             .jobs()
             .iter()
-            .filter(|job| job.state == JobState::Pending)
+            .filter(|job| matches!(job.state, JobState::Pending | JobState::Prepared))
             .count()
     }
 
-    /// Whether a compression is under way, so Exit would stop it.
-    pub fn compressing(&self) -> bool {
-        self.running.is_some()
+    /// How many files are being worked on, so Exit would stop them.
+    pub fn being_worked_on(&self) -> usize {
+        self.running.len()
     }
 
     /// Adds what was asked for, and shows the window when the request wants it. A choice made in
@@ -731,7 +746,7 @@ impl Gracil {
     /// Whether nothing is in the middle of being compressed or put in place, so leaving loses no
     /// work and leaves no half-written file.
     fn settled(&self) -> bool {
-        self.running.is_none()
+        self.running.is_empty()
             && !self
                 .outcomes
                 .values()
@@ -768,12 +783,8 @@ impl Gracil {
             && !self.resident
             && !self.window_shown
             && self.mini.is_none()
-            && self.running.is_none()
-            && !self
-                .queue
-                .jobs()
-                .iter()
-                .any(|job| job.state == JobState::Pending)
+            && self.running.is_empty()
+            && self.waiting_to_compress() == 0
             && !self
                 .outcomes
                 .values()
@@ -787,20 +798,38 @@ impl Gracil {
             .or_else(|| self.current())
     }
 
-    /// What Gracil is busy with, shown large unless the user picked another file: the running
-    /// one; otherwise a result waiting for a choice; otherwise the next one waiting; otherwise the
-    /// one just put in place; otherwise the last one done.
+    /// What Gracil is busy with, shown large unless the user picked another file: the file being
+    /// worked on (see [`Self::working`]); otherwise a result waiting for a choice; otherwise the
+    /// next one waiting; otherwise the one just put in place; otherwise the last one done.
     pub fn current(&self) -> Option<&Job> {
         let jobs = self.queue.jobs();
-        self.queue
-            .active()
+        self.working()
             .or_else(|| {
                 jobs.iter()
                     .find(|job| self.outcomes.get(&job.id).is_some_and(Outcome::is_waiting))
             })
-            .or_else(|| jobs.iter().find(|job| job.state == JobState::Pending))
+            .or_else(|| {
+                jobs.iter()
+                    .find(|job| matches!(job.state, JobState::Pending | JobState::Prepared))
+            })
             .or_else(|| self.last_placed.and_then(|id| self.queue.get(id)))
             .or_else(|| jobs.iter().rev().find(|job| job.state.is_finished()))
+    }
+
+    /// Of the files being worked on, the one shown: the video being compressed, which takes
+    /// longest; otherwise the first file being compressed; otherwise the first getting ready.
+    pub fn working(&self) -> Option<&Job> {
+        let jobs = self.queue.jobs();
+        let compressing = |job: &&Job| {
+            matches!(
+                job.state,
+                JobState::Compressing | JobState::Paused | JobState::Finalizing
+            )
+        };
+        jobs.iter()
+            .find(|job| job.kind == Kind::Video && compressing(job))
+            .or_else(|| jobs.iter().find(compressing))
+            .or_else(|| self.queue.active())
     }
 
     /// The file to offer a way back to while the user looks at another one: only when Gracil is
@@ -829,7 +858,7 @@ impl Gracil {
     /// on, waiting for a choice or still being looked for, and at least one file finished rather
     /// than being stopped.
     pub fn finished(&self) -> Option<Finished> {
-        let busy = self.running.is_some()
+        let busy = !self.running.is_empty()
             || self.gathering > 0
             || self.queue.jobs().iter().any(|job| !job.state.is_finished())
             || self
@@ -859,8 +888,7 @@ impl Gracil {
     /// What the mini-window shows: the video being compressed, else the first result waiting for
     /// a choice, else what the big window shows.
     pub fn mini_job(&self) -> Option<&Job> {
-        self.queue
-            .active()
+        self.working()
             .or_else(|| {
                 self.queue
                     .jobs()
@@ -978,6 +1006,7 @@ impl Gracil {
             return;
         }
         self.intents.remove(&id);
+        self.prepared.remove(&id);
         if let Some(Outcome::Ready { temp, .. }) = self.outcomes.remove(&id) {
             work::discard(&temp);
         }
@@ -996,34 +1025,106 @@ impl Gracil {
         }
     }
 
-    /// Starts the next video when the engine is ready and nothing is running. Nothing new starts
+    /// Starts whatever there is room for (ADR 0040), once the engine is ready. Videos: one
+    /// compresses while the next one gets ready. Images: a few at once beside it, as many as
+    /// [`pace::Room`] allows, each read ahead of its turn. Nothing new starts while paused or
     /// once Gracil is exiting.
     fn schedule(&mut self) -> Task<Message> {
-        if self.exiting {
+        if self.exiting || self.paused {
             return Task::none();
         }
         let EngineState::Ready(engine) = &self.engine else {
             return Task::none();
         };
-        let Some(job) = self.queue.start_next() else {
+        let engine = engine.clone();
+        let compressing = |state: JobState| {
+            matches!(
+                state,
+                JobState::Compressing | JobState::Paused | JobState::Finalizing
+            )
+        };
+        let getting_ready =
+            |state: JobState| matches!(state, JobState::Preparing | JobState::Prepared);
+        let mut tasks = Vec::new();
+
+        // Videos.
+        if self.queue.count(Kind::Video, compressing) == 0
+            && let Some(id) = self.queue.next_prepared(Kind::Video).map(|job| job.id)
+        {
+            tasks.push(self.start_compressing(&engine, id));
+        }
+        if self.queue.count(Kind::Video, getting_ready) == 0
+            && let Some(id) = self.queue.start_preparing(Kind::Video).map(|job| job.id)
+        {
+            tasks.push(self.start_preparing(&engine, id));
+        }
+
+        // Images.
+        let video_on_processor = self.queue.count(Kind::Video, compressing) > 0
+            && plan::attempts(engine.capabilities)
+                .first()
+                .is_some_and(|attempt| attempt.encoder == VideoEncoder::X265);
+        let room = pace::Room::now(video_on_processor);
+        let at_once = room.images_at_once();
+        let mut memory = room.memory_for_images();
+        let mut images = self.queue.count(Kind::Image, compressing);
+        while images < at_once {
+            let Some(id) = self.queue.next_prepared(Kind::Image).map(|job| job.id) else {
+                break;
+            };
+            let need = pace::image_memory(self.prepared.get(&id).and_then(work::Prepared::pixels));
+            // A large image waits for others to finish, but one always goes ahead.
+            if images > 0 && need > memory {
+                break;
+            }
+            memory = memory.saturating_sub(need);
+            tasks.push(self.start_compressing(&engine, id));
+            images += 1;
+        }
+        while self.queue.count(Kind::Image, getting_ready) < at_once {
+            let Some(id) = self.queue.start_preparing(Kind::Image).map(|job| job.id) else {
+                break;
+            };
+            tasks.push(self.start_preparing(&engine, id));
+        }
+        Task::batch(tasks)
+    }
+
+    /// Starts getting a file ready; it was just marked as getting ready in the list.
+    fn start_preparing(&mut self, engine: &Arc<Engine>, id: JobId) -> Task<Message> {
+        let Some(path) = self.queue.get(id).map(|job| job.path.clone()) else {
             return Task::none();
         };
-        let (id, path) = (job.id, job.path.clone());
         let control = JobControl::default();
-        self.running = Some((id, control.clone()));
-        work::compress_file(engine.clone(), path, control)
+        self.running.insert(id, control.clone());
+        work::prepare_file(engine.clone(), path, control)
+            .map(move |report| Message::Job(id, report))
+    }
+
+    /// Starts compressing a file that was got ready.
+    fn start_compressing(&mut self, engine: &Arc<Engine>, id: JobId) -> Task<Message> {
+        let path = self.queue.get(id).map(|job| job.path.clone());
+        let (Some(path), Some(prepared)) = (path, self.prepared.remove(&id)) else {
+            return Task::none();
+        };
+        self.transition(id, JobEvent::BeginCompressing);
+        let control = JobControl::default();
+        self.running.insert(id, control.clone());
+        work::compress_file(engine.clone(), path, prepared, control)
             .map(move |report| Message::Job(id, report))
     }
 
     fn on_report(&mut self, id: JobId, report: Report) -> Task<Message> {
         match report {
             Report::Progress(fraction) => {
-                let state = self.queue.get(id).map(|job| job.state);
-                if state == Some(JobState::Preparing) {
-                    self.transition(id, JobEvent::BeginCompressing);
-                }
                 self.queue.set_fraction(id, fraction);
                 Task::none()
+            }
+            Report::Prepared(prepared) => {
+                self.running.remove(&id);
+                self.transition(id, JobEvent::Ready);
+                self.prepared.insert(id, prepared);
+                self.schedule()
             }
             Report::Done(outcome) => {
                 let events: &[JobEvent] = match outcome {
@@ -1051,7 +1152,8 @@ impl Gracil {
                     self.note_problem();
                 }
                 self.outcomes.insert(id, outcome);
-                self.running = None;
+                self.running.remove(&id);
+                self.prepared.remove(&id);
                 // File Explorer's choice first; otherwise the "Always" setting (ADR 0025).
                 let intent = self.intents.remove(&id).or(self.settings.always);
                 let place = match intent {
@@ -1109,25 +1211,34 @@ impl Gracil {
         }
     }
 
-    /// Freezes or thaws the running compression (spec §47). Only a compression that has started
-    /// can pause; a failure leaves it as it was and is only logged.
+    /// Freezes or thaws every file being worked on, all together (spec §47, §77.3). Nothing new
+    /// starts while paused. A failure leaves a file as it was and is only logged.
     fn pause(&mut self, paused: bool) {
-        let Some((id, control)) = &self.running else {
+        if self.paused == paused || (paused && self.running.is_empty()) {
             return;
-        };
-        let id = *id;
-        let state = self.queue.get(id).map(|job| job.state);
-        let (result, event) = match (paused, state) {
-            (true, Some(JobState::Compressing)) => (
-                control.pause(gracil_windows::set_suspended),
-                JobEvent::Pause,
-            ),
-            (false, Some(JobState::Paused)) => (control.resume(), JobEvent::Resume),
-            _ => return,
-        };
-        match result {
-            Ok(()) => self.transition(id, event),
-            Err(error) => warn!(%error, paused, "could not pause or resume"),
+        }
+        self.paused = paused;
+        let running: Vec<(JobId, JobControl)> = self
+            .running
+            .iter()
+            .map(|(id, control)| (*id, control.clone()))
+            .collect();
+        for (id, control) in running {
+            let result = if paused {
+                control.pause(gracil_windows::set_suspended)
+            } else {
+                control.resume()
+            };
+            if let Err(error) = result {
+                warn!(%error, paused, "could not pause or resume");
+                continue;
+            }
+            let state = self.queue.get(id).map(|job| job.state);
+            match (paused, state) {
+                (true, Some(JobState::Compressing)) => self.transition(id, JobEvent::Pause),
+                (false, Some(JobState::Paused)) => self.transition(id, JobEvent::Resume),
+                _ => {}
+            }
         }
     }
 

@@ -5,12 +5,12 @@ use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
-use gracil_core::compress::{CompressError, Compressed, Engine, compress};
+use gracil_core::compress::{self, CompressError, Compressed, Engine, PreparedVideo};
 use gracil_core::encode::JobControl;
-use gracil_core::images::{self, ImageError};
+use gracil_core::images::{self, ImageError, PreparedImage};
 use gracil_core::leftovers;
 use gracil_core::media::{self, Kind};
 use gracil_core::output::{replace_original, save_as_new};
@@ -118,8 +118,39 @@ impl Outcome {
 
 #[derive(Debug, Clone)]
 pub enum Report {
+    /// How far compressing has gone.
     Progress(Option<f64>),
+    /// Getting ready is done; the file waits its turn to compress (ADR 0040).
+    Prepared(Prepared),
     Done(Outcome),
+}
+
+/// A file got ready, handed from the thread that got it ready to the one that compresses it.
+#[derive(Debug, Clone)]
+pub struct Prepared(Arc<Mutex<Option<Stage>>>);
+
+#[derive(Debug)]
+enum Stage {
+    Video(PreparedVideo),
+    Image(PreparedImage),
+}
+
+impl Prepared {
+    fn new(stage: Stage) -> Self {
+        Self(Arc::new(Mutex::new(Some(stage))))
+    }
+
+    /// For an image, how many pixels it has, when its header told.
+    pub fn pixels(&self) -> Option<u64> {
+        match self.0.lock().ok()?.as_ref()? {
+            Stage::Image(image) => image.pixels(),
+            Stage::Video(_) => None,
+        }
+    }
+
+    fn take(&self) -> Option<Stage> {
+        self.0.lock().ok()?.take()
+    }
 }
 
 /// Finds or installs FFmpeg and detects the hardware.
@@ -167,23 +198,49 @@ pub fn gather(paths: Vec<PathBuf>, only: Option<Kind>) -> Task<Found> {
     })
 }
 
-/// Compresses `source`, a video or an image, leaving the result beside it for the user to place.
-pub fn compress_file(engine: Arc<Engine>, source: PathBuf, control: JobControl) -> Task<Report> {
+/// Gets `source` ready, the first stage of compressing it (ADR 0040): for a video, the short test
+/// samples that choose its compression; for an image, reading it. Reports
+/// [`Report::Prepared`], or [`Report::Done`] when it can go no further.
+pub fn prepare_file(engine: Arc<Engine>, source: PathBuf, control: JobControl) -> Task<Report> {
+    on_thread(move |mut sender: Sender<Report>| {
+        let report = match media::kind_of(&source) {
+            Kind::Video => match compress::prepare(&engine, &source, &control, &mut |_| {}) {
+                Ok(video) => Report::Prepared(Prepared::new(Stage::Video(video))),
+                Err(error) => Report::Done(video_outcome(Err(error), &source)),
+            },
+            Kind::Image => match images::prepare(&source) {
+                Ok(image) => Report::Prepared(Prepared::new(Stage::Image(image))),
+                Err(error) => Report::Done(image_outcome(Err(error), &source)),
+            },
+        };
+        let _ = block_on(sender.send(report));
+    })
+}
+
+/// Compresses a file [`prepare_file`] got ready, leaving the result beside it for the user to
+/// place.
+pub fn compress_file(
+    engine: Arc<Engine>,
+    source: PathBuf,
+    prepared: Prepared,
+    control: JobControl,
+) -> Task<Report> {
     on_thread(move |mut sender: Sender<Report>| {
         let mut progress = sender.clone();
         let mut on_update = |update: gracil_core::compress::Update| {
             // Progress is best effort: when the window is busy, a skipped update costs nothing.
             let _ = progress.try_send(Report::Progress(update.fraction));
         };
-        let outcome = match media::kind_of(&source) {
-            Kind::Video => video_outcome(
-                compress(&engine, &source, &control, &mut on_update),
+        let outcome = match prepared.take() {
+            Some(Stage::Video(video)) => video_outcome(
+                compress::compress_prepared(&engine, &source, video, &control, &mut on_update),
                 &source,
             ),
-            Kind::Image => image_outcome(
-                images::compress(&engine, &source, &control, &mut on_update),
+            Some(Stage::Image(image)) => image_outcome(
+                images::compress_prepared(&engine, &source, image, &control, &mut on_update),
                 &source,
             ),
+            None => Outcome::Failed(Failure::CouldNotCompress),
         };
         let _ = block_on(sender.send(Report::Done(outcome)));
     })

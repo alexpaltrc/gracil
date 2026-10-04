@@ -10,6 +10,7 @@ mod done;
 mod logging;
 mod numbers;
 mod outside;
+mod pace;
 mod pill;
 mod request;
 mod settings;

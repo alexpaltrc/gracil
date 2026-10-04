@@ -1,10 +1,10 @@
-//! The set of videos and images the user has added, and which one runs next (spec §26–§36).
+//! The set of videos and images the user has added, and which ones run next (spec §26–§36).
 //!
-//! Files run one at a time, oldest first, except that images go before videos still waiting: they
-//! take seconds and videos take minutes (ADR 0034, item 13). The running file is never
-//! interrupted. Adding is always additive. A path already in the set is
-//! not added twice; the app removes a finished entry first, so a file can always be compressed
-//! again (§29).
+//! Each file is first got ready, then compressed. Videos and images go side by side, each in the
+//! order they were added; how many of each run at once is the app's to decide (ADR 0040). Clear
+//! never interrupts the files being worked on. Adding is always additive. A path already in the
+//! set is not added twice; the app removes a finished entry first, so a file can always be
+//! compressed again (§29).
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -20,6 +20,7 @@ pub struct JobId(u64);
 pub struct Job {
     pub id: JobId,
     pub path: PathBuf,
+    pub kind: Kind,
     pub state: JobState,
     /// Share of the work done, `0.0..=1.0`, while it is known.
     pub fraction: Option<f64>,
@@ -52,6 +53,7 @@ impl Queue {
                 slot.insert(JobId(self.next_id));
                 self.jobs.push(Job {
                     id: JobId(self.next_id),
+                    kind: media::kind_of(&path),
                     path,
                     state: JobState::Pending,
                     fraction: None,
@@ -82,7 +84,8 @@ impl Queue {
         self.keys.get(&key(path)).and_then(|&id| self.get(id))
     }
 
-    /// The job being worked on, if any. At most one job is active at a time.
+    /// The first file being worked on, if any. Several can be: one video and a few images, each
+    /// getting ready or compressing (ADR 0040).
     pub fn active(&self) -> Option<&Job> {
         self.jobs.iter().find(|job| job.state.is_active())
     }
@@ -94,21 +97,30 @@ impl Queue {
             .count()
     }
 
-    /// Starts the oldest pending image, or else the oldest pending video, when nothing else is
-    /// running.
-    pub fn start_next(&mut self) -> Option<&Job> {
-        if self.active().is_some() {
-            return None;
-        }
-        let pending = |job: &Job| job.state == JobState::Pending;
+    /// How many files of `kind` are in a state `test` accepts.
+    pub fn count(&self, kind: Kind, test: impl Fn(JobState) -> bool) -> usize {
+        self.jobs
+            .iter()
+            .filter(|job| job.kind == kind && test(job.state))
+            .count()
+    }
+
+    /// Starts getting the oldest waiting file of `kind` ready.
+    pub fn start_preparing(&mut self, kind: Kind) -> Option<&Job> {
         let at = self
             .jobs
             .iter()
-            .position(|job| pending(job) && media::kind_of(&job.path) == Kind::Image)
-            .or_else(|| self.jobs.iter().position(pending))?;
+            .position(|job| job.kind == kind && job.state == JobState::Pending)?;
         let job = &mut self.jobs[at];
         job.state = job.state.apply(JobEvent::Start).ok()?;
         Some(job)
+    }
+
+    /// The oldest file of `kind` that is ready and waiting its turn to compress.
+    pub fn next_prepared(&self, kind: Kind) -> Option<&Job> {
+        self.jobs
+            .iter()
+            .find(|job| job.kind == kind && job.state == JobState::Prepared)
     }
 
     pub fn apply(&mut self, id: JobId, event: JobEvent) -> Result<JobState, InvalidTransition> {
@@ -188,7 +200,7 @@ mod tests {
     }
 
     fn finish(queue: &mut Queue, event: JobEvent) -> JobId {
-        let id = queue.start_next().unwrap().id;
+        let id = queue.start_preparing(Kind::Video).unwrap().id;
         if event == JobEvent::Complete {
             queue.apply(id, JobEvent::BeginCompressing).unwrap();
             queue.apply(id, JobEvent::BeginFinalizing).unwrap();
@@ -206,38 +218,41 @@ mod tests {
     }
 
     #[test]
-    fn one_job_at_a_time_oldest_first() {
+    fn each_kind_goes_oldest_first_side_by_side() {
+        let mut queue = queue(&["a.mp4", "b.jpg", "c.mp4", "d.png"]);
+        let video = queue.start_preparing(Kind::Video).unwrap().id;
+        let image = queue.start_preparing(Kind::Image).unwrap().id;
+        assert_eq!(queue.get(video).unwrap().file_name(), "a.mp4");
+        assert_eq!(queue.get(image).unwrap().file_name(), "b.jpg");
+        let next = queue.start_preparing(Kind::Video).unwrap();
+        assert_eq!(next.file_name(), "c.mp4");
+        assert_eq!(queue.pending_count(), 1);
+        assert_eq!(queue.count(Kind::Video, JobState::is_active), 2);
+    }
+
+    #[test]
+    fn a_ready_file_waits_its_turn() {
         let mut queue = queue(&["a.mp4", "b.mp4"]);
-        let first = queue.start_next().unwrap().id;
-        assert_eq!(queue.get(first).unwrap().file_name(), "a.mp4");
-        assert!(queue.start_next().is_none(), "a job is already running");
-
-        queue.apply(first, JobEvent::Fail).unwrap();
-        assert_eq!(queue.start_next().unwrap().file_name(), "b.mp4");
-        assert_eq!(queue.pending_count(), 0);
+        let first = queue.start_preparing(Kind::Video).unwrap().id;
+        let second = queue.start_preparing(Kind::Video).unwrap().id;
+        assert!(queue.next_prepared(Kind::Video).is_none());
+        queue.apply(second, JobEvent::Ready).unwrap();
+        queue.apply(first, JobEvent::Ready).unwrap();
+        assert_eq!(queue.next_prepared(Kind::Video).unwrap().id, first);
+        assert!(queue.next_prepared(Kind::Image).is_none());
     }
 
     #[test]
-    fn images_go_before_waiting_videos() {
-        let mut queue = queue(&["a.mp4", "b.mp4", "c.jpg", "d.png"]);
-        let mut order = Vec::new();
-        for _ in 0..4 {
-            let id = finish(&mut queue, JobEvent::Complete);
-            order.push(queue.get(id).unwrap().file_name());
-        }
-        assert_eq!(order, ["c.jpg", "d.png", "a.mp4", "b.mp4"]);
-    }
-
-    #[test]
-    fn the_running_job_cannot_be_removed_or_cleared() {
-        let mut queue = queue(&["a.mp4", "b.mp4", "c.mp4"]);
+    fn files_being_worked_on_cannot_be_removed_or_cleared() {
+        let mut queue = queue(&["a.mp4", "b.mp4", "c.jpg"]);
         finish(&mut queue, JobEvent::Complete);
-        let running = queue.start_next().unwrap().id;
+        let video = queue.start_preparing(Kind::Video).unwrap().id;
+        let image = queue.start_preparing(Kind::Image).unwrap().id;
 
-        assert!(!queue.remove(running));
+        assert!(!queue.remove(video));
         queue.clear();
-        assert_eq!(queue.len(), 1);
-        assert_eq!(queue.active().unwrap().id, running);
+        let left: Vec<_> = queue.jobs().iter().map(|job| job.id).collect();
+        assert_eq!(left, [video, image]);
     }
 
     #[test]
@@ -254,7 +269,7 @@ mod tests {
     #[test]
     fn finished_jobs_lose_their_progress() {
         let mut queue = queue(&["a.mp4"]);
-        let id = queue.start_next().unwrap().id;
+        let id = queue.start_preparing(Kind::Video).unwrap().id;
         queue.apply(id, JobEvent::BeginCompressing).unwrap();
         queue.set_fraction(id, Some(0.5));
         queue.apply(id, JobEvent::Cancel).unwrap();

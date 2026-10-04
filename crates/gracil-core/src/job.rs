@@ -10,8 +10,10 @@ use std::fmt;
 pub enum JobState {
     /// Waiting in the queue.
     Pending,
-    /// Inspecting the source and choosing how to compress it.
+    /// Getting ready: inspecting the source and choosing how to compress it.
     Preparing,
+    /// Ready, waiting its turn to compress (ADR 0040). Holds no running work.
+    Prepared,
     /// FFmpeg is running.
     Compressing,
     /// FFmpeg is suspended and will continue from where it stopped.
@@ -26,6 +28,8 @@ pub enum JobState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JobEvent {
     Start,
+    /// Getting ready is done.
+    Ready,
     BeginCompressing,
     Pause,
     Resume,
@@ -60,7 +64,8 @@ impl JobState {
 
         let next = match (self, event) {
             (S::Pending, E::Start) => S::Preparing,
-            (S::Preparing, E::BeginCompressing) => S::Compressing,
+            (S::Preparing, E::Ready) => S::Prepared,
+            (S::Preparing | S::Prepared, E::BeginCompressing) => S::Compressing,
             (S::Compressing, E::Pause) => S::Paused,
             (S::Paused, E::Resume) => S::Compressing,
             (S::Compressing, E::BeginFinalizing) => S::Finalizing,
@@ -68,7 +73,9 @@ impl JobState {
             (S::Preparing | S::Compressing | S::Paused | S::Finalizing, E::Fail) => S::Failed,
             // Finalizing cannot be cancelled: it may be in the middle of replacing the original,
             // and stopping halfway is exactly what safe replacement exists to prevent. It is short.
-            (S::Pending | S::Preparing | S::Compressing | S::Paused, E::Cancel) => S::Cancelled,
+            (S::Pending | S::Preparing | S::Prepared | S::Compressing | S::Paused, E::Cancel) => {
+                S::Cancelled
+            }
             (from, event) => return Err(InvalidTransition { from, event }),
         };
         Ok(next)
@@ -100,9 +107,10 @@ mod tests {
     use super::JobState as S;
     use super::*;
 
-    const ALL_STATES: [S; 8] = [
+    const ALL_STATES: [S; 9] = [
         S::Pending,
         S::Preparing,
+        S::Prepared,
         S::Compressing,
         S::Paused,
         S::Finalizing,
@@ -110,8 +118,9 @@ mod tests {
         S::Failed,
         S::Cancelled,
     ];
-    const ALL_EVENTS: [E; 8] = [
+    const ALL_EVENTS: [E; 9] = [
         E::Start,
+        E::Ready,
         E::BeginCompressing,
         E::Pause,
         E::Resume,
@@ -138,6 +147,17 @@ mod tests {
             E::Complete,
         ]);
         assert_eq!(state, Ok(S::Completed));
+    }
+
+    #[test]
+    fn a_file_can_wait_its_turn_once_ready() {
+        let state = run(&[E::Start, E::Ready, E::BeginCompressing, E::BeginFinalizing]);
+        assert_eq!(state, Ok(S::Finalizing));
+        assert!(
+            S::Prepared.is_removable(),
+            "a ready file holds no running work"
+        );
+        assert_eq!(S::Prepared.apply(E::Cancel), Ok(S::Cancelled));
     }
 
     #[test]

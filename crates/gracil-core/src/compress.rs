@@ -81,20 +81,70 @@ pub enum CompressError {
     AsSmallAsItGets,
 }
 
-/// Compresses `source`, trying each [`plan::attempts`] step until one produces a valid file.
+/// What getting a video ready found out (ADR 0040): what it holds, and the level it will be
+/// compressed at, from the short test samples.
+#[derive(Debug, Clone)]
+pub struct PreparedVideo {
+    info: MediaInfo,
+    found: Found,
+}
+
+/// Compresses `source`: gets it ready, then compresses it.
 pub fn compress(
     engine: &Engine,
     source: &Path,
     control: &JobControl,
     on_update: &mut dyn FnMut(Update),
 ) -> Result<Compressed, CompressError> {
+    let prepared = prepare(engine, source, control, on_update)?;
+    compress_prepared(engine, source, prepared, control, on_update)
+}
+
+/// The first stage of compressing `source`: reads what it holds and tries a few short moments to
+/// choose its level. Mostly on the processor; writes nothing.
+pub fn prepare(
+    engine: &Engine,
+    source: &Path,
+    control: &JobControl,
+    on_update: &mut dyn FnMut(Update),
+) -> Result<PreparedVideo, CompressError> {
     let info = probe::probe(&engine.toolchain, source)?;
     if !info.has_video() {
         return Err(CompressError::NoVideo);
     }
-    let temp = reserve_temp(source)?;
+    // Shown as "getting ready" until the compressing reports progress; Stop works throughout.
+    on_update(Update {
+        fraction: fraction(Duration::ZERO, info.duration),
+        speed: None,
+    });
+    let capabilities = engine.capabilities;
+    let found = match plan::attempts(capabilities).first() {
+        None => Found::Fallback,
+        Some(&first) => {
+            let level = Found::Fallback.level_for(first.encoder);
+            // The samples are measured and thrown away; nothing is written where the result goes.
+            let plan = EncodePlan::new(source, Path::new(""), &info, first, capabilities, level);
+            search::find_level(&engine.toolchain, &plan, &info, control)
+        }
+    };
+    match found {
+        Found::Cancelled => Err(CompressError::Cancelled),
+        Found::AsSmallAsItGets => Err(CompressError::AsSmallAsItGets),
+        Found::Level { .. } | Found::Fallback => Ok(PreparedVideo { info, found }),
+    }
+}
 
-    let result = run_attempts(engine, source, &temp, &info, control, on_update);
+/// The second stage: compresses a video [`prepare`] got ready, trying each [`plan::attempts`]
+/// step until one produces a valid file.
+pub fn compress_prepared(
+    engine: &Engine,
+    source: &Path,
+    prepared: PreparedVideo,
+    control: &JobControl,
+    on_update: &mut dyn FnMut(Update),
+) -> Result<Compressed, CompressError> {
+    let temp = reserve_temp(source)?;
+    let result = run_attempts(engine, source, &temp, &prepared, control, on_update);
     if result.is_err()
         && let Err(error) = fs::remove_file(&temp)
     {
@@ -107,39 +157,20 @@ fn run_attempts(
     engine: &Engine,
     source: &Path,
     temp: &Path,
-    info: &MediaInfo,
+    prepared: &PreparedVideo,
     control: &JobControl,
     on_update: &mut dyn FnMut(Update),
 ) -> Result<Compressed, CompressError> {
+    let PreparedVideo { info, found } = prepared;
     let capabilities = engine.capabilities;
-    let plan_for =
-        |attempt: Attempt, level| EncodePlan::new(source, temp, info, attempt, capabilities, level);
-    let attempts = plan::attempts(capabilities);
-
-    // Shown as "getting ready" until the first attempt reports progress; Stop works throughout.
-    on_update(Update {
-        fraction: fraction(Duration::ZERO, info.duration),
-        speed: None,
-    });
-    let found = match attempts.first() {
-        None => Found::Fallback,
-        Some(&first) => {
-            let fallback = Found::Fallback.level_for(first.encoder);
-            search::find_level(&engine.toolchain, &plan_for(first, fallback), info, control)
-        }
-    };
-    match found {
-        Found::Cancelled => return Err(CompressError::Cancelled),
-        Found::AsSmallAsItGets => return Err(CompressError::AsSmallAsItGets),
-        Found::Level { .. } | Found::Fallback => {}
-    }
 
     let mut last_error = String::new();
-    for attempt in attempts {
+    for attempt in plan::attempts(capabilities) {
         if control.is_cancelled() {
             return Err(CompressError::Cancelled);
         }
-        let plan = plan_for(attempt, found.level_for(attempt.encoder));
+        let level = found.level_for(attempt.encoder);
+        let plan = EncodePlan::new(source, temp, info, attempt, capabilities, level);
         info!(?attempt, level = plan.level, dropped = ?plan.dropped, "encoding");
         on_update(Update {
             fraction: fraction(Duration::ZERO, info.duration),

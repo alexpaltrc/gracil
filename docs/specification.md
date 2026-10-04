@@ -451,6 +451,9 @@ numbers for the user's region: its decimal mark and its digit grouping (*15,031 
 
 # 33. Active item behavior
 
+*Update (2026-10-04, ADR 0040):* several files can be worked on at once: one video compressing,
+the next one getting ready, and images beside it. Everything below applies to each of them.
+
 The currently processing file must not disappear because the user pressed a generic Clear button.
 Removing an actively processing file is a cancellation action and must be explicit. Do not
 overload "Remove" or "Clear" with cancellation semantics. The active job may expose a dedicated
@@ -985,28 +988,28 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   be compressed several at a time, and fewer when the images are very large, so memory never runs
   short. On a network or cloud drive this also overlaps the waiting for downloads and uploads.
   Pause and stop act on all of them together, and the ring shows the progress of the whole list
-  (ADR 0034).
+  (ADR 0034). *Built 2026-10-04 (ADR 0040); the ring for the whole list is still to be built.*
 - **Fast, but never alarming.** *Decided by the product owner.* Gracil must never make the
   computer feel slow, and never run it flat out: the fans would roar, and that would not inspire
   trust. How much Gracil uses adapts to what the user is doing: more while the computer is
   otherwise idle, less as soon as the user is working in other applications. This holds even for
   a list of 15,000 files. High performance, yes; scaring the user, never. It applies to all the
-  work, not just images.
+  work, not just images. *Built 2026-10-04 (ADR 0040).*
 - **One video at a time.** *Decided by the product owner.* Two videos are never compressed at
   once: one video already uses all of the graphics card's encoder (or the processor), so two
-  would each go at half speed and gain nothing.
+  would each go at half speed and gain nothing. *Built 2026-10-04 (ADR 0040).*
 - **Get the next file ready during the current one.** *Decided by the product owner, as the base
   of how Gracil works.* Every file's work has two stages: getting ready (for a video, the short
   test samples that choose its compression, mostly on the processor) and compressing (for a
   video, mostly on the graphics card). While one file compresses, the next one gets ready, instead
   of the two stages always following each other. This is built once, for every kind of file:
-  videos, images, and any kind added later.
+  videos, images, and any kind added later. *Built 2026-10-04 (ADR 0040).*
 - **Images on the processor while a video is on the graphics card.** *Decided by the product
   owner.* While a video compresses on the graphics card, images compress on the processor, so
-  neither sits idle. Still within "fast, but never alarming".
+  neither sits idle. Still within "fast, but never alarming". *Built 2026-10-04 (ADR 0040).*
 - Together these change the rule that only one file is worked on at a time (§33, the queue) and
   the order of ADR 0034 (images before waiting videos), so an ADR records them when they are
-  built. *Not built: the owner will say when to start.*
+  built. *Built 2026-10-04 (ADR 0040).*
 
 # 78. Temporary UI decisions
 

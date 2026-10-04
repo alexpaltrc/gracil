@@ -46,15 +46,21 @@ Drop videos or images onto the window, or choose them with **or choose files**. 
 at any time, even while Gracil is working. The kinds of files Gracil takes are listed under "One
 format: MP4" (videos) and "Images" (photos and pictures) below.
 
-- Gracil compresses one file at a time, in the order you added them, except that images go
-  before videos that are still waiting: an image takes seconds and a video minutes. The video
-  being compressed is never interrupted. The one being compressed is shown large, inside a ring:
-  a marble rolls clockwise from the top as the work advances, filling an invisible circle with
-  color behind it, and when it gets back to the top the video is done. The percentage is written
-  just below.
+- Gracil works on several files at once, each kind in the order you added them. Every file goes
+  through two steps: first Gracil gets it ready, then it compresses it. While one video
+  compresses, the next one gets ready, so no time is lost between them. Two videos are never
+  compressed at once: one already keeps the graphics card (or the processor) fully busy. Images
+  compress a few at a time alongside the video, on the processor while the video is on the
+  graphics card. How many depends on your computer and on what you are doing (see "Working
+  without getting in the way" below).
+- The file shown large is the video being compressed, or, with only images, the first image being
+  compressed. It sits inside a ring: a marble rolls clockwise from the top as the work advances,
+  filling an invisible circle with color behind it, and when it gets back to the top the file is
+  done. The percentage is written just below.
 - The middle of the ring holds the controls. Its top part is **pause** (II); click it and it turns
-  into **play** (▶), which resumes. Its bottom part is **stop** (■), which cancels.
-  While Gracil is still getting ready, only stop works.
+  into **play** (▶), which resumes. Its bottom part is **stop** (■), which cancels. Both act on
+  every file being worked on at that moment, all together; after a stop, the files still waiting
+  carry on. While paused, nothing new starts.
 - Pausing freezes the work exactly where it is, and Gracil stops using the processor and
   graphics card. Resuming carries on from the same point; nothing is lost or started over. You
   can also stop while paused.
@@ -149,6 +155,20 @@ exists: it runs a tiny test compression to be sure.
 You never choose between these. Gracil picks the best one available. The test also tells Gracil
 which of the graphics card's quality features work, and it uses the ones that make videos
 smaller without making them look worse.
+
+## Working without getting in the way
+
+Gracil is meant to be fast without ever making your computer feel slow or sound like it is
+straining.
+
+- Everything Gracil does runs below your other programs: whatever you are using comes first, and
+  Gracil works with what is left free. Gracil's own window still answers at once.
+- No single piece of work uses the whole processor: the video encoder and the quality measure
+  each use at most half of it.
+- While you are using the computer, Gracil takes on fewer images at once. When you have left it
+  alone for a minute, it takes on more, and fewer again as soon as you come back.
+- Large images need more memory, so Gracil starts fewer of them at once and always leaves at least
+  half of the free memory for your programs.
 
 ## Each video gets its own amount of compression
 
@@ -289,11 +309,12 @@ makes them smaller, and you choose **Replace** or **Save copy**.
   They are left exactly as they are, and the "!" says why. They aren't offered in the file
   picker or in File Explorer's menu.
 - **How long:** a phone photo takes under a second; a large PNG a few seconds.
-- **With videos.** Images and videos share one list, and images go before waiting videos.
+- **With videos.** Images and videos share one list. Images compress a few at a time on the
+  processor while a video compresses on the graphics card.
 - **The circle for the whole list (in progress).** With more than one file, the whole circle will
   stand for the whole list: the marble crosses one part per file and leaves a hollow marble behind
   each one it finishes, so you can see how many are done and how many are left. For now the circle
-  shows the file being compressed.
+  shows the file being compressed, or the first of the images being compressed together.
 
 ## Your original is safe
 

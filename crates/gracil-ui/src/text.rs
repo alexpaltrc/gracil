@@ -86,7 +86,8 @@ pub struct Text {
     saved_as: fn(&str) -> String,
     replaced_by: fn(&str) -> String,
     tray_tip: fn(TrayState) -> String,
-    exit_explanation: fn(bool, usize, &str) -> String,
+    /// What Exit stops: how many files are being worked on and how many wait, each also written.
+    exit_explanation: fn(usize, &str, usize, &str) -> String,
     failures: Failures,
 }
 
@@ -208,10 +209,10 @@ impl Text {
         (self.tray_tip)(state)
     }
 
-    /// What Exit will do to the work in progress (spec §54.1): whether a compression stops, and
-    /// how many files waiting won't be compressed.
-    pub fn exit_explanation(&self, stops_one: bool, waiting: usize) -> String {
-        (self.exit_explanation)(stops_one, waiting, &number(waiting))
+    /// What Exit will do to the work in progress (spec §54.1): how many files being worked on
+    /// stop, and how many files waiting won't be compressed.
+    pub fn exit_explanation(&self, stopping: usize, waiting: usize) -> String {
+        (self.exit_explanation)(stopping, &number(stopping), waiting, &number(waiting))
     }
 
     /// Why something went wrong, as the "!" explains it.
@@ -297,13 +298,18 @@ static ENGLISH: Text = Text {
         TrayState::Paused => "Gracil · paused".to_owned(),
         TrayState::Error => "Gracil · something needs your attention".to_owned(),
     },
-    exit_explanation: |stops_one, waiting, written| {
+    exit_explanation: |stopping, stopping_written, waiting, written| {
         let mut parts = Vec::new();
-        if stops_one {
-            parts.push(
+        match stopping {
+            0 => {}
+            1 => parts.push(
                 "The file being compressed stops, and its original stays exactly as it was."
                     .to_owned(),
-            );
+            ),
+            _ => parts.push(format!(
+                "The {stopping_written} files being compressed stop, and their originals stay \
+                 exactly as they were."
+            )),
         }
         match waiting {
             0 => {}
@@ -397,14 +403,19 @@ static SPANISH: Text = Text {
         TrayState::Paused => "Gracil · en pausa".to_owned(),
         TrayState::Error => "Gracil · algo necesita tu atención".to_owned(),
     },
-    exit_explanation: |stops_one, waiting, written| {
+    exit_explanation: |stopping, stopping_written, waiting, written| {
         let mut parts = Vec::new();
-        if stops_one {
-            parts.push(
+        match stopping {
+            0 => {}
+            1 => parts.push(
                 "El archivo que se está comprimiendo se detiene, y su original queda exactamente \
                  como estaba."
                     .to_owned(),
-            );
+            ),
+            _ => parts.push(format!(
+                "Los {stopping_written} archivos que se están comprimiendo se detienen, y sus \
+                 originales quedan exactamente como estaban."
+            )),
         }
         match waiting {
             0 => {}
@@ -451,18 +462,22 @@ mod tests {
     fn exit_says_exactly_what_stops() {
         let en = Text::get(Language::English);
         assert!(
-            en.exit_explanation(true, 0)
+            en.exit_explanation(1, 0)
                 .starts_with("The file being compressed stops")
         );
-        assert!(!en.exit_explanation(true, 0).contains("waiting"));
+        assert!(!en.exit_explanation(1, 0).contains("waiting"));
         assert_eq!(
-            en.exit_explanation(false, 2),
+            en.exit_explanation(0, 2),
             "2 files waiting won't be compressed."
         );
         let es = Text::get(Language::Spanish);
         assert!(
-            es.exit_explanation(true, 1)
+            es.exit_explanation(1, 1)
                 .ends_with("1 archivo en espera no se comprimirá.")
+        );
+        assert!(
+            es.exit_explanation(4, 0)
+                .starts_with("Los 4 archivos que se están comprimiendo se detienen")
         );
     }
 
