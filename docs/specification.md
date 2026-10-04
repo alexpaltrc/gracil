@@ -830,8 +830,8 @@ Do not attempt to build every milestone in one giant pass.
 
 # 77.1 Next: image compression (planned)
 
-*Added 2026-10-03. Only a plan: nothing of it is built yet. Decisions 2, 3 and 4 below are settled
-by [ADR 0034](decisions/0034-image-standard.md), Gracil's image standard; decision 5 is still open.*
+*Added 2026-10-03. Only a plan: nothing of it is built yet. All open decisions below are settled by
+[ADR 0034](decisions/0034-image-standard.md), Gracil's image standard.*
 
 Gracil will compress images with the same philosophy as video:
 
@@ -882,8 +882,14 @@ Open decisions, to settle before any work starts:
    makes the JPEGs (FFmpeg has no jpegli and a weak JPEG encoder); oxipng optimizes PNGs.
    *Decided:* the JPEG encoder is jpegli only (Google's, the newest and the best at high
    quality), built by Gracil from Google's official repository (github.com/google/jpegli) at a
-   pinned commit and shipped inside the package; nothing from libjxl or JPEG XL is used (ADR 0034).
+   pinned commit and shipped inside the package; nothing from libjxl or JPEG XL is used (ADR
+   0034). It reads JPEG directly (through the libjpeg-turbo copy in jpegli's repository); other
+   formats are read first by Windows or FFmpeg.
 5. **How images and videos share the list**, the dial and the tray without adding complexity.
+   *Decided 2026-10-03 by the product owner (ADR 0034, item 13):* one list for every file;
+   images are compressed before waiting videos, since they take seconds; with more than one file
+   the dial's whole circle is the whole list, and the marble leaves a hollow marble at the end of
+   each file's part. A design pass to make the dial more refined comes later.
 
 # 78. Temporary UI decisions
 

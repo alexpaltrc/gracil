@@ -219,6 +219,27 @@ kept:
 A video that was already an MP4 keeps its name. Any other video gets `.mp4` at the end of its
 name.
 
+## Images (in progress)
+
+Gracil will compress photos and other images the same way it compresses videos. None of this
+works yet; it is how it will work.
+
+- **Two formats, chosen by Gracil.** A PNG stays a PNG, so screenshots and graphics stay sharp.
+  Every other image (JPEG, HEIC from an iPhone, WebP, TIFF, BMP) becomes a JPEG, which opens
+  everywhere. An image with see-through parts becomes a PNG, since JPEG can't hold them.
+- **Looks the same.** The first time, a photo is made smaller without any difference you can see,
+  at its own size: Gracil never makes an image smaller in width or height.
+- **Compressing again** an image Gracil already made smaller loses a little, without asking, as
+  it does for videos. If it still can't get clearly smaller, the image gets the quiet "!".
+- **Never heavier.** An image is only replaced when the result is clearly smaller.
+- **What stays:** the date taken, the camera, the place, which way is up, and the colors.
+- **Not accepted:** moving images (GIF and the like, for now), camera RAW files and JPEG XL. They
+  are left exactly as they are.
+- **With videos.** Images and videos share one list. Images go before waiting videos, because
+  they take seconds. With more than one file, the whole circle stands for the whole list: the
+  marble crosses one part per file and leaves a hollow marble behind each one it finishes, so you
+  can see how many are done and how many are left.
+
 ## Your original is safe
 
 Gracil never writes over your video while it works.

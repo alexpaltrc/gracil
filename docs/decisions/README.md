@@ -38,4 +38,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0031](0031-windows-11-colors.md) | Windows 11's own colors and the user's accent |
 | [0032](0032-resolution-pill.md) | "Always": keep the resolution, ask, or reduce (withdrawn) |
 | [0033](0033-keep-the-resolution.md) | Every video keeps its resolution; compressing again loses a little, without asking |
-| [0034](0034-image-standard.md) | Gracil's image standard: PNG stays PNG, the rest becomes jpegli JPEG (not built yet) |
+| [0034](0034-image-standard.md) | Gracil's image standard: PNG stays PNG, the rest becomes jpegli JPEG; images first, the dial counts the list (not built yet) |

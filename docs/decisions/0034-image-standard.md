@@ -1,10 +1,10 @@
 # 0034 — Gracil's image standard
 
-**Status:** Accepted, not built. Formats, the engine's source and the PNG rules were decided by the
-product owner (2026-10-03); the numbers for JPEG were left to engineering, "always looking for a
-golden standard", and were chosen from the measurements below. Settles open decisions 2, 3 and 4 of
-spec §77.1; decision 5 (how images share the list, the dial and the tray) stays open and must be
-settled before the interface is built.
+**Status:** Accepted, not built. Formats, the engine's source, the PNG rules and how images share
+the list, the order and the dial were decided by the product owner (2026-10-03); the numbers for
+JPEG were left to engineering, "always looking for a golden standard", and were chosen from the
+measurements below. Settles open decisions 2–5 of spec §77.1. *Amended the same day, before any of
+it was built:* `cjpegli` now reads JPEG directly (item 9), and item 13 was added.
 
 **Context.** Images follow the video standard (ADR 0028, 0029, 0033): a file's first compression
 looks the same as the original; when that would not be clearly smaller, the file was already
@@ -18,7 +18,7 @@ the two images, about 80 means no difference at normal viewing, 70 is "high qual
 
 1. **Formats.** A PNG stays a PNG. Every other image becomes a JPEG and keeps its name. An image
    with transparency that is not a PNG becomes a PNG. Not accepted: animated images (GIF,
-   animated PNG, animated WebP; a future plan), camera RAW, JPEG XL. Accepted ones are left exactly
+   animated PNG, animated WebP; a future plan), camera RAW, JPEG XL. Those are left exactly
    as they are, with the quiet "!" and the reason.
 2. **Resolution is always kept**, as for video (ADR 0033). No image is ever scaled.
 3. **JPEG, first compression:** jpegli at butteraugli distance **1.0**, jpegli's own "visually
@@ -42,20 +42,28 @@ the two images, about 80 means no difference at normal viewing, 70 is "high qual
    JPEG, HEIC, WebP and PNG are judged the same way. Gracil measures in its own process with the
    `ssimulacra2` Rust crate (BSD-2).
 9. **Engine.**
-   - Reading: Windows itself (WIC), with FFmpeg as the fallback (for example HEIC without the
-     Store's HEIF extension: FFmpeg reads its tile grid). The decoded image goes to the encoder as
-     a PNG or PPM file in Gracil's temporary space.
+   - A JPEG goes to `cjpegli` as it is: jpegli reads it itself through libjpeg-turbo (BSD-3,
+     IJG and zlib licenses), the copy jpegli's own repository includes. On three 12 MP photos this
+     was about five times quicker than decoding to a PNG first (0.4 s against 2–2.5 s) and scored
+     the same or better against the original.
+   - Every other format is read by Windows itself (WIC), with FFmpeg as the fallback (for example
+     HEIC without the Store's HEIF extension: FFmpeg reads its tile grid), and goes to the encoder
+     as a PNG or PPM file in Gracil's temporary space. jpegli reads only JPEG, PNG and the simple
+     uncompressed formats; this one extra step is lossless.
    - JPEG: `cjpegli`, Google's jpegli, built by Gracil from the official repository
      (`github.com/google/jpegli`, BSD-3) at a pinned commit with `scripts/build-jpegli.ps1`, and
-     shipped inside the MSIX (about 1.3 MB). jpegli is no longer part of libjxl; nothing from
+     shipped inside the MSIX (about 1.7 MB). jpegli is no longer part of libjxl; nothing from
      libjxl or JPEG XL is used. Run as a separate program, like FFmpeg.
    - PNG: `oxipng` (MIT) and `exoquant` (MIT), linked into Gracil. GPL quantizers such as
      libimagequant/pngquant are never used: Gracil is proprietary.
-   - Credits and license texts for jpegli, its bundled libpng/zlib, oxipng and exoquant go in the
-     About screen and the Store listing, as for FFmpeg.
+   - Credits and license texts for jpegli, its bundled libjpeg-turbo, libpng and zlib, oxipng and
+     exoquant go in the About screen and the Store listing, as for FFmpeg.
 10. **Metadata** (spec §41, best effort, never a reason to reject): the date taken, camera data
-    and location (EXIF), the orientation and the color profile are carried over; Gracil writes them
-    into the result itself. A Display P3 photo stays Display P3 through its profile.
+    and location (EXIF), the orientation and the color profile are carried over. jpegli keeps the
+    color profile but not EXIF, so Gracil copies EXIF into the result itself. The orientation must
+    survive: jpegli keeps a photo's pixels as stored, so without it a photo taken upright would
+    show sideways. A Display P3 photo stays Display P3 through its profile.
+
 11. **HDR.** A photo with an HDR gain map (recent iPhones and Android phones) becomes its normal
     picture: the result looks as the photo does on most screens, without the extra brightness on
     an HDR screen. A picture stored as true HDR (PQ or HLG) is left as it is, with the quiet "!",
@@ -63,6 +71,25 @@ the two images, about 80 means no difference at normal viewing, 70 is "high qual
 12. **Very large images** have no limit. They take longer: for a 48 MP photo, jpegli takes about 2
     seconds and each SSIMULACRA2 measurement about 10, so compressing again can take about half a
     minute.
+13. **Images and videos together** (spec §77.1, decision 5):
+    - **One list** for every file, images and videos alike: nothing separate to learn.
+    - **Images go first.** They take seconds and videos take minutes, so images added while videos
+      wait are compressed before the waiting videos; the video being compressed is not
+      interrupted. Among images, and among videos, the order is the order they were added.
+    - **The dial.** With one file, image or video, it works as it does today: the marble goes
+      round once for that file. With more than one, the whole circle is the whole list: it is
+      split into equal parts, one per file, and the marble crosses one part per file. Each time a
+      file is done, the marble leaves a mark where its part ends: a hollow marble, only its
+      outline. The marks show at a glance how many are done and how many are left. Equal parts,
+      rather than parts sized by how long each file takes, keep the marks evenly spaced and the
+      count honest: a quick image and a long video are each one file. When the parts would be too
+      small for the marks to be told apart, the marks are left out and only the circle shows.
+      The list here means the files done since Gracil last started working plus the ones still
+      waiting; adding files while it works makes the parts smaller. When everything is done, the
+      next file starts a fresh circle. The percentage below stays that of the file being
+      compressed.
+    - **The tray** marble's ring follows the dial: the whole list with more than one file.
+    - Making the dial look more refined, modern and elegant is a planned design pass of its own.
 
 **Measurements** (the product owner's test set; sizes as a share of the original; scores are
 SSIMULACRA2 against the decoded original):
