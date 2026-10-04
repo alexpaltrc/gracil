@@ -10,9 +10,10 @@ Gracil is still being built, but you can already compress videos with it.
 
 - Gracil is in English and Spanish. It uses the language Windows is shown in, so there is nothing
   to set.
-- Gracil is dressed in soft mineral greys and ivory, in light and dark. It follows Windows' light
-  or dark mode, and when you switch it, Gracil fades gently from one to the other. Every word and
-  button stays easy to read in both.
+- Gracil wears Windows 11's own colors, in light and dark, so it looks like part of Windows. Its
+  buttons and progress take the accent color you picked in Windows. It follows Windows' light or
+  dark mode and your accent color, and when you change either, Gracil fades gently to match.
+  Every word and button stays easy to read in both.
 - Gracil has its own icon, a marble resting on a support, in the window, the taskbar, the Start
   menu and File Explorer. On the taskbar it sits on a small tile in Gracil's own colours, dark or
   light to match your taskbar. It stays sharp at any screen size.

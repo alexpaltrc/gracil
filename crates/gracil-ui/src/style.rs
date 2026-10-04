@@ -1,7 +1,7 @@
 //! Design tokens and the few reusable styles every screen is built from (spec §50).
 //!
-//! The colors are the Piedra palette (ADR 0015); type and spacing are still temporary (§78).
-//! Screens only ever refer to these names, so restyling Gracil happens here.
+//! The colors are Windows 11's own, with the user's accent color (ADR 0031); type and spacing are
+//! still temporary (§78). Screens only ever refer to these names, so restyling Gracil happens here.
 
 use std::time::Duration;
 
@@ -28,29 +28,44 @@ pub mod size {
 
 pub const RADIUS: f32 = 12.0;
 
-/// How long the window takes to follow a change between Windows' light and dark themes.
+/// How long the window takes to follow a change in Windows' colors: light and dark, or the accent.
 pub const THEME_SHIFT: Duration = Duration::from_millis(600);
 
-/// The Piedra palette (ADR 0015): mineral greys and ivory. The marble is the same stone grey in
-/// both themes; the support, used for text, flips between graphite and pale stone.
-pub fn palette(mode: Mode) -> Palette {
-    const MARBLE: Color = Color::from_rgb8(0x8C, 0x88, 0x7E);
+/// The user's accent color, in the shade Windows 11 fills controls with in each mode: a darker one
+/// in light mode, a lighter one in dark mode.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Accent {
+    pub on_light: Color,
+    pub on_dark: Color,
+}
+
+impl Accent {
+    /// Windows 11's own blue, for when the user's accent can't be read.
+    pub const WINDOWS: Self = Self {
+        on_light: Color::from_rgb8(0x00, 0x5F, 0xB8),
+        on_dark: Color::from_rgb8(0x4C, 0xC2, 0xFF),
+    };
+}
+
+/// Windows 11's palette (ADR 0031): its neutral app backgrounds and text, its status colors, and
+/// the user's accent as the primary color.
+pub fn palette(mode: Mode, accent: Accent) -> Palette {
     match mode {
         Mode::Dark => Palette {
             background: DARK_BACKGROUND,
-            text: Color::from_rgb8(0xDA, 0xD8, 0xCF),
-            primary: MARBLE,
-            success: Color::from_rgb8(0x5C, 0xC9, 0x8A),
-            warning: Color::from_rgb8(0xF0, 0xB4, 0x4C),
-            danger: Color::from_rgb8(0xF2, 0x6D, 0x6D),
+            text: Color::WHITE,
+            primary: accent.on_dark,
+            success: Color::from_rgb8(0x6C, 0xCB, 0x5F),
+            warning: Color::from_rgb8(0xFC, 0xE1, 0x00),
+            danger: Color::from_rgb8(0xFF, 0x99, 0xA4),
         },
         _ => Palette {
             background: LIGHT_BACKGROUND,
-            text: Color::from_rgb8(0x4D, 0x4B, 0x46),
-            primary: MARBLE,
-            success: Color::from_rgb8(0x2E, 0x9E, 0x62),
-            warning: Color::from_rgb8(0xC2, 0x80, 0x10),
-            danger: Color::from_rgb8(0xD0, 0x3F, 0x3F),
+            text: Color::from_rgb8(0x1A, 0x1A, 0x1A),
+            primary: accent.on_light,
+            success: Color::from_rgb8(0x0F, 0x7B, 0x0F),
+            warning: Color::from_rgb8(0x9D, 0x5D, 0x00),
+            danger: Color::from_rgb8(0xC4, 0x2B, 0x1C),
         },
     }
 }
@@ -59,54 +74,62 @@ pub fn theme(palette: Palette) -> Theme {
     Theme::custom("Gracil", palette)
 }
 
-/// The Piedra roles beyond Iced's palette, checked against WCAG (ADR 0015): text at least 4.5:1
-/// on its background, controls at least 3:1.
+/// The roles beyond Iced's palette, Windows 11's own (ADR 0031): text at least 4.5:1 on its
+/// background, controls at least 3:1.
 #[derive(Debug, Clone, Copy)]
 pub struct Tokens {
     /// Secondary text: counts, states, hints, quiet actions.
     pub secondary: Color,
-    /// Filled controls and what has been done (the dial's trail).
+    /// Filled controls and what has been done (the dial's trail): the user's accent color.
     pub accent: Color,
     /// Text on the accent.
     pub on_accent: Color,
     /// Edges of controls and areas.
     pub border: Color,
-    /// Text on the marble's stone grey, for anything filled with it.
-    pub on_marble: Color,
+    /// The solid face of a control that is grabbed or moves, like a slider's thumb.
+    pub thumb: Color,
 }
 
-const LIGHT_BACKGROUND: Color = Color::from_rgb8(0xF3, 0xF1, 0xEB);
-const DARK_BACKGROUND: Color = Color::from_rgb8(0x25, 0x25, 0x22);
+/// Windows 11's app backgrounds (Mica's fallback colors).
+const LIGHT_BACKGROUND: Color = Color::from_rgb8(0xF3, 0xF3, 0xF3);
+const DARK_BACKGROUND: Color = Color::from_rgb8(0x20, 0x20, 0x20);
 
-const LIGHT: Tokens = Tokens {
-    secondary: Color::from_rgb8(0x67, 0x65, 0x61),
-    accent: Color::from_rgb8(0x68, 0x65, 0x5E),
-    on_accent: LIGHT_BACKGROUND,
-    border: Color::from_rgb8(0x88, 0x84, 0x7B),
-    on_marble: Color::from_rgb8(0x15, 0x14, 0x13),
+/// The light and dark values of the roles that don't depend on the accent.
+struct Neutrals {
+    secondary: Color,
+    on_accent: Color,
+    border: Color,
+    thumb: Color,
+}
+
+const LIGHT: Neutrals = Neutrals {
+    secondary: Color::from_rgb8(0x5C, 0x5C, 0x5C),
+    on_accent: Color::WHITE,
+    border: Color::from_rgb8(0x86, 0x86, 0x86),
+    thumb: Color::WHITE,
 };
 
-const DARK: Tokens = Tokens {
-    secondary: Color::from_rgb8(0xAA, 0xA8, 0xA1),
-    accent: Color::from_rgb8(0xAB, 0xA8, 0xA0),
-    on_accent: DARK_BACKGROUND,
-    border: Color::from_rgb8(0x8C, 0x88, 0x7E),
-    on_marble: Color::from_rgb8(0x15, 0x14, 0x13),
+const DARK: Neutrals = Neutrals {
+    secondary: Color::from_rgb8(0xCC, 0xCC, 0xCC),
+    on_accent: Color::BLACK,
+    border: Color::from_rgb8(0x9A, 0x9A, 0x9A),
+    thumb: Color::from_rgb8(0x45, 0x45, 0x45),
 };
 
 /// The roles for what `theme` shows, including partway through a change between light and dark:
-/// how far its background has gone from ivory to graphite says how far to mix them.
+/// how far its background has gone from light grey to dark grey says how far to mix them.
 pub fn tokens(theme: &Theme) -> Tokens {
-    let background = theme.palette().background;
-    let t = ((background.r - LIGHT_BACKGROUND.r) / (DARK_BACKGROUND.r - LIGHT_BACKGROUND.r))
+    let palette = theme.palette();
+    let t = ((palette.background.r - LIGHT_BACKGROUND.r)
+        / (DARK_BACKGROUND.r - LIGHT_BACKGROUND.r))
         .clamp(0.0, 1.0);
     let mix = |a, b| mix(a, b, t);
     Tokens {
         secondary: mix(LIGHT.secondary, DARK.secondary),
-        accent: mix(LIGHT.accent, DARK.accent),
+        accent: palette.primary,
         on_accent: mix(LIGHT.on_accent, DARK.on_accent),
         border: mix(LIGHT.border, DARK.border),
-        on_marble: mix(LIGHT.on_marble, DARK.on_marble),
+        thumb: mix(LIGHT.thumb, DARK.thumb),
     }
 }
 
@@ -170,14 +193,16 @@ pub fn quiet_button(theme: &Theme, status: button::Status) -> button::Style {
 }
 
 /// The one kind of button with a surface: what to do with a finished result. Filled with the
-/// accent, so it reads clearly in both themes.
+/// accent, and a little see-through under the pointer, as Windows' own accent buttons are.
 pub fn action_button(theme: &Theme, status: button::Status) -> button::Style {
     let palette = theme.palette();
     let tokens = tokens(theme);
     let (fill, text_color) = match status {
-        button::Status::Hovered | button::Status::Pressed => {
-            (mix(tokens.accent, palette.text, 0.25), tokens.on_accent)
-        }
+        button::Status::Hovered => (tokens.accent.scale_alpha(0.9), tokens.on_accent),
+        button::Status::Pressed => (
+            tokens.accent.scale_alpha(0.8),
+            tokens.on_accent.scale_alpha(0.8),
+        ),
         button::Status::Disabled => (
             palette.text.scale_alpha(0.06),
             tokens.secondary.scale_alpha(0.6),

@@ -1,6 +1,7 @@
 # 0015 — The marble identity: icon, Piedra palette and following Windows' theme
 
-**Status:** Accepted. Replaces the temporary icon and colors of spec §3 and §78.
+**Status:** Accepted. Replaces the temporary icon and colors of spec §3 and §78. Its palette
+(items 1 and 2) is superseded by [0031](0031-windows-11-colors.md); item 3 still holds.
 
 **Context.** The product owner commissioned the visual identity "La canica · Piedra": a marble
 (the video) resting on a support (Gracil, which prepares the way). Its philosophy is "letting go is

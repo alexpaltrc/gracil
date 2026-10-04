@@ -10,7 +10,7 @@ use std::time::Instant;
 use gracil_core::queue::JobId;
 use iced::mouse;
 use iced::widget::canvas::{self, Action, Event, Frame, Geometry, LineCap, Path, Stroke};
-use iced::{Color, Point, Rectangle, Renderer, Size, Theme, Vector, window};
+use iced::{Color, Point, Rectangle, Renderer, Size, Theme, window};
 
 use crate::app::Message;
 use crate::style;
@@ -202,8 +202,8 @@ impl canvas::Program<Message> for Dial {
         frame.stroke(&Path::circle(center, outer), edge);
         frame.stroke(&Path::circle(center, inner), edge);
 
-        // What has gone through the pipe, from twelve o'clock clockwise, behind the marble. It is the
-        // accent, a shade of the support color like the logo's, and the stone-grey marble rests on it.
+        // What has gone through the pipe, from twelve o'clock clockwise, behind the marble: the
+        // accent, like the filled part of Windows' own sliders.
         let head = -FRAC_PI_2 + TAU * state.fill;
         if state.fill > 0.001 {
             let trail = Path::new(|path| {
@@ -223,22 +223,18 @@ impl canvas::Program<Message> for Dial {
             );
         }
 
-        // The marble, edged in the background color so it stands apart from the trail, with a small
-        // highlight so it reads as round.
+        // The marble, drawn like the thumb of Windows' own sliders: a solid face with a thin edge
+        // and the accent in its middle, so it stands apart from the trail in both themes.
         let marble = Point::new(center.x + pipe * head.cos(), center.y + pipe * head.sin());
         let marble_radius = pipe_width / 2.0 - 1.5 * scale;
-        frame.fill(
-            &Path::circle(marble, marble_radius + 1.5 * scale),
-            palette.background,
+        frame.fill(&Path::circle(marble, marble_radius), tokens.thumb);
+        frame.stroke(
+            &Path::circle(marble, marble_radius),
+            Stroke::default()
+                .with_width(1.0)
+                .with_color(palette.text.scale_alpha(0.12)),
         );
-        frame.fill(&Path::circle(marble, marble_radius), palette.primary);
-        frame.fill(
-            &Path::circle(
-                marble + Vector::new(-marble_radius * 0.35, -marble_radius * 0.35),
-                marble_radius * 0.35,
-            ),
-            Color::WHITE.scale_alpha(0.3),
-        );
+        frame.fill(&Path::circle(marble, marble_radius * 0.55), tokens.accent);
 
         // The middle: two buttons that light up softly under the pointer.
         let divider_y = center.y + DIVIDER * radius;

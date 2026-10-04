@@ -38,11 +38,11 @@ pub fn pill<'a, Message: 'a>(
     let label = move |index: usize, label: &'a str| -> Element<'a, Message> {
         let picked = index == selected;
         container(text(label).size(size::CAPTION).style(move |theme: &Theme| {
-            // A picked end sits on the marble-grey stone.
+            // A picked end sits on the accent.
             let tokens = style::tokens(theme);
             text::Style {
                 color: Some(if picked {
-                    tokens.on_marble
+                    tokens.on_accent
                 } else {
                     tokens.secondary
                 }),

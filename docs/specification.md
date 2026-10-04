@@ -87,6 +87,9 @@ current Windows 11 iconography and visual guidelines.
 *Update (ADR 0015):* the icon has been designed: the marble ("la canica"), with the Piedra palette, in
 `assets/icons/`.
 
+*Update (ADR 0031):* the Piedra palette is replaced by Windows 11's own colors and the user's
+accent color, followed live.
+
 # 4. Supported platform
 
 Target: Windows 11, x86-64 / 64-bit Windows initially. Do not build a 32-bit application.
@@ -864,6 +867,8 @@ to them.
 
 *Update (ADR 0015):* the icon (the marble) and the colors (the Piedra palette) are now decided,
 and Gracil follows Windows' light or dark theme with a soft fade.
+
+*Update (ADR 0031):* the colors are now Windows 11's own, with the user's accent color.
 
 # 79. Focus + Drawer is not temporary
 

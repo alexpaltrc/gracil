@@ -1,0 +1,45 @@
+# 0031 — Windows 11's own colors and the user's accent
+
+**Status:** Accepted. Requested by the product owner (2026-10-03). Replaces the Piedra palette of
+[0015](0015-piedra-identity.md) (items 1 and 2); its item 3, following Windows' light and dark
+theme, still holds.
+
+**Context.** Gracil should look as native as possible on Windows 11. The Piedra palette (ivory,
+mineral greys, a stone-grey marble) was Gracil's own, so it never quite matched the windows
+around it, and it ignored the accent color the user picked in Windows.
+
+**Decision.**
+
+1. The palette is Windows 11's own (Fluent), in `style::palette` and `style::tokens`:
+
+   | Role | Light | Dark |
+   |---|---|---|
+   | Background (Mica's fallback) | `#F3F3F3` | `#202020` |
+   | Text | `#1A1A1A` | `#FFFFFF` |
+   | Secondary text, quiet actions | `#5C5C5C` | `#CCCCCC` |
+   | Border: edges of controls and areas | `#868686` | `#9A9A9A` |
+   | Accent: filled buttons, the dial's trail, a picked end of a pill | the user's accent, dark shade 1 | the user's accent, light shade 2 |
+   | Text on the accent | `#FFFFFF` | `#000000` |
+   | A slider's thumb (the dial's marble) | `#FFFFFF` | `#454545` |
+   | Caution (the "!") | `#9D5D00` | `#FCE100` |
+   | Success | `#0F7B0F` | `#6CCB5F` |
+   | Critical | `#C42B1C` | `#FF99A4` |
+
+   These are Windows' own values for the same roles, so text keeps at least 4.5:1 and controls
+   at least 3:1 on their background. The caution color also fixes Piedra's amber, which was too
+   pale on a light background.
+2. The accent is the user's, read from Windows (`gracil_windows::accent`, the `AccentPalette`
+   that Windows keeps in the registry). Light mode fills with its first darker shade, dark mode
+   with its second lighter shade, as Windows' own accent buttons do. If it can't be read, Windows'
+   default blue is used. When the user changes it, Windows tells every window
+   (`WM_SETTINGCHANGE` with `ImmersiveColorSet`); the tray's hidden window passes that on as
+   `TrayEvent::Colors`, and Gracil reads the accent again and fades to it over the same 600 ms as
+   a change between light and dark. Nothing polls.
+3. The dial's marble is drawn like the thumb of Windows' sliders: a solid face with a thin edge
+   and the accent in its middle, riding on a trail in the accent.
+4. Accent buttons turn a little see-through under the pointer and when pressed, like Windows'.
+
+**Consequences.**
+
+- Gracil follows the user's colors with nothing to set, and changes with them while open.
+- Piedra's delivery stays in `docs/design/piedra/` as history.

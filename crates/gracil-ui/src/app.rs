@@ -41,7 +41,9 @@ pub struct Gracil {
     theme: Theme,
     /// The Windows theme being followed; unknown until Windows first answers.
     mode: Option<Mode>,
-    /// A change between light and dark in progress: where it started, where it goes and when.
+    /// The user's accent color in Windows, followed as it changes.
+    accent: style::Accent,
+    /// A change of colors in progress: where it started, where it goes and when.
     shift: Option<(Palette, Palette, Instant)>,
     running: Option<(JobId, JobControl)>,
     /// The main window, while it is open.
@@ -180,6 +182,7 @@ impl Gracil {
         // answer would come too late and the first window would fade from light (ADR 0015).
         let mode =
             gracil_windows::light_apps().map(|light| if light { Mode::Light } else { Mode::Dark });
+        let accent = windows_accent();
         let state = Self {
             queue: Queue::default(),
             outcomes: HashMap::new(),
@@ -189,8 +192,9 @@ impl Gracil {
             selected: None,
             last_placed: None,
             text,
-            theme: style::theme(style::palette(mode.unwrap_or(Mode::Light))),
+            theme: style::theme(style::palette(mode.unwrap_or(Mode::Light), accent)),
             mode,
+            accent,
             shift: None,
             running: None,
             main: None,
@@ -500,6 +504,10 @@ impl Gracil {
                 Task::none()
             }
             Message::Outside(Outside::Tray(TrayEvent::Exit)) => self.ask_to_exit(),
+            Message::Outside(Outside::Tray(TrayEvent::Colors)) => {
+                self.follow_accent(Instant::now());
+                Task::none()
+            }
         }
     }
 
@@ -981,14 +989,28 @@ impl Gracil {
         }
         let first = self.mode.is_none();
         self.mode = Some(mode);
-        let target = style::palette(mode);
         if first {
-            self.theme = style::theme(target);
+            self.theme = style::theme(style::palette(mode, self.accent));
             self.shift = None;
         } else {
-            // Starting from what is on screen, so changing back halfway is still smooth.
-            self.shift = Some((self.theme.palette(), target, now));
+            self.shift_to_palette(now);
         }
+    }
+
+    /// Picks up a new accent color from Windows, fading to it like a change of theme (ADR 0031).
+    fn follow_accent(&mut self, now: Instant) {
+        let accent = windows_accent();
+        if accent != self.accent {
+            self.accent = accent;
+            self.shift_to_palette(now);
+        }
+    }
+
+    /// Fades to the palette for the current mode and accent, starting from what is on screen, so
+    /// changing back halfway is still smooth.
+    fn shift_to_palette(&mut self, now: Instant) {
+        let target = style::palette(self.mode.unwrap_or(Mode::Light), self.accent);
+        self.shift = Some((self.theme.palette(), target, now));
     }
 
     fn shift_theme(&mut self, now: Instant) {
@@ -1073,4 +1095,13 @@ fn after(delay: Duration, message: Message) -> Task<Message> {
 /// picture intact, and only then is it destroyed.
 fn dismiss(id: window::Id) -> Task<Message> {
     window::set_mode::<Message>(id, window::Mode::Hidden).chain(window::close(id))
+}
+
+/// The accent color chosen in Windows, or Windows' own blue if it can't be read.
+fn windows_accent() -> style::Accent {
+    let color = |[r, g, b]: [u8; 3]| iced::Color::from_rgb8(r, g, b);
+    gracil_windows::accent().map_or(style::Accent::WINDOWS, |accent| style::Accent {
+        on_light: color(accent.on_light),
+        on_dark: color(accent.on_dark),
+    })
 }

@@ -2,9 +2,9 @@
 //!
 //! The icon lives on a thread of its own with a hidden window that receives the taskbar's
 //! messages: a click shows or hides the mini-window, the right-click menu offers Open, the
-//! File Explorer setting and Exit. The icon follows the
-//! taskbar between light and dark, and comes back if File Explorer restarts. Gracil tells it what
-//! to show with [`Tray::show`]; it never polls.
+//! File Explorer setting and Exit. The icon follows the taskbar between light and dark, passes on
+//! changes to Windows' colors, and comes back if File Explorer restarts. Gracil tells it what to
+//! show with [`Tray::show`]; it never polls.
 
 mod picture;
 
@@ -54,6 +54,8 @@ pub enum TrayEvent {
     ExplorerMiniWindow,
     /// Exit in the icon's menu.
     Exit,
+    /// Windows' colors changed: light or dark, or the accent color.
+    Colors,
 }
 
 /// The words of the icon's menu, in the interface's language.
@@ -304,6 +306,7 @@ unsafe extern "system" fn window_procedure(
                 lock(shared).light_taskbar = crate::theme::light_taskbar();
             }
             refresh(window);
+            notify(TrayEvent::Colors);
             0
         }
         _ if message == TASKBAR_CREATED.load(Ordering::Relaxed) && message != 0 => {

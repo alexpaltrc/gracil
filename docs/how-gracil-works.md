@@ -20,10 +20,12 @@ to set: if Windows is in Spanish, Gracil is too; otherwise it's in English.
 
 ## Light and dark
 
-Gracil follows Windows' light or dark mode, with nothing to set. Its colors are soft mineral greys
-and ivory. If you switch Windows between light and dark while Gracil is open, Gracil follows right
-away, fading gently from one to the other instead of flashing. Its windows always open
-in the right one from the very first moment.
+Gracil follows Windows' light or dark mode, with nothing to set. It uses Windows 11's own colors,
+so it looks like the rest of Windows, and its buttons and progress take the accent color you
+picked in Windows' **Settings → Personalization → Colors**. If you switch Windows between light
+and dark, or pick another accent color, while Gracil is open, Gracil follows right away, fading
+gently instead of flashing. Its windows always open in the right colors from the very first
+moment.
 Every word and every button is chosen to stay easy to read in both, by the usual accessibility
 measure: the buttons for what to do with a finished video are filled, so they stand out clearly.
 
