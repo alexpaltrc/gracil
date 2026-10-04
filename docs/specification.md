@@ -975,6 +975,22 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   marble fills an invisible circle. The thin line between pause and stop in the middle of the
   ring goes too. Meant to look more elegant and give Gracil personality. Changes the look recorded
   in ADR 0014, so an ADR amends it when it is built.
+- **Several images at once.** Gracil compresses one file at a time, so a long list of images
+  (14,916 still waiting in the owner's folder) takes far longer than it needs to. Images should
+  be compressed several at a time. Proposed: as many at once as the processor has cores, less
+  one so the computer stays responsive, and fewer when the images are very large, so memory never
+  runs short. On a network or cloud drive this also overlaps the waiting for downloads and
+  uploads. Pause and stop act on all of them together, and the ring shows the progress of the
+  whole list (ADR 0034).
+- **Videos: proposed, to be evaluated.** Don't compress two videos at once by default: the
+  encoder on the graphics card, or the processor, is already fully used by one video, so two at
+  once would each go about half as fast and gain nothing. Instead, get the next video ready (its
+  short test samples, which mostly use the processor) while the current one is compressed on the
+  graphics card. Also compress images on the processor while a video is compressed on the
+  graphics card. Two videos at once only on graphics cards with two or more video encoders (some
+  high-end NVIDIA cards), and only if measuring shows a real gain.
+- Both change the rule that only one file is worked on at a time (§33, the queue), so an ADR
+  records them when they are built.
 
 # 78. Temporary UI decisions
 
