@@ -860,10 +860,22 @@ Open decisions, to settle before any work starts:
 1. ~~The final format~~: decided above (PNG stays PNG; everything else becomes JPEG).
 2. **The exact compression**: jpegli's fixed quality and the PNG optimizer's settings, verified on a
    representative set of photos, screenshots and graphics, following in spirit the quality
-   standard Gracil first settles on for video.
-3. **Which images are accepted** (JPEG, PNG, HEIC, WebP, TIFF, BMP, GIF, camera RAW…) and what
-   happens to transparency, animation, HDR and very large images.
+   standard Gracil first settles on for video. *Agreed direction (2026-10-03):* the same
+   rules as video. Every image keeps its resolution (ADR 0033); a JPEG is made at jpegli's
+   "looks the same" distance and kept only when clearly smaller; an image already compressed is
+   compressed again at a looser distance, without asking, or keeps the quiet "!"; never heavier.
+   The numbers, and how much smaller a PNG must get, come from measuring the test set.
+3. **Which images are accepted** *(partly decided 2026-10-03 by the product owner)*:
+   - An image with transparency that is not a PNG (a WebP or TIFF, for example) becomes a PNG,
+     so its transparency is kept; JPEG has none.
+   - **Animated images** (GIF, animated PNG, animated WebP) are not supported for now: they are
+     neither photo nor video. They are left exactly as they are, and are a plan for the future.
+   - **Camera RAW** files are not accepted: they are a photographer's negative, and turning one
+     into a JPEG is developing it, not compressing it.
+   - Still open: HDR photos and very large images.
 4. **The engine**: FFmpeg, which Gracil already relies on, or a dedicated image library.
+   *Proposed (2026-10-03):* Windows itself (WIC) reads images, with FFmpeg as a fallback; jpegli
+   makes the JPEGs (FFmpeg has no jpegli and a weak JPEG encoder); oxipng optimizes PNGs.
 5. **How images and videos share the list**, the dial and the tray without adding complexity.
 
 # 78. Temporary UI decisions
