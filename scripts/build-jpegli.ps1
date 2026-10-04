@@ -52,4 +52,21 @@ $options = @(
 cmd /c "call `"$vcvars`" >nul && cd /d `"$source`" && cmake -G Ninja -B build -S . $options && cmake --build build --target cjpegli"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Output (Join-Path $source 'build\tools\cjpegli.exe')
+# cjpegli opens files with the C library's narrow functions, which follow the process code page.
+# Making that code page UTF-8 lets it open any file name, emoji and every script included.
+$cjpegli = Join-Path $source 'build\tools\cjpegli.exe'
+$manifest = Join-Path $source 'build\utf8.manifest'
+@'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <application>
+    <windowsSettings>
+      <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
+    </windowsSettings>
+  </application>
+</assembly>
+'@ | Set-Content -Encoding utf8 $manifest
+cmd /c "call `"$vcvars`" >nul && mt -nologo -manifest `"$manifest`" -outputresource:`"$cjpegli`";#1"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Write-Output $cjpegli

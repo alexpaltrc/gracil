@@ -12,6 +12,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1
 This makes a release build and puts the package's files in `packaging/msix/out/layout`, with the
 manifest filled in from `packaging/msix/identity.psd1` and the version from `Cargo.toml`.
 
+It also puts jpegli's `cjpegli.exe`, which compresses every photo
+([ADR 0034](../decisions/0034-image-standard.md)), next to `gracil.exe`, with the licenses of
+jpegli and the libraries built into it in `cjpegli-licenses.txt`. When `cjpegli.exe` has not been
+built yet, the script first runs `scripts/build-jpegli.ps1`, which needs git and Visual Studio
+Build Tools with the C++ workload, CMake and Ninja.
+
 ## Try it on this computer
 
 Registering the layout needs Windows' **Developer Mode** (Settings → System → For developers).
