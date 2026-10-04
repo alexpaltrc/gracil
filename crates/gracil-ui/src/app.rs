@@ -22,7 +22,7 @@ use crate::request::Request;
 use crate::settings::Settings;
 use crate::style;
 use crate::text::{Language, Text};
-use crate::work::{self, Choice, Failure, Outcome, Report};
+use crate::work::{self, Choice, Failure, Outcome, Report, Sizes};
 
 pub struct Gracil {
     pub queue: Queue,
@@ -119,7 +119,10 @@ pub enum Message {
     /// The "Always" pill: replace, ask (`None`) or save a copy for every video that finishes.
     Always(Option<Choice>),
     Placed(JobId, Choice, Result<PathBuf, Failure>),
+    /// A file picked in the list is shown large; picking it again goes back to the work.
     Select(JobId),
+    /// Back from a file picked in the list to what Gracil is working on.
+    ShowCurrent,
     Remove(JobId),
     Clear,
     ToggleDrawer,
@@ -372,7 +375,11 @@ impl Gracil {
                 Task::none()
             }
             Message::Select(id) => {
-                self.selected = Some(id);
+                self.selected = (self.selected != Some(id)).then_some(id);
+                Task::none()
+            }
+            Message::ShowCurrent => {
+                self.selected = None;
                 Task::none()
             }
             Message::Remove(id) => {
@@ -391,6 +398,10 @@ impl Gracil {
             }
             Message::ToggleDrawer => {
                 self.drawer_open = !self.drawer_open;
+                // Closing the list puts away what was picked in it, too.
+                if !self.drawer_open {
+                    self.selected = None;
+                }
                 Task::none()
             }
             Message::ThemeChanged(mode) => {
@@ -723,14 +734,20 @@ impl Gracil {
                 .any(|outcome| matches!(outcome, Outcome::Ready { .. }))
     }
 
-    /// The video shown large: the one the user picked; otherwise the running one; otherwise a
-    /// result waiting for a choice; otherwise the next one waiting; otherwise the one just put in
-    /// place; otherwise the last one done.
+    /// The file shown large: the one the user picked in the list, otherwise [`Self::current`].
     pub fn focused(&self) -> Option<&Job> {
-        let jobs = self.queue.jobs();
         self.selected
             .and_then(|id| self.queue.get(id))
-            .or_else(|| self.queue.active())
+            .or_else(|| self.current())
+    }
+
+    /// What Gracil is busy with, shown large unless the user picked another file: the running
+    /// one; otherwise a result waiting for a choice; otherwise the next one waiting; otherwise the
+    /// one just put in place; otherwise the last one done.
+    pub fn current(&self) -> Option<&Job> {
+        let jobs = self.queue.jobs();
+        self.queue
+            .active()
             .or_else(|| {
                 jobs.iter()
                     .find(|job| self.outcomes.get(&job.id).is_some_and(Outcome::is_waiting))
@@ -738,6 +755,28 @@ impl Gracil {
             .or_else(|| jobs.iter().find(|job| job.state == JobState::Pending))
             .or_else(|| self.last_placed.and_then(|id| self.queue.get(id)))
             .or_else(|| jobs.iter().rev().find(|job| job.state.is_finished()))
+    }
+
+    /// The file to offer a way back to while the user looks at another one: only when Gracil is
+    /// working on it or it waits for a choice (spec §32.1).
+    pub fn way_back(&self) -> Option<&Job> {
+        let picked = self.selected?;
+        self.current().filter(|job| {
+            job.id != picked
+                && (job.state.is_active()
+                    || self.outcomes.get(&job.id).is_some_and(Outcome::is_waiting))
+        })
+    }
+
+    /// Every file in the list that came out smaller, added together, and how many there are.
+    pub fn total(&self) -> (Sizes, usize) {
+        self.queue
+            .jobs()
+            .iter()
+            .filter_map(|job| self.outcomes.get(&job.id)?.sizes())
+            .fold((Sizes::default(), 0), |(sum, count), sizes| {
+                (sum + sizes, count + 1)
+            })
     }
 
     /// What the mini-window shows: the video being compressed, else the first result waiting for
@@ -825,7 +864,7 @@ impl Gracil {
             return;
         };
         let Outcome::Ready {
-            smaller_by,
+            sizes,
             placing,
             problem,
             ..
@@ -835,12 +874,12 @@ impl Gracil {
         };
         match placed {
             Ok(path) => {
-                let smaller_by = *smaller_by;
+                let sizes = *sizes;
                 self.last_placed = Some(id);
                 *outcome = Outcome::Placed {
                     choice,
                     path,
-                    smaller_by,
+                    sizes,
                 };
             }
             Err(failure) => {

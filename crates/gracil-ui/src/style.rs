@@ -192,6 +192,17 @@ pub fn quiet_button(theme: &Theme, status: button::Status) -> button::Style {
     }
 }
 
+/// The file picked in the list, shown large: a quiet button on a faint surface, so it is clear
+/// which one is showing and that picking it again puts it away.
+pub fn picked_row(theme: &Theme, status: button::Status) -> button::Style {
+    let palette = theme.palette();
+    button::Style {
+        background: Some(Background::Color(palette.text.scale_alpha(0.07))),
+        text_color: palette.text,
+        ..quiet_button(theme, status)
+    }
+}
+
 /// The one kind of button with a surface: what to do with a finished result. Filled with the
 /// accent, and a little see-through under the pointer, as Windows' own accent buttons are.
 pub fn action_button(theme: &Theme, status: button::Status) -> button::Style {

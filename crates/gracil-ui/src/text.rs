@@ -5,7 +5,7 @@
 
 use gracil_windows::TrayState;
 
-use crate::work::Failure;
+use crate::work::{Failure, Sizes};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
@@ -65,7 +65,11 @@ pub struct Text {
     /// The pill's two ends: always replace, always save a copy. Its middle, "ask each time", is a
     /// small circle rather than a word.
     pub always_choices: [&'static str; 2],
+    /// The decimal mark: a point in English, a comma in Spanish.
+    decimal: char,
     smaller: fn(u32) -> String,
+    in_all: fn(&str, u32) -> String,
+    less: fn(&str) -> String,
     files: fn(usize) -> String,
     ready: fn(usize) -> String,
     in_line: fn(usize) -> String,
@@ -100,7 +104,48 @@ impl Text {
 
     /// `smaller_by` is a share of the original, from 0 to 1.
     pub fn smaller(&self, smaller_by: f64) -> String {
-        (self.smaller)((smaller_by * 100.0).round() as u32)
+        (self.smaller)(rounded_percent(smaller_by))
+    }
+
+    /// A file size the way File Explorer counts it, in KB, MB or GB: `78 MB`, `1.2 GB`.
+    pub fn size(&self, bytes: u64) -> String {
+        const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
+        let mut value = (bytes as f64 / 1024.0).max(1.0);
+        let mut unit = 0;
+        while value >= 999.5 && unit < UNITS.len() - 1 {
+            value /= 1024.0;
+            unit += 1;
+        }
+        let number = if value < 9.95 && unit > 0 {
+            format!("{value:.1}").replace('.', &self.decimal.to_string())
+        } else {
+            format!("{value:.0}")
+        };
+        format!("{number} {}", UNITS[unit])
+    }
+
+    /// The size before and after: `120 MB → 78 MB`.
+    pub fn change(&self, sizes: Sizes) -> String {
+        format!(
+            "{} → {}",
+            self.size(sizes.original),
+            self.size(sizes.compressed)
+        )
+    }
+
+    /// The whole list together: `In all: 3.4 GB → 2.2 GB, 35% smaller`.
+    pub fn in_all(&self, sizes: Sizes) -> String {
+        (self.in_all)(&self.change(sizes), rounded_percent(sizes.smaller_by()))
+    }
+
+    /// How much room the list saved, in a few words: `1.2 GB smaller`.
+    pub fn less(&self, sizes: Sizes) -> String {
+        (self.less)(&self.size(sizes.original - sizes.compressed))
+    }
+
+    /// The drawer's short form: `−35%`.
+    pub fn shrunk(&self, smaller_by: f64) -> String {
+        format!("−{}%", rounded_percent(smaller_by))
     }
 
     pub fn files(&self, count: usize) -> String {
@@ -182,7 +227,10 @@ static ENGLISH: Text = Text {
     choose_files: "Choose files",
     media_filter: "Videos and images",
     all_files_filter: "All files",
+    decimal: '.',
     smaller: |percent| format!("{percent}% smaller"),
+    in_all: |change, percent| format!("In all: {change}, {percent}% smaller"),
+    less: |amount| format!("{amount} smaller"),
     files: |count| match count {
         1 => "1 file".to_owned(),
         n => format!("{n} files"),
@@ -262,7 +310,10 @@ static SPANISH: Text = Text {
     choose_files: "Elegir archivos",
     media_filter: "Videos e imágenes",
     all_files_filter: "Todos los archivos",
+    decimal: ',',
     smaller: |percent| format!("{percent}% más pequeño"),
+    in_all: |change, percent| format!("En total: {change}, {percent}% más pequeño"),
+    less: |amount| format!("{amount} menos"),
     files: |count| match count {
         1 => "1 archivo".to_owned(),
         n => format!("{n} archivos"),
@@ -318,6 +369,11 @@ static SPANISH: Text = Text {
     },
 };
 
+/// A share from 0 to 1 rounded to a whole percentage, for how much smaller a file became.
+fn rounded_percent(share: f64) -> u32 {
+    (share * 100.0).round() as u32
+}
+
 /// A share from 0 to 1 as a whole percentage, never above 100.
 fn percent(share: f32) -> u32 {
     (share.clamp(0.0, 1.0) * 100.0).floor() as u32
@@ -370,5 +426,23 @@ mod tests {
         let es = Text::get(Language::Spanish);
         assert_eq!(es.smaller(0.756), "76% más pequeño");
         assert_eq!(Text::get(Language::English).smaller(0.004), "0% smaller");
+    }
+
+    #[test]
+    fn sizes_read_like_file_explorer() {
+        let (en, es) = (Text::get(Language::English), Text::get(Language::Spanish));
+        assert_eq!(en.size(300), "1 KB");
+        assert_eq!(en.size(78 * 1024 * 1024), "78 MB");
+        assert_eq!(en.size(1_288_490_189), "1.2 GB");
+        assert_eq!(es.size(1_288_490_189), "1,2 GB");
+        assert_eq!(en.size(1023 * 1024), "1.0 MB", "never 1023 KB");
+        let sizes = Sizes {
+            original: 100 * 1024 * 1024,
+            compressed: 65 * 1024 * 1024,
+        };
+        assert_eq!(en.change(sizes), "100 MB → 65 MB");
+        assert_eq!(en.in_all(sizes), "In all: 100 MB → 65 MB, 35% smaller");
+        assert_eq!(es.less(sizes), "35 MB menos");
+        assert_eq!(es.shrunk(sizes.smaller_by()), "−35%");
     }
 }

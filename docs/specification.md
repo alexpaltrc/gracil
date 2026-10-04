@@ -427,6 +427,23 @@ Selecting the subtle file-count control opens the file drawer, which lets the us
 current set of files, remove individual removable items, and quickly clear removable files. The
 drawer is not visually dominant. When closed, the user should mostly forget a queue exists.
 
+# 32.1 Picking a file, and the way back (ADR 0036)
+
+Clicking a file in the drawer shows it in the focus, and its row stays lightly marked. Picking is
+a temporary look, never a trap: clicking the same row again, closing the drawer, or clicking the
+quiet "‹ name · status" line under the picked file returns the focus to the work in progress.
+That line appears only while something is being compressed or a result waits for a choice, and
+it is not the picked file.
+
+# 32.2 Sizes (ADR 0036)
+
+A result shows its size before and after under its choices ("120 MB → 78 MB"). The drawer row
+of a placed file says how much smaller and where it went ("−35% · Replaced"). With two or more
+results on the list, the drawer opens with their sum ("In all: 3.4 GB → 2.2 GB, 35% smaller")
+and the footer adds the room freed ("1.2 GB smaller"). Only files still on the list count. Sizes
+are counted the way File Explorer counts them (1 KB = 1024 bytes), with the language's decimal
+mark.
+
 # 33. Active item behavior
 
 The currently processing file must not disappear because the user pressed a generic Clear button.
@@ -926,7 +943,7 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
 
 # 77.3 Planned
 
-*Recorded 2026-10-04 by the product owner; not built.*
+*Recorded 2026-10-04 by the product owner. Both built the same day (ADR 0036, §32.1, §32.2).*
 
 - **How much was saved.** After compressing many videos or images there is no way to see how much
   smaller each file became, nor how much the whole batch saved. Show both, quietly.

@@ -117,9 +117,13 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         .align_x(Center);
     match state.outcomes.get(&job.id) {
         Some(Outcome::Ready {
-            placing, extension, ..
+            placing,
+            extension,
+            sizes,
+            ..
         }) => {
             details = details.push(choices(state, job, !placing));
+            details = details.push(caption(state.text.change(*sizes)));
             if let Some(change) = format_change(job, extension) {
                 details = details.push(caption(change));
             }
@@ -128,12 +132,31 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
             // Shown turned off, so it is clear there was nothing worth keeping (spec §40.1).
             details = details.push(choices(state, job, false));
         }
-        Some(Outcome::Placed { choice, path, .. }) => {
+        Some(Outcome::Placed {
+            choice,
+            path,
+            sizes,
+        }) => {
+            details = details.push(caption(state.text.change(*sizes)));
             details = details.push(caption(placed_caption(state, job, *choice, path)));
         }
         _ => {}
     }
-    content.push(details).into()
+    content = content.push(details);
+    // Looking at another file never hides the work: one quiet line leads back to it.
+    if let Some(current) = state.way_back() {
+        let label = format!(
+            "‹  {}  ·  {}",
+            shorten(&current.file_name(), DRAWER_NAME_CHARS),
+            status(state, current).label
+        );
+        content = content.push(
+            button(text(label).size(size::CAPTION).wrapping(Wrapping::None))
+                .style(style::quiet_button)
+                .on_press(Message::ShowCurrent),
+        );
+    }
+    content.into()
 }
 
 /// The mini-window next to the tray icon (spec §55): the video being worked on, with its dial
@@ -350,16 +373,12 @@ fn status(state: &Gracil, job: &Job) -> Status {
         JobState::Completed | JobState::Failed | JobState::Cancelled => {
             match state.outcomes.get(&job.id) {
                 Some(Outcome::Ready { placing: true, .. }) => Status::plain(state.text.saving),
-                Some(Outcome::Ready {
-                    smaller_by,
-                    problem,
-                    ..
-                }) => Status {
-                    label: state.text.smaller(*smaller_by),
+                Some(Outcome::Ready { sizes, problem, .. }) => Status {
+                    label: state.text.smaller(sizes.smaller_by()),
                     notice: problem.map(|failure| state.text.failure(failure)),
                 },
-                Some(Outcome::Placed { smaller_by, .. }) => {
-                    Status::plain(state.text.smaller(*smaller_by))
+                Some(Outcome::Placed { sizes, .. }) => {
+                    Status::plain(state.text.smaller(sizes.smaller_by()))
                 }
                 Some(Outcome::Failed(Failure::NotSmaller)) => Status {
                     label: state.text.not_smaller.into(),
@@ -379,17 +398,20 @@ fn status(state: &Gracil, job: &Job) -> Status {
     }
 }
 
-/// The drawer says what happened to a result in one word, since the focus shows the details.
+/// The drawer says what happened to a result in a few words, since the focus shows the details:
+/// how much smaller, and where it went (`−35%  ·  Replaced`).
 fn drawer_status(state: &Gracil, job: &Job) -> Status {
     match state.outcomes.get(&job.id) {
-        Some(Outcome::Placed {
-            choice: Choice::Replace,
-            ..
-        }) => Status::plain(state.text.replaced),
-        Some(Outcome::Placed {
-            choice: Choice::SaveCopy,
-            ..
-        }) => Status::plain(state.text.copy_saved),
+        Some(Outcome::Placed { choice, sizes, .. }) => {
+            let placed = match choice {
+                Choice::Replace => state.text.replaced,
+                Choice::SaveCopy => state.text.copy_saved,
+            };
+            Status::plain(format!(
+                "{}  ·  {placed}",
+                state.text.shrunk(sizes.smaller_by())
+            ))
+        }
         _ => status(state, job),
     }
 }
@@ -421,6 +443,11 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
     match state.waiting_count() {
         0 => {}
         n => summary.push_str(&format!("  ·  {}", state.text.ready(n))),
+    }
+    // With several files done, how much room they freed together (the drawer has the details).
+    let (total, done) = state.total();
+    if done >= 2 {
+        summary.push_str(&format!("  ·  {}", state.text.less(total)));
     }
     let toggle = if state.drawer_open {
         state.text.hide_files
@@ -466,6 +493,9 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
         any_removable.then_some(Message::Clear),
     ));
 
+    let (total, done) = state.total();
+    let in_all = (done >= 2).then(|| caption(state.text.in_all(total)));
+
     let rows = state.queue.jobs().iter().map(|job| {
         let line = row![
             container(name(job, DRAWER_NAME_CHARS, size::BODY)).width(Fill),
@@ -481,7 +511,11 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
             button(line)
                 .padding([space::XS, space::S])
                 .width(Fill)
-                .style(style::quiet_button)
+                .style(if state.selected == Some(job.id) {
+                    style::picked_row
+                } else {
+                    style::quiet_button
+                })
                 .on_press(Message::Select(job.id)),
             remove,
         ]
@@ -489,20 +523,20 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
         .into()
     });
 
-    container(
-        column![
-            header,
-            scrollable(column(rows).spacing(space::XS))
-                .spacing(space::XS)
-                .height(iced::Shrink),
-        ]
-        .spacing(space::XS)
-        .padding(space::S),
-    )
-    .max_height(DRAWER_MAX_HEIGHT)
-    .width(Fill)
-    .style(style::drawer)
-    .into()
+    let mut content = column![header].spacing(space::XS).padding(space::S);
+    if let Some(line) = in_all {
+        content = content.push(container(line).padding([0.0, space::S]));
+    }
+    content = content.push(
+        scrollable(column(rows).spacing(space::XS))
+            .spacing(space::XS)
+            .height(iced::Shrink),
+    );
+    container(content)
+        .max_height(DRAWER_MAX_HEIGHT)
+        .width(Fill)
+        .style(style::drawer)
+        .into()
 }
 
 /// A small "!" that explains itself on hover (spec §2.3).

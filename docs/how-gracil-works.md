@@ -54,9 +54,18 @@ format: MP4" (videos) and "Images" (photos and pictures) below.
 - Pausing freezes the work exactly where it is, and Gracil stops using the processor and
   graphics card. Resuming carries on from the same point; nothing is lost or started over. You
   can also stop while paused.
-- **View files**, under it, shows every video you added and how each one went: how much smaller
-  it became, or why it couldn't be compressed. Click a video there to show it large. The **×**
-  beside it takes it off the list, and **Clear** empties the list. Neither touches your original.
+- **View files**, under it, shows every video and image you added and how each one went: how much
+  smaller it became, where it went (for example **−35% · Replaced**), or why it couldn't be
+  compressed. With two or more done, a line at its top adds them all up, for example **In all:
+  3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says it in a few words, for
+  example **5 files · 1.2 GB smaller · View files**. Only what is still on the list counts:
+  taking files off it, or **Clear**, takes them out of the total.
+- Click a file in **View files** to show it large; it stays lit in the list while it shows. To go
+  back to the work, click it again, close **View files**, or click the quiet line under it that
+  names the file being compressed and how far along it is (‹ name · 42%). That line appears
+  whenever you are looking at another file while Gracil is working or a result waits for you.
+- The **×** beside a file takes it off the list, and **Clear** empties the list. Neither touches
+  your original.
 - You can always compress a video again, even one already on the list: if the list is done with
   it (it was replaced, saved, couldn't be compressed or was stopped), it starts again as new.
   Adding a video that is still waiting, being compressed or waiting for your choice does nothing.
@@ -65,7 +74,8 @@ format: MP4" (videos) and "Images" (photos and pictures) below.
 
 ## Replace, or keep a copy
 
-When a video is done, Gracil shows how much smaller it became and two buttons:
+When a video is done, Gracil shows how much smaller it became, its size before and after (for
+example **120 MB → 78 MB**), and two buttons:
 
 - **Replace** puts the smaller video in place of the original. It keeps the same name and the
   date it was created, so it still looks like the same video in your folders. Its "date modified"

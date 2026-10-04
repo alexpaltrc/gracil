@@ -57,13 +57,18 @@ Gracil is still being built, but you can already compress videos and images with
   advances. The middle of the ring holds the controls, as symbols instead of words: the top part
   pauses (II) and turns into play (▶) to resume, and the bottom part stops (■). Pausing frees up
   your computer while keeping the work done so far; resuming carries on from the same point.
-  **View files** shows every other video and how much smaller each one became. Click one to show
-  it large, or take it off the list with **×** or **Clear**. A video can always be compressed
-  again, even right after replacing it, without clearing the list first.
-- When a video is done, you see how much smaller it became and choose: **Replace** puts it in
-  place of the original, keeping its name and the date it was created; **Save copy** keeps your
-  original and saves the smaller one next to it as `Gracil-` followed by its name. With several
-  videos done, **Replace all** and **Save all copies** handle them in one go.
+  **View files** shows every other video and image, how much smaller each one became and where it
+  went, for example **−35% · Replaced**. With two or more done, it adds them all up, for example
+  **In all: 3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says how much room
+  they freed. Click a file to show it large; click it again, close **View files**, or click the
+  small line naming the file being compressed to go back to the ring. Take a file off the list
+  with **×** or **Clear**. A video can always be compressed again, even right after replacing
+  it, without clearing the list first.
+- When a video is done, you see how much smaller it became, and its size before and after, for
+  example **120 MB → 78 MB**. Then you choose: **Replace** puts it in place of the original,
+  keeping its name and the date it was created; **Save copy** keeps your original and saves
+  the smaller one next to it as `Gracil-` followed by its name. With several videos
+  done, **Replace all** and **Save all copies** handle them in one go.
 - If you always answer the same way, the line at the foot of the window lets you say so once:
   **Always**, then **Replace**, a small circle, and **Save a copy**. Pick either end and Gracil
   does that with every video that finishes from then on. On the circle in the middle, where it

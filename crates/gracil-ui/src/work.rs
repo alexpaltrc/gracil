@@ -52,6 +52,34 @@ pub enum Choice {
     SaveCopy,
 }
 
+/// How big a file was, and how big its compressed version is, in bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Sizes {
+    pub original: u64,
+    pub compressed: u64,
+}
+
+impl Sizes {
+    /// How much smaller, as a share of the original from 0 to 1.
+    pub fn smaller_by(self) -> f64 {
+        if self.original == 0 {
+            return 0.0;
+        }
+        1.0 - self.compressed as f64 / self.original as f64
+    }
+}
+
+impl std::ops::Add for Sizes {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            original: self.original + other.original,
+            compressed: self.compressed + other.compressed,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Outcome {
     /// Compressed and validated, waiting in `temp` for the user to choose.
@@ -59,7 +87,7 @@ pub enum Outcome {
         temp: PathBuf,
         /// The extension the result is saved with: `mp4`, or `jpg` or `png` for an image.
         extension: OsString,
-        smaller_by: f64,
+        sizes: Sizes,
         placing: bool,
         /// Why the last attempt to place it failed, if it did.
         problem: Option<Failure>,
@@ -67,7 +95,7 @@ pub enum Outcome {
     Placed {
         choice: Choice,
         path: PathBuf,
-        smaller_by: f64,
+        sizes: Sizes,
     },
     Failed(Failure),
     Cancelled,
@@ -77,6 +105,14 @@ impl Outcome {
     /// Compressed, and waiting for the user to choose replace or copy.
     pub fn is_waiting(&self) -> bool {
         matches!(self, Self::Ready { placing: false, .. })
+    }
+
+    /// The sizes before and after, for a file that came out smaller.
+    pub fn sizes(&self) -> Option<Sizes> {
+        match self {
+            Self::Ready { sizes, .. } | Self::Placed { sizes, .. } => Some(*sizes),
+            Self::Failed(_) | Self::Cancelled => None,
+        }
     }
 }
 
@@ -204,7 +240,10 @@ fn ready(temp: PathBuf, size: u64, extension: OsString, source: &Path) -> Outcom
     Outcome::Ready {
         temp,
         extension,
-        smaller_by: 1.0 - size as f64 / original as f64,
+        sizes: Sizes {
+            original,
+            compressed: size,
+        },
         placing: false,
         problem: None,
     }
