@@ -5,6 +5,8 @@
 //!   or Save copy after each one is done.
 //! - `gracil.exe --replace videos` and `--save-copy videos`: what File Explorer's commands send.
 //!   The videos are compressed in the background, and each result is placed as asked.
+//! - `--videos` or `--images` with either: only that kind, from the files and folders sent. A
+//!   folder is looked through, subfolders included (ADR 0035).
 //! - `gracil.exe --startup`: what Windows sends when it starts Gracil with the session. Gracil
 //!   stays in the tray with no window (ADR 0024).
 //!
@@ -13,6 +15,8 @@
 
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
+
+use gracil_core::media::Kind;
 
 use crate::work::Choice;
 
@@ -24,11 +28,15 @@ pub struct Request {
     pub paths: Vec<PathBuf>,
     /// Started with Windows: stay in the tray, show nothing.
     pub at_startup: bool,
+    /// Only videos, or only images, from what was sent (File Explorer's commands, ADR 0035).
+    pub only: Option<Kind>,
 }
 
 const REPLACE: &str = "--replace";
 const SAVE_COPY: &str = "--save-copy";
 const STARTUP: &str = "--startup";
+const VIDEOS: &str = "--videos";
+const IMAGES: &str = "--images";
 
 impl Request {
     /// Reads a command line without the program's own name.
@@ -37,6 +45,7 @@ impl Request {
             choice: None,
             paths: Vec::new(),
             at_startup: false,
+            only: None,
         };
         for argument in arguments {
             if argument == OsStr::new(REPLACE) {
@@ -45,6 +54,10 @@ impl Request {
                 request.choice = Some(Choice::SaveCopy);
             } else if argument == OsStr::new(STARTUP) {
                 request.at_startup = true;
+            } else if argument == OsStr::new(VIDEOS) {
+                request.only = Some(Kind::Video);
+            } else if argument == OsStr::new(IMAGES) {
+                request.only = Some(Kind::Image);
             } else {
                 // Absolute, so the same video named two ways is still one video.
                 let path = PathBuf::from(argument);
@@ -66,7 +79,17 @@ impl Request {
         };
         let paths = self.paths.iter().map(|path| path.clone().into_os_string());
         let startup = self.at_startup.then(|| OsString::from(STARTUP));
-        flag.into_iter().chain(startup).chain(paths).collect()
+        let only = self.only.map(|kind| {
+            OsString::from(match kind {
+                Kind::Video => VIDEOS,
+                Kind::Image => IMAGES,
+            })
+        });
+        flag.into_iter()
+            .chain(startup)
+            .chain(only)
+            .chain(paths)
+            .collect()
     }
 
     /// Whether this request needs the main window. A plain launch with nothing to add still does.
@@ -100,6 +123,16 @@ mod tests {
 
         let request = Request::parse(arguments(&["--save-copy", r"C:\a.mov"]));
         assert_eq!(request.choice, Some(Choice::SaveCopy));
+    }
+
+    #[test]
+    fn one_kind_only_survives_forwarding() {
+        let request = Request::parse(arguments(&["--save-copy", "--images", r"C:\Fotos"]));
+        assert_eq!(request.only, Some(Kind::Image));
+        assert_eq!(Request::parse(request.to_arguments()), request);
+        let request = Request::parse(arguments(&["--videos", r"C:\Fotos"]));
+        assert_eq!(request.only, Some(Kind::Video));
+        assert!(request.shows_window(), "asking opens the window");
     }
 
     #[test]

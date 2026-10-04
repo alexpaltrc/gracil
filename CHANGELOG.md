@@ -33,12 +33,14 @@ Gracil is still being built, but you can already compress videos and images with
   one went, and you can drop more videos on it. When a video is done, you can choose **Replace**
   or **Save copy** right there, without opening the big window. It stays open while you do other things until you
   close it or click the marble again; **Open Gracil** in it brings up the big window.
-- Right-click videos or images in File Explorer and choose **Gracil**, which shows how many files
-  you picked, for example **Gracil (3)**. Inside are **Compress and replace** and **Compress and
-  save a copy**. The files are compressed without opening the big window, and other files picked along
-  with them are left alone. The small window opens by itself so you can watch; if you'd rather it
-  didn't, untick **Show mini-window when compressing from File Explorer** in the marble's
-  right-click menu.
+- Right-click videos, images or a whole folder in File Explorer and choose **Gracil**, which shows
+  how many files you picked, for example **Gracil (3)**. For a folder, Gracil compresses every
+  video and image inside it, subfolders included, or only the videos, or only the images. The
+  commands follow the **Always** line of Gracil's window: "Compress and replace…" on Replace,
+  "Compress and save copies of…" on Save a copy, and just "Compress…" on the circle, which opens
+  Gracil's window and asks after each file. Other files picked along are left alone. The small
+  window opens by itself so you can watch; if you'd rather it didn't, untick **Show mini-window
+  when compressing from File Explorer** in the marble's right-click menu.
 - Gracil installs like any other Windows app, and starts by itself when you sign in, waiting
   quietly next to the clock until you give it videos. To stop that, turn Gracil off in Windows'
   **Settings → Apps → Startup**.

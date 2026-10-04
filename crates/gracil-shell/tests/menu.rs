@@ -73,7 +73,7 @@ fn touch(dir: &Path, name: &str) -> PathBuf {
 }
 
 #[test]
-fn the_menu_counts_videos_and_offers_both_commands() {
+fn the_menu_counts_files_and_offers_the_commands_that_apply() {
     let dir = fresh_dir("count");
     let videos = [
         touch(&dir, "Cumpleaños 🎂.mp4"),
@@ -96,15 +96,34 @@ fn the_menu_counts_videos_and_offers_both_commands() {
         let mut found = [None, None, None];
         let mut fetched = 0;
         let _ = commands.Next(&mut found, Some(&mut fetched));
-        assert_eq!(fetched, 2);
-        let titles: Vec<String> = found[..2]
+        assert_eq!(fetched, 3);
+        let commands: Vec<IExplorerCommand> = found.into_iter().map(Option::unwrap).collect();
+
+        // Videos only: just the videos command shows. Its words follow the Always setting.
+        let states: Vec<u32> = commands
             .iter()
-            .map(|command| text(command.as_ref().unwrap().GetTitle(&mixed).unwrap()))
+            .map(|command| command.GetState(&mixed, false).unwrap())
             .collect();
+        let (shown, hidden) = (ECS_ENABLED.0 as u32, ECS_HIDDEN.0 as u32);
+        assert_eq!(states, [hidden, shown, hidden]);
+        let title = text(commands[1].GetTitle(&mixed).unwrap());
         assert!(
-            titles == ["Compress and replace", "Compress and save a copy"]
-                || titles == ["Comprimir y reemplazar", "Comprimir y guardar como copia"],
-            "{titles:?}"
+            title.starts_with("Compr") && title.ends_with("videos"),
+            "{title}"
+        );
+
+        // A folder: plain "Gracil", all three commands, "in this folder".
+        let folder = selection(std::slice::from_ref(&dir));
+        assert_eq!(text(menu.GetTitle(&folder).unwrap()), "Gracil");
+        assert_eq!(menu.GetState(&folder, false).unwrap(), shown);
+        for command in &commands {
+            assert_eq!(command.GetState(&folder, false).unwrap(), shown);
+        }
+        let title = text(commands[0].GetTitle(&folder).unwrap());
+        assert!(
+            title.ends_with("videos and images in this folder")
+                || title.ends_with("videos e imágenes dentro de esta carpeta"),
+            "{title}"
         );
     }
     drop(menu);

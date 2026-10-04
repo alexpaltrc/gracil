@@ -605,7 +605,8 @@ impl Gracil {
         } else {
             Task::none()
         };
-        let paths: Vec<PathBuf> = files(request.paths).collect();
+        // Folders from File Explorer are looked through here (ADR 0035).
+        let paths = gracil_core::media::gather(request.paths, request.only);
         let added = self.add(paths.clone());
         let mut tasks = vec![show, added];
         if let Some(choice) = request.choice {

@@ -676,6 +676,11 @@ subcommands **Compress and replace** and **Compress and save a copy**. Support o
 selected videos. Whether a single file shows "Gracil" or "Gracil (1)" is a small copy decision;
 keep it easy to change.
 
+*Amended by [ADR 0035](decisions/0035-explorer-folders-and-always.md) (2026-10-04):* folders are
+accepted too, there are three commands (videos and images, videos, images), and their words follow
+the **Always** setting: "Compress and replace", "Compress and save copies of", or just "Compress",
+which opens the window and asks.
+
 # 59. Dynamic Explorer count
 
 Use the selected item collection to count supported videos for the title. Do not perform
@@ -918,6 +923,16 @@ What Gracil reads, and what it writes (ADR 0012):
 These are the extensions offered by the file picker and File Explorer's menu
 (`media::VIDEO_EXTENSIONS`). Any other file dropped on the window that is not a known image is
 handed to FFmpeg as a video and tried, never rejected up front (§2).
+
+# 77.3 Planned
+
+*Recorded 2026-10-04 by the product owner; not built.*
+
+- **How much was saved.** After compressing many videos or images there is no way to see how much
+  smaller each file became, nor how much the whole batch saved. Show both, quietly.
+- **Getting the dial back.** In a long list, selecting a file that failed (for example "Already
+  compressed") replaces the ring in the main window, and the only way back to the ring is to take
+  that file off the list. Going back to the work in progress must be easy and natural.
 
 # 78. Temporary UI decisions
 

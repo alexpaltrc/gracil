@@ -60,7 +60,8 @@ format: MP4" (videos) and "Images" (photos and pictures) below.
 - You can always compress a video again, even one already on the list: if the list is done with
   it (it was replaced, saved, couldn't be compressed or was stopped), it starts again as new.
   Adding a video that is still waiting, being compressed or waiting for your choice does nothing.
-  Folders are ignored for now.
+  A folder dropped on the window is ignored for now; to compress a whole folder, right-click it
+  in File Explorer (see below).
 
 ## Replace, or keep a copy
 
@@ -309,13 +310,27 @@ existing file.
 Gracil runs once. If you open it again, or open videos with it while it is already running, the
 Gracil you have comes forward and the videos join the same list.
 
-Right-click videos or images in File Explorer and you'll find **Gracil** in the menu, with the
-number of files in brackets when you picked more than one, for example **Gracil (3)**. Other files
-you picked along with them are left alone, and if none of them is a video or an image Gracil
-takes, the menu doesn't show Gracil at all. Inside are two choices: **Compress and replace** and
-**Compress and save a copy**. Either one compresses the files without opening the big window, and
-replaces them or saves copies as you chose. If Gracil is already running, the files join its
-list. If Gracil wasn't running, it starts for that, and closes by itself once the work is done.
+Right-click videos, images or a folder in File Explorer and you'll find **Gracil** in the menu,
+with the number of files in brackets when you picked more than one, for example **Gracil (3)**.
+Other files you picked along with them are left alone, and if there's no video, image or folder
+among them, the menu doesn't show Gracil at all.
+
+Inside, the commands say exactly what will happen, and they follow the **Always** line at the foot
+of Gracil's window:
+
+- On **Replace**: *Compress and replace videos and images*, *… videos* and *… images*.
+- On **Save a copy**: *Compress and save copies of videos and images*, and so on.
+- On the circle in the middle: just *Compress videos and images*, and so on. Gracil's window
+  opens and, as always on the circle, asks you after each file.
+
+For a folder, all three are there and end in *in this folder*: Gracil compresses every video and
+image inside it, subfolders included. *… videos* leaves the images alone and *… images* leaves the
+videos alone. For files, you see the command that fits what you picked: only videos, only images,
+or all three when you picked both.
+
+With **Replace** or **Save a copy**, the files are compressed without opening the big window. If
+Gracil is already running, the files join its list. If Gracil wasn't running, it starts for that,
+and closes by itself once the work is done.
 
 ## Starting with Windows
 

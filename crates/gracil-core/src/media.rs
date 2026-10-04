@@ -5,7 +5,7 @@
 //! decide without opening the file: the file picker's default filter, and File Explorer's menu,
 //! which has to answer at once (spec §59).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Extensions of common video files, lowercase and without the dot.
 pub const VIDEO_EXTENSIONS: &[&str] = &[
@@ -57,6 +57,46 @@ pub fn looks_like_media(path: &Path) -> bool {
     looks_like_video(path) || has_extension(path, IMAGE_EXTENSIONS)
 }
 
+/// The files to compress from what File Explorer sent (ADR 0035). A file given by itself is kept
+/// whatever its name, unless `only` asks for one kind. A folder is looked through, subfolders
+/// included, for the videos and images in it (of the `only` kind, when given), in name order.
+/// Links to other folders are not followed, so a folder can never lead back to itself.
+pub fn gather(paths: impl IntoIterator<Item = PathBuf>, only: Option<Kind>) -> Vec<PathBuf> {
+    let wanted = |path: &Path| only.is_none_or(|kind| kind_of(path) == kind);
+    let mut found = Vec::new();
+    for path in paths {
+        if path.is_dir() {
+            walk(
+                &path,
+                &|path| looks_like_media(path) && wanted(path),
+                &mut found,
+            );
+        } else if path.is_file() && (only.is_none() || looks_like_media(&path) && wanted(&path)) {
+            found.push(path);
+        }
+    }
+    found
+}
+
+fn walk(dir: &Path, wanted: &dyn Fn(&Path) -> bool, found: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    for entry in entries {
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        let path = entry.path();
+        if kind.is_dir() {
+            walk(&path, wanted, found);
+        } else if kind.is_file() && wanted(&path) {
+            found.push(path);
+        }
+    }
+}
+
 fn has_extension(path: &Path, known: &[&str]) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
@@ -96,5 +136,39 @@ mod tests {
             assert!(is_refused_image(Path::new(name)), "{name}");
             assert!(!looks_like_media(Path::new(name)), "{name}");
         }
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn folders_are_looked_through_with_their_subfolders() {
+        let root = std::env::temp_dir().join(format!("gracil-gather-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let deep = root.join("trip").join("day 1");
+        std::fs::create_dir_all(&deep).unwrap();
+        for name in ["b.mp4", "a.jpg", "notes.txt", "anim.gif"] {
+            std::fs::write(root.join(name), b"x").unwrap();
+        }
+        std::fs::write(deep.join("c.MOV"), b"x").unwrap();
+        std::fs::write(deep.join("d.heic"), b"x").unwrap();
+        let names = |found: Vec<PathBuf>| -> Vec<String> {
+            found
+                .iter()
+                .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
+                .collect()
+        };
+        let all = names(gather([root.clone()], None));
+        assert_eq!(all, ["a.jpg", "b.mp4", "c.MOV", "d.heic"]);
+        assert_eq!(
+            names(gather([root.clone()], Some(Kind::Video))),
+            ["b.mp4", "c.MOV"]
+        );
+        assert_eq!(
+            names(gather([root.clone()], Some(Kind::Image))),
+            ["a.jpg", "d.heic"]
+        );
+        // A file given by itself is taken whatever its name, as when it is dropped.
+        assert_eq!(names(gather([root.join("notes.txt")], None)), ["notes.txt"]);
+        assert!(gather([root.join("notes.txt")], Some(Kind::Video)).is_empty());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
