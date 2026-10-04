@@ -970,6 +970,11 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   below the ring. It could add a short summary of the whole batch, such as *22 files compressed*
   and *4 files were already compressed*. The aim is quick feedback that Gracil has finished,
   above all after a long list. The exact form is still open.
+- **A ring without its track.** The track the marble rolls along in the main window (the "pipe"
+  of the ring) is no longer drawn: only the marble and the part it has filled are seen, so the
+  marble fills an invisible circle. The thin line between pause and stop in the middle of the
+  ring goes too. Meant to look more elegant and give Gracil personality. Changes the look recorded
+  in ADR 0014, so an ADR amends it when it is built.
 
 # 78. Temporary UI decisions
 
