@@ -9,8 +9,9 @@ use iced::widget::text::Wrapping;
 use iced::widget::{Canvas, Space, button, column, container, row, scrollable, text, tooltip};
 use iced::{Center, Element, Fill, window};
 
-use crate::app::{EngineState, Gracil, Message};
+use crate::app::{EngineState, Finished, Gracil, Message};
 use crate::dial::{self, Dial};
+use crate::done::{self, Done};
 use crate::pill::pill;
 use crate::style::{self, size, space};
 use crate::work::{Choice, Failure, Outcome};
@@ -113,6 +114,12 @@ fn focus(state: &Gracil, hovering: bool) -> Element<'_, Message> {
     if hovering {
         return text(state.text.release_to_add).size(size::TITLE).into();
     }
+    // Once everything is done, a clear "done" instead of the last file (ADR 0039).
+    if state.selected.is_none()
+        && let Some(finished) = state.finished()
+    {
+        return finished_view(state, &finished);
+    }
     match state.focused() {
         Some(job) => focused(state, job),
         None if state.gathering > 0 => text(state.text.looking).size(size::TITLE).into(),
@@ -126,6 +133,27 @@ fn focus(state: &Gracil, hovering: bool) -> Element<'_, Message> {
         .align_x(Center)
         .into(),
     }
+}
+
+/// The whole list is done: the filled ring with a green check, how much room was saved, and how
+/// the list went (ADR 0039).
+fn finished_view<'a>(state: &'a Gracil, finished: &Finished) -> Element<'a, Message> {
+    let done = Done {
+        headline: state.text.headline(finished),
+    };
+    column![
+        Canvas::new(done)
+            .width(Fill)
+            .height(dial::SIZE + done::AMOUNT_ROOM),
+        text(state.text.summary(finished))
+            .size(size::BODY)
+            .style(style::muted)
+            .align_x(Center),
+    ]
+    .spacing(space::XS)
+    .align_x(Center)
+    .max_width(360)
+    .into()
 }
 
 fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {

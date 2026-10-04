@@ -99,6 +99,18 @@ const REVEAL_AT_THE_LATEST: Duration = Duration::from_secs(3);
 /// The mini-window's size, in logical pixels.
 const MINI_SIZE: Size = Size::new(340.0, 108.0);
 
+/// How the whole list went, once it is done.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Finished {
+    /// The files that came out smaller, added together.
+    pub saved: Sizes,
+    pub compressed: usize,
+    /// Files that were already about as small as they get.
+    pub already: usize,
+    /// Files that couldn't be compressed for another reason.
+    pub failed: usize,
+}
+
 #[derive(Debug, Clone)]
 pub enum EngineState {
     Starting,
@@ -811,6 +823,37 @@ impl Gracil {
             .fold((Sizes::default(), 0), |(sum, count), sizes| {
                 (sum + sizes, count + 1)
             })
+    }
+
+    /// The whole list is done, when it is (spec §77.3, ADR 0039): nothing is waiting, being worked
+    /// on, waiting for a choice or still being looked for, and at least one file finished rather
+    /// than being stopped.
+    pub fn finished(&self) -> Option<Finished> {
+        let busy = self.running.is_some()
+            || self.gathering > 0
+            || self.queue.jobs().iter().any(|job| !job.state.is_finished())
+            || self
+                .outcomes
+                .values()
+                .any(|outcome| matches!(outcome, Outcome::Ready { .. }));
+        if busy {
+            return None;
+        }
+        let mut finished = Finished::default();
+        for job in self.queue.jobs() {
+            match self.outcomes.get(&job.id) {
+                Some(Outcome::Placed { sizes, .. }) => {
+                    finished.saved = finished.saved + *sizes;
+                    finished.compressed += 1;
+                }
+                Some(Outcome::Failed(Failure::AsSmallAsItGets | Failure::NotSmaller)) => {
+                    finished.already += 1;
+                }
+                Some(Outcome::Failed(_)) => finished.failed += 1,
+                Some(Outcome::Ready { .. } | Outcome::Cancelled) | None => {}
+            }
+        }
+        (finished.compressed + finished.already + finished.failed > 0).then_some(finished)
     }
 
     /// What the mini-window shows: the video being compressed, else the first result waiting for

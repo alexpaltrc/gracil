@@ -6,6 +6,7 @@
 
 mod app;
 mod dial;
+mod done;
 mod logging;
 mod numbers;
 mod outside;

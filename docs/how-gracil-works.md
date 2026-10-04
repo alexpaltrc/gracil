@@ -70,6 +70,13 @@ format: MP4" (videos) and "Images" (photos and pictures) below.
   back to the work, click it again, close **View files**, or click the quiet line under it that
   names the file being compressed and how far along it is (‹ name · 42%). That line appears
   whenever you are looking at another file while Gracil is working or a result waits for you.
+- When the whole list is done (nothing left waiting, being compressed or waiting for your choice),
+  the window says so clearly: the ring stays full, its middle fills with green and a check mark
+  draws itself, and just below, in large letters, how much room the list saved, for example
+  **130 MB smaller** (or **All done** if nothing came out smaller). Under it, a quiet line says how
+  the list went, for example **22 files compressed · 4 were already compressed**, and how many
+  couldn't be compressed, if any. Pick a file in **View files** to look at it; add more files and
+  Gracil gets back to work.
 - The **×** beside a file takes it off the list, and **Clear** empties the list. Neither touches
   your original.
 - You can always compress a video again, even one already on the list: if the list is done with

@@ -43,3 +43,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0036](0036-sizes-and-the-way-back.md) | Sizes before and after, the list added up, and the way back to the work |
 | [0037](0037-looking-through-folders-in-the-background.md) | Folders from File Explorer are looked through in the background, folder by folder |
 | [0038](0038-a-ring-without-its-track.md) | The ring has no visible track and no line between pause and stop |
+| [0039](0039-a-clear-done.md) | A clear "done": a green check in the ring, the room saved, and how the list went |

@@ -5,6 +5,7 @@
 
 use gracil_windows::TrayState;
 
+use crate::app::Finished;
 use crate::numbers::Numbers;
 use crate::work::{Failure, Sizes};
 
@@ -70,6 +71,8 @@ pub struct Text {
     /// The pill's two ends: always replace, always save a copy. Its middle, "ask each time", is a
     /// small circle rather than a word.
     pub always_choices: [&'static str; 2],
+    /// The big line once everything is done, when nothing came out smaller.
+    pub all_done: &'static str,
     smaller: fn(u32) -> String,
     in_all: fn(&str, u32) -> String,
     less: fn(&str) -> String,
@@ -77,6 +80,9 @@ pub struct Text {
     files: fn(usize, &str) -> String,
     ready: fn(usize, &str) -> String,
     in_line: fn(usize, &str) -> String,
+    compressed: fn(usize, &str) -> String,
+    already: fn(usize, &str) -> String,
+    failed: fn(usize, &str) -> String,
     saved_as: fn(&str) -> String,
     replaced_by: fn(&str) -> String,
     tray_tip: fn(TrayState) -> String,
@@ -165,6 +171,30 @@ impl Text {
         (self.in_line)(count, &number(count))
     }
 
+    /// The big line once the whole list is done: how much room it saved, or, when nothing came
+    /// out smaller, that all is done.
+    pub fn headline(&self, finished: &Finished) -> String {
+        if finished.compressed > 0 {
+            self.less(finished.saved)
+        } else {
+            self.all_done.to_owned()
+        }
+    }
+
+    /// How the whole list went: `22 files compressed  ·  4 were already compressed`.
+    pub fn summary(&self, finished: &Finished) -> String {
+        [
+            (finished.compressed, self.compressed),
+            (finished.already, self.already),
+            (finished.failed, self.failed),
+        ]
+        .into_iter()
+        .filter(|&(count, _)| count > 0)
+        .map(|(count, words)| words(count, &number(count)))
+        .collect::<Vec<_>>()
+        .join("  ·  ")
+    }
+
     pub fn saved_as(&self, name: &str) -> String {
         (self.saved_as)(name)
     }
@@ -250,6 +280,16 @@ static ENGLISH: Text = Text {
     explorer_mini_window: "Show mini-window when compressing from File Explorer",
     always: "Always",
     always_choices: ["Replace", "Save a copy"],
+    all_done: "All done",
+    compressed: |count, written| match count {
+        1 => "1 file compressed".to_owned(),
+        _ => format!("{written} files compressed"),
+    },
+    already: |count, written| match count {
+        1 => "1 was already compressed".to_owned(),
+        _ => format!("{written} were already compressed"),
+    },
+    failed: |_, written| format!("{written} couldn't be compressed"),
     in_line: |_, written| format!("{written} waiting"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
@@ -337,6 +377,19 @@ static SPANISH: Text = Text {
     explorer_mini_window: "Mostrar miniventana al comprimir desde el Explorador de archivos",
     always: "Siempre",
     always_choices: ["Reemplazar", "Guardar como copia"],
+    all_done: "Todo listo",
+    compressed: |count, written| match count {
+        1 => "1 archivo comprimido".to_owned(),
+        _ => format!("{written} archivos comprimidos"),
+    },
+    already: |count, written| match count {
+        1 => "1 ya estaba comprimido".to_owned(),
+        _ => format!("{written} ya estaban comprimidos"),
+    },
+    failed: |count, written| match count {
+        1 => "1 no se pudo comprimir".to_owned(),
+        _ => format!("{written} no se pudieron comprimir"),
+    },
     in_line: |_, written| format!("{written} en espera"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
@@ -434,6 +487,35 @@ mod tests {
             es.files(15_031),
             "15,031 archivos",
             "in the number format of Windows"
+        );
+    }
+
+    #[test]
+    fn a_finished_list_says_how_it_went() {
+        let (en, es) = (Text::get(Language::English), Text::get(Language::Spanish));
+        let finished = Finished {
+            saved: Sizes {
+                original: 300 * 1024 * 1024,
+                compressed: 170 * 1024 * 1024,
+            },
+            compressed: 22,
+            already: 4,
+            failed: 0,
+        };
+        assert_eq!(es.headline(&finished), "130 MB menos");
+        assert_eq!(
+            es.summary(&finished),
+            "22 archivos comprimidos  ·  4 ya estaban comprimidos"
+        );
+        let nothing_smaller = Finished {
+            already: 1,
+            failed: 1_204,
+            ..Finished::default()
+        };
+        assert_eq!(en.headline(&nothing_smaller), "All done");
+        assert_eq!(
+            en.summary(&nothing_smaller),
+            "1 was already compressed  ·  1,204 couldn't be compressed"
         );
     }
 

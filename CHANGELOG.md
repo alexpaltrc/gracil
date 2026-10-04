@@ -58,17 +58,21 @@ Gracil is still being built, but you can already compress videos and images with
 - Moving images (such as GIF), camera RAW files, JPEG XL and photos stored in HDR aren't
   compressed: they are left exactly as they are, and a small "!" says why.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
-  advances, filling an invisible circle with color behind it. The middle of the ring holds the controls, as symbols instead of words: the top part
-  pauses (II) and turns into play (▶) to resume, and the bottom part stops (■). Pausing frees up
-  your computer while keeping the work done so far; resuming carries on from the same point.
-  **View files**, which opens at once even with thousands of files, shows every other video and
-  image, how much smaller each one became and where it
-  went, for example **−35% · Replaced**. With two or more done, it adds them all up, for example
+  advances, filling an invisible circle with color behind it. The middle of the ring holds the
+  controls, as symbols instead of words: the top part pauses (II) and turns into play (▶) to
+  resume, and the bottom part stops (■). Pausing frees up your computer while keeping the work
+  done so far; resuming carries on from the same point. **View files**, which opens at once even
+  with thousands of files, shows every other video and image, how much smaller each one became
+  and where it went, for example **−35% · Replaced**. With two or more done, it adds them all up, for example
   **In all: 3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says how much room
   they freed. Click a file to show it large; click it again, close **View files**, or click the
   small line naming the file being compressed to go back to the ring. Take a file off the list
   with **×** or **Clear**. A video can always be compressed again, even right after replacing
   it, without clearing the list first.
+- When the whole list is done, the window says so clearly: the ring's middle fills with green and
+  a check mark draws itself, and just below, in large letters, how much room the list saved, for
+  example **130 MB smaller**, with a quiet line such as **22 files compressed · 4 were already
+  compressed**.
 - When a video is done, you see how much smaller it became, and its size before and after, for
   example **120 MB → 78 MB**. Then you choose: **Replace** puts it in place of the original,
   keeping its name and the date it was created; **Save copy** keeps your original and saves

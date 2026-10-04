@@ -181,12 +181,10 @@ impl canvas::Program<Message> for Dial {
         let center = frame.center();
         let scale = scale(bounds.size());
         let pipe_width = PIPE_WIDTH * scale;
-        let outer = SIZE * scale / 2.0 - 1.0;
-        let pipe = outer - pipe_width / 2.0;
-        let radius = middle_radius(bounds.size());
+        let (pipe, trail_width, radius) = ring(bounds.size());
 
-        // No pipe is drawn, only what the marble has filled (ADR 0038): from twelve o'clock clockwise, behind the marble: the
-        // accent, like the filled part of Windows' own sliders.
+        // No pipe is drawn, only what the marble has filled (ADR 0038): from twelve o'clock
+        // clockwise, behind the marble, in the accent, like the filled part of Windows' sliders.
         let head = -FRAC_PI_2 + TAU * state.fill;
         if state.fill > 0.001 {
             let trail = Path::new(|path| {
@@ -200,7 +198,7 @@ impl canvas::Program<Message> for Dial {
             frame.stroke(
                 &trail,
                 Stroke::default()
-                    .with_width(pipe_width - 5.0 * scale)
+                    .with_width(trail_width)
                     .with_line_cap(LineCap::Butt)
                     .with_color(tokens.accent.scale_alpha(1.0 - 0.35 * state.play)),
             );
@@ -306,6 +304,15 @@ impl canvas::Program<Message> for Dial {
             mouse::Interaction::default()
         }
     }
+}
+
+/// Where a dial drawn in `bounds` puts its ring: the ring's radius, the width of its filled part,
+/// and the radius of its middle. The finished view draws the same shapes.
+pub fn ring(bounds: Size) -> (f32, f32, f32) {
+    let scale = scale(bounds);
+    let pipe_width = PIPE_WIDTH * scale;
+    let pipe = SIZE * scale / 2.0 - 1.0 - pipe_width / 2.0;
+    (pipe, pipe_width - 5.0 * scale, middle_radius(bounds))
 }
 
 /// The radius of the buttons in the middle of the circle.

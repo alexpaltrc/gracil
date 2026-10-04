@@ -974,7 +974,7 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   the amount saved ("130 MB smaller") brought to the center, larger, with a subtle animation, just
   below the ring. It could add a short summary of the whole batch, such as *22 files compressed*
   and *4 files were already compressed*. The aim is quick feedback that Gracil has finished,
-  above all after a long list. The exact form is still open.
+  above all after a long list. The exact form is still open. *Built 2026-10-04 (ADR 0039).*
 - **A ring without its track.** The track the marble rolls along in the main window (the "pipe"
   of the ring) is no longer drawn: only the marble and the part it has filled are seen, so the
   marble fills an invisible circle. The thin line between pause and stop in the middle of the
