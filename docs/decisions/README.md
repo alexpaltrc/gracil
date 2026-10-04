@@ -37,3 +37,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0030](0030-faster-quality-measurement.md) | Faster quality measurement: every other frame, and on the GPU when FFmpeg can |
 | [0031](0031-windows-11-colors.md) | Windows 11's own colors and the user's accent |
 | [0032](0032-resolution-pill.md) | "Always": keep the resolution, ask, or reduce (withdrawn) |
+| [0033](0033-keep-the-resolution.md) | Every video keeps its resolution; compressing again loses a little, without asking |

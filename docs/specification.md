@@ -328,7 +328,9 @@ This was the starting point. Gracil's own quality standard replaces its fixed va
 - Each video finds its own quality level: short samples are encoded and measured against the
   source (VMAF), and the smallest level that still scores at least 95 is used. CQ 27 remains the
   fallback when no measurement is possible.
-- A video whose short side is above 1080 pixels becomes 1080; smaller ones keep their size.
+- Every video keeps its resolution (ADR 0033; at first, a short side above 1080 became 1080).
+- A video that is already compressed is compressed again at a VMAF of 90 instead of 95, without
+  asking, when that makes it clearly smaller (ADR 0033).
 - Above 30 frames per second becomes 30; 30 or fewer is kept.
 - Audio is copied where compatible, except heavy audio (lossless, or a very high bitrate), which
   becomes AAC.

@@ -17,7 +17,7 @@ use crate::leftovers;
 use crate::plan::{self, Attempt, EncodePlan};
 use crate::probe::{self, MediaInfo, ProbeError, StreamKind};
 use crate::progress::fraction;
-use crate::search::{self, Found, Lighter};
+use crate::search::{self, Found};
 use crate::toolchain::{self, Resolved, Toolchain, ToolchainError};
 
 /// A ready FFmpeg and what it can do on this computer. Built once per process.
@@ -71,10 +71,10 @@ pub enum CompressError {
     Cancelled,
     #[error("FFmpeg could not compress the file: {0}")]
     Failed(String),
-    /// Compressing it to look the same would not make it clearly smaller (ADR 0029). Nothing was
-    /// encoded; these lighter choices can be offered instead, and may be none.
-    #[error("the video is already compressed")]
-    AlreadyCompressed(Vec<Lighter>),
+    /// Already compressed, and not even compressing it again would make it clearly smaller (ADR
+    /// 0029, ADR 0033). Nothing was encoded.
+    #[error("the video is already about as small as it gets")]
+    AsSmallAsItGets,
 }
 
 /// Compresses `source`, trying each [`plan::attempts`] step until one produces a valid file.
@@ -84,25 +84,13 @@ pub fn compress(
     control: &JobControl,
     on_update: &mut dyn FnMut(Update),
 ) -> Result<Compressed, CompressError> {
-    compress_with(engine, source, None, control, on_update)
-}
-
-/// Like [`compress`], with a lighter choice the user made for an already-compressed video: its
-/// size and level are used without searching again.
-pub fn compress_with(
-    engine: &Engine,
-    source: &Path,
-    choice: Option<Lighter>,
-    control: &JobControl,
-    on_update: &mut dyn FnMut(Update),
-) -> Result<Compressed, CompressError> {
     let info = probe::probe(&engine.toolchain, source)?;
     if !info.has_video() {
         return Err(CompressError::NoVideo);
     }
     let temp = reserve_temp(source)?;
 
-    let result = run_attempts(engine, source, &temp, &info, choice, control, on_update);
+    let result = run_attempts(engine, source, &temp, &info, control, on_update);
     if result.is_err()
         && let Err(error) = fs::remove_file(&temp)
     {
@@ -116,60 +104,38 @@ fn run_attempts(
     source: &Path,
     temp: &Path,
     info: &MediaInfo,
-    choice: Option<Lighter>,
     control: &JobControl,
     on_update: &mut dyn FnMut(Update),
 ) -> Result<Compressed, CompressError> {
     let capabilities = engine.capabilities;
-    let plan_for = |attempt: Attempt, level| {
-        let plan = EncodePlan::new(source, temp, info, attempt, capabilities, level);
-        match choice {
-            Some(choice) => plan.with_shape(choice.shape),
-            None => plan,
-        }
-    };
-    // Resizing frames left on the GPU needs `scale_cuda`; without it those attempts are skipped.
-    let attempts: Vec<Attempt> = plan::attempts(capabilities)
-        .into_iter()
-        .filter(|&attempt| {
-            let resizes = || {
-                plan_for(attempt, 0)
-                    .main_video()
-                    .is_some_and(|(_, shape)| shape.size.is_some())
-            };
-            !attempt.hw_decode || capabilities.scale_cuda || !resizes()
-        })
-        .collect();
+    let plan_for =
+        |attempt: Attempt, level| EncodePlan::new(source, temp, info, attempt, capabilities, level);
+    let attempts = plan::attempts(capabilities);
 
     // Shown as "getting ready" until the first attempt reports progress; Stop works throughout.
     on_update(Update {
         fraction: fraction(Duration::ZERO, info.duration),
         speed: None,
     });
-    let found = match (choice, attempts.first()) {
-        // The choice was measured when it was offered.
-        (Some(_), _) | (None, None) => Found::Fallback,
-        (None, Some(&first)) => {
+    let found = match attempts.first() {
+        None => Found::Fallback,
+        Some(&first) => {
             let fallback = Found::Fallback.level_for(first.encoder);
             search::find_level(&engine.toolchain, &plan_for(first, fallback), info, control)
         }
     };
     match found {
         Found::Cancelled => return Err(CompressError::Cancelled),
-        Found::Lighter(choices) => return Err(CompressError::AlreadyCompressed(choices)),
+        Found::AsSmallAsItGets => return Err(CompressError::AsSmallAsItGets),
         Found::Level { .. } | Found::Fallback => {}
     }
-    let level_for = |encoder| match choice {
-        Some(choice) => choice.level_for(encoder),
-        None => found.level_for(encoder),
-    };
 
     let mut last_error = String::new();
     for attempt in attempts {
         if control.is_cancelled() {
             return Err(CompressError::Cancelled);
         }
-        let plan = plan_for(attempt, level_for(attempt.encoder));
+        let plan = plan_for(attempt, found.level_for(attempt.encoder));
         info!(?attempt, level = plan.level, dropped = ?plan.dropped, "encoding");
         on_update(Update {
             fraction: fraction(Duration::ZERO, info.duration),

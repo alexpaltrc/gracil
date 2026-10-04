@@ -1,5 +1,5 @@
 //! Gracil's quality standard (ADR 0028): encoder settings, the quality search's target and
-//! ranges, and the size, frame-rate and audio rules. Everything here is pure.
+//! ranges, and the frame-rate and audio rules. Everything here is pure.
 
 use std::ops::RangeInclusive;
 
@@ -9,9 +9,9 @@ use crate::probe::{Rate, Stream};
 /// The VMAF score a video's level must reach: no visible difference at normal viewing.
 pub const TARGET_SCORE: f64 = 95.0;
 
-/// The VMAF score of the lighter choices offered for an already-compressed video (ADR 0029): some
-/// loss the user accepts to get a real reduction.
-pub const LIGHTER_SCORE: f64 = 90.0;
+/// The VMAF score for a video that is already compressed (ADR 0033): compressing it again loses a
+/// little, which is what the user asks for by compressing it again.
+pub const AGAIN_SCORE: f64 = 90.0;
 
 /// A compression is worth doing only when its predicted size is at most this share of the
 /// original (ADR 0029).
@@ -25,8 +25,8 @@ pub fn levels(encoder: VideoEncoder) -> RangeInclusive<u8> {
     }
 }
 
-/// The levels searched for the lighter choices: further towards small files.
-pub fn lighter_levels(encoder: VideoEncoder) -> RangeInclusive<u8> {
+/// The levels searched for a video that is already compressed: further towards small files.
+pub fn again_levels(encoder: VideoEncoder) -> RangeInclusive<u8> {
     match encoder {
         VideoEncoder::Nvenc => 24..=42,
         VideoEncoder::X265 => 20..=38,
@@ -104,18 +104,12 @@ pub fn pixel_format(ten_bit: bool, encoder: VideoEncoder) -> &'static str {
     }
 }
 
-/// Picture size and frame rate a video leaves with. `None` keeps the source's.
+/// The frame rate a video leaves with. `None` keeps the source's. Its picture size is always kept
+/// (ADR 0033).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Shape {
-    pub size: Option<(u32, u32)>,
     pub rate: Option<Rate>,
 }
-
-/// The short side a video is brought down to, never up.
-const MAX_SHORT_SIDE: u32 = 1080;
-
-/// The short sides a video steps down to when the user asks for a smaller size.
-const SMALLER_STEPS: [u32; 2] = [720, 480];
 
 /// Sources averaging more frames per second than this are brought down to 30; it leaves 29.97
 /// and slightly irregular 30 fps phone videos alone.
@@ -124,53 +118,13 @@ const MAX_RATE: f64 = 30.5;
 impl Shape {
     pub fn of(stream: &Stream) -> Self {
         Self {
-            size: stream
-                .width
-                .zip(stream.height)
-                .and_then(|size| smaller_size(size, MAX_SHORT_SIDE)),
             rate: stream.frame_rate.and_then(slower_rate),
         }
-    }
-
-    /// Like [`Self::of`], one size down (ADR 0029): the short side becomes the next of
-    /// [`SMALLER_STEPS`] below the one [`Self::of`] gives. `None` at 480 or smaller, or when the
-    /// size is unknown.
-    pub fn one_size_down(stream: &Stream) -> Option<Self> {
-        let size = stream.width.zip(stream.height)?;
-        let short = size.0.min(size.1).min(MAX_SHORT_SIDE);
-        let step = SMALLER_STEPS.into_iter().find(|&step| step < short)?;
-        Some(Self {
-            size: smaller_size(size, step),
-            ..Self::of(stream)
-        })
-    }
-
-    /// The short side of the picture this shape gives `stream`, when known.
-    pub fn short_side(self, stream: &Stream) -> Option<u32> {
-        self.size
-            .or(stream.width.zip(stream.height))
-            .map(|(width, height)| width.min(height))
     }
 
     pub fn is_unchanged(self) -> bool {
         self == Self::default()
     }
-}
-
-/// Scales so the short side is `max_short`, keeping the aspect ratio and even dimensions.
-fn smaller_size((width, height): (u32, u32), max_short: u32) -> Option<(u32, u32)> {
-    let (short, long) = (width.min(height), width.max(height));
-    if short <= max_short {
-        return None;
-    }
-    let scaled = f64::from(long) * f64::from(max_short) / f64::from(short);
-    // At most the long side itself, so the result fits in a `u32`.
-    let long = ((scaled / 2.0).round() as u32 * 2).max(2);
-    Some(if width >= height {
-        (long, max_short)
-    } else {
-        (max_short, long)
-    })
 }
 
 /// 30 fps, or 29.97 for the NTSC family (59.94, 119.88) so the timing stays regular.
@@ -218,48 +172,6 @@ mod tests {
             height: Some(height),
             frame_rate: Some(Rate { num, den }),
             ..Stream::default()
-        }
-    }
-
-    #[test]
-    fn only_videos_above_1080p_shrink() {
-        let cases = [
-            ((3840, 2160), Some((1920, 1080))),
-            ((2160, 3840), Some((1080, 1920))),
-            ((2560, 1440), Some((1920, 1080))),
-            ((4096, 2160), Some((2048, 1080))),
-            ((1920, 1080), None),
-            ((1080, 1920), None),
-            ((854, 480), None),
-            ((1920, 1088), Some((1906, 1080))),
-            ((2880, 1440), Some((2160, 1080))),
-        ];
-        for ((w, h), expected) in cases {
-            assert_eq!(Shape::of(&video(w, h, 30, 1)).size, expected, "{w}x{h}");
-        }
-    }
-
-    #[test]
-    fn one_size_down_never_goes_below_480() {
-        let cases = [
-            ((3840, 2160), Some((1280, 720))),
-            ((1920, 1080), Some((1280, 720))),
-            ((1080, 1920), Some((720, 1280))),
-            ((1320, 720), Some((880, 480))),
-            ((1024, 600), Some((820, 480))),
-            ((854, 480), None),
-            ((640, 360), None),
-        ];
-        for ((w, h), expected) in cases {
-            let shape = Shape::one_size_down(&video(w, h, 60, 1));
-            assert_eq!(shape.map(|s| s.size), expected.map(Some), "{w}x{h}");
-            if let Some(shape) = shape {
-                assert_eq!(
-                    shape.rate,
-                    Some(Rate { num: 30, den: 1 }),
-                    "keeps the rate rule"
-                );
-            }
         }
     }
 

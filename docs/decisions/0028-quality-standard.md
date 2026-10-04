@@ -1,8 +1,9 @@
 # 0028 — Gracil's quality standard: each video finds its own level
 
-**Status:** Accepted, amended by ADR 0029 (no adaptive quantization; size check). Decided by
-the product owner (2026-10-03). Supersedes the fixed settings of spec §21 (preset P6, CQ 27
-for every video); the encoder choice of §22 and the attempt ladder are unchanged.
+**Status:** Accepted, amended by ADR 0029 (no adaptive quantization; size check) and ADR 0033
+(item 5, size: every video keeps its resolution). Decided by the product owner (2026-10-03).
+Supersedes the fixed settings of spec §21 (preset P6, CQ 27 for every video); the encoder choice
+of §22 and the attempt ladder are unchanged.
 
 **Context.** One fixed setting treats every video the same. A calm phone clip could be much
 smaller at the same visible quality, while a grainy or detailed one needs more room. Real results

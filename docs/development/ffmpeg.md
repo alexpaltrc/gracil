@@ -46,9 +46,9 @@ Detected once per process (`Capabilities::detect`):
   B-frame references and multipass; `Basic` drops the B-frame settings; `Legacy` is the original
   8-bit p6 setting. No tier uses adaptive quantization or the temporal filter (ADR 0029).
 - **CUDA decoding**: NVENC works and `-hwaccels` lists `cuda`.
-- **Filters**: `-filters` lists `scale_cuda` (resizing frames left on the GPU) and `libvmaf` (the
-  quality search). The essentials build has both. `libvmaf_cuda` with `hwupload_cuda` (VMAF on the
-  GPU, ADR 0030) is used when present; no public Windows build has it.
+- **Filters**: `-filters` lists `libvmaf` (the quality search); the essentials build has it.
+  `libvmaf_cuda` with `scale_cuda` and `hwupload_cuda` (VMAF on the GPU, ADR 0030) is used when
+  present; no public Windows build has it.
 - **x265 10-bit**: `-h encoder=libx265` lists `yuv420p10le`.
 - Without NVENC, `libx265` on the CPU does the encoding.
 
@@ -71,9 +71,6 @@ the source is damaged at that point, and the next attempt would stop there too.
 The output is accepted when FFprobe reads it, it holds HEVC video, and its length matches the
 source within 1% or one second.
 
-An attempt that decodes on the GPU is skipped when the video must be resized and `scale_cuda` is
-missing.
-
 ### Settings (ADR 0028)
 
 - NVENC: `hevc_nvenc` with the detected tier's options (`standard::NvencLevel::options`) and
@@ -82,11 +79,10 @@ missing.
   -b_ref_mode middle -multipass fullres`.
 - x265: `-preset medium -x265-params log-level=error -crf <level>`, 10-bit when supported.
 - HEVC is tagged `hvc1` so Apple devices and Windows players accept it.
-- **Size and frame rate** (`standard::Shape`): a short side above 1080 is scaled to 1080 (Lanczos,
-  even dimensions); an average above 30.5 fps becomes 30, or 30000/1001 for the NTSC family.
-  Smaller or slower videos are left as they are. Filters go per stream (`-filter:<out>`):
-  `fps`, then `scale_cuda` on GPU frames or `scale` plus `format=p010le`/`yuv420p10le`/`yuv420p`
-  on CPU frames. GPU frames need no format filter; `-highbitdepth 1` handles 10-bit.
+- **Size and frame rate** (`standard::Shape`): the picture size is never changed (ADR 0033). An
+  average above 30.5 fps becomes 30, or 30000/1001 for the NTSC family; slower videos are left as
+  they are. Filters go per stream (`-filter:<out>`): `fps`, then, on CPU frames only,
+  `format=p010le`/`yuv420p10le`/`yuv420p`. GPU frames need no format filter; `-highbitdepth 1` handles 10-bit.
 
 ### Quality search (`search.rs`)
 
@@ -100,7 +96,7 @@ whole search. One FFmpeg process per sample does both jobs, writing nothing to d
 
 ```text
 -ss START -t 4 -i file:SRC
--filter_complex "[0:N]fps…,scale…,split[source][reference];[source]format=…[encode];[reference]format=yuv420p[ref]"
+-filter_complex "[0:N]fps…,split[source][reference];[source]format=…[encode];[reference]format=yuv420p[ref]"
 -map [encode] <encoder options at level> -stats_enc_post:0 pipe:1 -stats_enc_post_fmt:0 "{n} {size}" -f null -
 -dec 0:0 -filter_complex "[dec:0]format=yuv420p[encoded];[encoded][ref]libvmaf=n_threads=…:pool=harmonic_mean:n_subsample=2[vmaf]"
 -map [vmaf] -f null -
@@ -123,18 +119,16 @@ stream that is not re-encoded at its size in the source. A level that reaches 95
 it is predicted to be at most 80% of the original; the search gives up early once a level that
 misses 95 is already predicted above 80%.
 
-**Already compressed.** Otherwise nothing is encoded and `find_level` returns `Found::Lighter`
-with up to two choices at VMAF ≥ 90 (NVENC CQ 24–42, x265 CRF 20–38): the video's own size, and
-one size down (short side 1080 → 720 → 480, never below 480, scored against the source scaled to
-that same size). Each is kept only if predicted at most 80% of the original, and the smaller size
-only if lighter than the first. `compress_with` then encodes the user's pick without searching
-again.
+**Already compressed (ADR 0033).** Otherwise the video was already compressed, and compressing it
+again is allowed to lose a little: the search continues for the highest level reaching VMAF 90
+(NVENC CQ 24–42, x265 CRF 20–38), at the video's own size. That level is used if predicted at most
+80% of the original; if not, nothing is encoded and `find_level` returns `Found::AsSmallAsItGets`.
 
 The search is skipped (fixed level: CQ 27, CRF 26) for videos under 6 s, of unknown length, under
 60 s with x265, or without `libvmaf`, and whenever a measurement fails. If no level reaches 95, the
 best quality in the range is used. Attempts with a different encoder than the first use their
 fixed level. Cancelling stops the search. Every measured level, its score and predicted video size
-are logged, as are the choice and the lighter choices.
+are logged, as is the choice.
 
 ### Keeping what matters (spec §41)
 

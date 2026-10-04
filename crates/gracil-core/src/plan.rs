@@ -138,25 +138,12 @@ impl EncodePlan {
         }
     }
 
-    /// The first video that is encoded, with what happens to its size and frame rate.
+    /// The first video that is encoded, with what happens to its frame rate.
     pub fn main_video(&self) -> Option<(u32, Shape)> {
         self.streams.iter().find_map(|s| match s.action {
             StreamAction::EncodeVideo(shape) => Some((s.source_index, shape)),
             _ => None,
         })
-    }
-
-    /// The same plan with the main video leaving in `shape` instead, for a lighter choice
-    /// (ADR 0029).
-    pub fn with_shape(mut self, shape: Shape) -> Self {
-        if let Some(stream) = self
-            .streams
-            .iter_mut()
-            .find(|s| matches!(s.action, StreamAction::EncodeVideo(_)))
-        {
-            stream.action = StreamAction::EncodeVideo(shape);
-        }
-        self
     }
 
     /// The complete FFmpeg argument list. The output file must already exist (Gracil reserves it),
@@ -223,7 +210,7 @@ impl EncodePlan {
     }
 }
 
-/// Resizing, frame rate and pixel format for one encoded video, as FFmpeg filters in order.
+/// Frame rate and pixel format for one encoded video, as FFmpeg filters in order.
 /// `gpu_frames` means the frames are still on the GPU, where NVENC reads them as they are.
 pub(crate) fn video_filters(
     shape: Shape,
@@ -234,13 +221,6 @@ pub(crate) fn video_filters(
     let mut filters = Vec::new();
     if let Some(rate) = shape.rate {
         filters.push(format!("fps={}/{}", rate.num, rate.den));
-    }
-    if let Some((width, height)) = shape.size {
-        filters.push(if gpu_frames {
-            format!("scale_cuda=w={width}:h={height}:interp_algo=lanczos")
-        } else {
-            format!("scale=w={width}:h={height}:flags=lanczos")
-        });
     }
     if !gpu_frames {
         let ten_bit = capabilities.ten_bit(encoder);
@@ -307,10 +287,7 @@ mod tests {
     use crate::standard::NvencLevel;
     use StreamAction::*;
 
-    const SAME: StreamAction = EncodeVideo(Shape {
-        size: None,
-        rate: None,
-    });
+    const SAME: StreamAction = EncodeVideo(Shape { rate: None });
 
     fn stream(index: u32, kind: StreamKind, codec: &str) -> Stream {
         Stream {
@@ -350,7 +327,6 @@ mod tests {
             cuda_decode: true,
             nvenc,
             x265_10bit: true,
-            scale_cuda: true,
             vmaf: true,
             vmaf_cuda: false,
         }
@@ -432,7 +408,7 @@ mod tests {
     }
 
     #[test]
-    fn large_fast_videos_shrink_on_the_gpu_or_the_cpu() {
+    fn large_fast_videos_keep_their_size_and_slow_down() {
         let mut source = stream(0, StreamKind::Video, "h264");
         source.width = Some(3840);
         source.height = Some(2160);
@@ -440,18 +416,14 @@ mod tests {
         let info = info(vec![source]);
 
         let on_gpu = joined(&plan(&info, nvenc_full()));
-        assert!(
-            on_gpu.contains("-filter:0 fps=30/1,scale_cuda=w=1920:h=1080:interp_algo=lanczos -c:0")
-        );
+        assert!(on_gpu.contains("-filter:0 fps=30/1 -c:0"));
 
         let software = Attempt {
             hw_decode: false,
             ..nvenc_full()
         };
         let on_cpu = joined(&plan(&info, software));
-        assert!(
-            on_cpu.contains("-filter:0 fps=30/1,scale=w=1920:h=1080:flags=lanczos,format=p010le")
-        );
+        assert!(on_cpu.contains("-filter:0 fps=30/1,format=p010le"));
     }
 
     #[test]

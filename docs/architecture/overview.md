@@ -52,9 +52,9 @@ build, verify it and install it privately (ADR 0008).
 list `hevc_nvenc`, then a sub-second test encode must succeed; the richest NVENC settings tier
 that passes is kept. Before encoding, `gracil_core::search` measures short samples with VMAF to
 pick the video's quality level and predict its size (ADR 0028, ADR 0029); a video already
-compressed too hard to shrink that way gets lighter choices for the user instead.
-`gracil_core::standard` decides resizing (short side to 1080), frame rate (to 30) and audio
-conversion. Each job then walks a ladder of attempts, from fastest to most forgiving: NVENC with
+compressed too hard to shrink that way is searched again at a slightly lower quality target (ADR
+0033). `gracil_core::standard` decides frame rate (to 30) and audio conversion; the picture size
+is never changed. Each job then walks a ladder of attempts, from fastest to most forgiving: NVENC with
 CUDA decoding → NVENC with software decoding → NVENC keeping only essential streams → `libx265`
 keeping only essential streams (without NVENC: `libx265` full, then essential). See [`../development/ffmpeg.md`](../development/ffmpeg.md).
 

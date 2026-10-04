@@ -2,14 +2,16 @@
 //! (ADR 0029).
 //!
 //! Short samples spread through the video are encoded at candidate levels and compared with the
-//! source using VMAF, both with the same size and frame-rate changes. The highest level (the
+//! source using VMAF, both with the same frame-rate change. The highest level (the
 //! smallest file) whose average score reaches [`standard::TARGET_SCORE`] wins. Each sample is one
 //! FFmpeg process that encodes and measures at once, through a loopback decoder, so nothing is
 //! written to disk. The same process reports the size of every encoded frame, from which the size
 //! of the whole result is predicted.
 //!
-//! When that level would not make the video clearly smaller, the video is already compressed:
-//! nothing is encoded, and two lighter choices are measured for the user instead.
+//! When that level would not make the video clearly smaller, the video is already compressed, and
+//! the highest level reaching [`standard::AGAIN_SCORE`] is used instead (ADR 0033): compressing
+//! again loses a little, which is what the user asks for. If even that would not be clearly
+//! smaller, nothing is encoded.
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -24,7 +26,7 @@ use tracing::{info, warn};
 use crate::capabilities::{Capabilities, VideoEncoder};
 use crate::encode::{self, EncodeOutcome, JobControl};
 use crate::plan::{self, Attempt, EncodePlan, StreamAction};
-use crate::probe::{MediaInfo, Stream, file_url};
+use crate::probe::{MediaInfo, file_url};
 use crate::standard::{self, Shape};
 use crate::toolchain::Toolchain;
 
@@ -48,10 +50,9 @@ pub enum Found {
         encoder: VideoEncoder,
         level: u8,
     },
-    /// The video is already compressed: compressing it to look the same would not make it
-    /// clearly smaller. These are the lighter choices worth offering, keeping the size first;
-    /// none when even they would not be.
-    Lighter(Vec<Lighter>),
+    /// The video is already compressed, and not even compressing it again (ADR 0033) would make
+    /// it clearly smaller. Nothing is encoded.
+    AsSmallAsItGets,
     /// Nothing could be measured; each encoder uses its fallback level.
     Fallback,
     Cancelled,
@@ -67,32 +68,6 @@ impl Found {
     }
 }
 
-/// A lighter way to compress an already-compressed video, which the user may choose (ADR 0029).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Lighter {
-    pub encoder: VideoEncoder,
-    pub level: u8,
-    /// Size and frame rate the main video leaves with.
-    pub shape: Shape,
-    /// Whether the picture becomes smaller than Gracil would normally make it.
-    pub smaller: bool,
-    /// The picture's short side afterwards, such as 720 for 720p, when known.
-    pub short_side: Option<u32>,
-    /// The whole file's predicted size, in bytes.
-    pub predicted: u64,
-}
-
-impl Lighter {
-    /// The level to use with `encoder`: this choice's, or that encoder's fallback.
-    pub fn level_for(&self, encoder: VideoEncoder) -> u8 {
-        if encoder == self.encoder {
-            self.level
-        } else {
-            standard::fallback_level(encoder)
-        }
-    }
-}
-
 /// Searches the level for `plan`'s main video, encoded the way `plan.attempt` would.
 pub fn find_level(
     toolchain: &Toolchain,
@@ -102,9 +77,6 @@ pub fn find_level(
 ) -> Found {
     let encoder = plan.attempt.encoder;
     let Some((index, shape)) = plan.main_video() else {
-        return Found::Fallback;
-    };
-    let Some(stream) = info.streams.iter().find(|s| s.index == index) else {
         return Found::Fallback;
     };
     let shortest = match encoder {
@@ -137,7 +109,7 @@ pub fn find_level(
             kept: kept_bytes(info, plan, original, duration),
         }
     });
-    match choose(&mut search, sizes, stream) {
+    match choose(&mut search, sizes) {
         Ok(found) => found,
         Err(Halt::Cancelled) => Found::Cancelled,
         Err(Halt::Failed(error)) => {
@@ -148,8 +120,9 @@ pub fn find_level(
     }
 }
 
-/// Picks the level that looks the same; if that is not worth it, the lighter choices.
-fn choose(search: &mut Search, sizes: Option<Sizes>, stream: &Stream) -> Result<Found, Halt> {
+/// Picks the level that looks the same. If that is not worth it, the video was already compressed,
+/// and it gets the level that loses a little (ADR 0033), when that one is worth it.
+fn choose(search: &mut Search, sizes: Option<Sizes>) -> Result<Found, Halt> {
     let encoder = search.attempt.encoder;
     let levels = standard::levels(encoder);
     // A level that already misses the target and is still too big: every level that reaches the
@@ -183,50 +156,30 @@ fn choose(search: &mut Search, sizes: Option<Sizes>, stream: &Stream) -> Result<
     }
     info!(
         original = sizes.original,
-        "already compressed; measuring lighter choices"
+        "already compressed; measuring the level for compressing again"
     );
 
-    let lighter_levels = standard::lighter_levels(encoder);
     let never = |_: &Measured| false;
-    let mut choices: Vec<Lighter> = Vec::with_capacity(2);
-    let mut offer = |search: &mut Search, level: u8, smaller: bool| -> Result<(), Halt> {
-        let Some(predicted) = sizes.predicted(&search.measure(level)?) else {
-            return Ok(());
-        };
-        // One size down is only worth offering when it is lighter than keeping the size.
-        let lighter_than_first = choices
-            .first()
-            .is_none_or(|first| predicted < first.predicted);
-        if sizes.worth_it(Some(predicted)) && lighter_than_first {
-            choices.push(Lighter {
-                encoder,
-                level,
-                shape: search.shape,
-                smaller,
-                short_side: search.shape.short_side(stream),
-                predicted,
-            });
-        }
-        Ok(())
-    };
-    let kept = search.highest(
-        lighter_levels.clone(),
-        standard::LIGHTER_SCORE,
+    let again = search.highest(
+        standard::again_levels(encoder),
+        standard::AGAIN_SCORE,
         None,
         &never,
     )?;
-    if let Some(level) = kept {
-        offer(search, level, false)?;
-    }
-    if let Some(shape) = Shape::one_size_down(stream) {
-        let mut smaller = search.with_shape(shape);
-        let level = smaller.highest(lighter_levels, standard::LIGHTER_SCORE, kept, &never)?;
-        if let Some(level) = level {
-            offer(&mut smaller, level, true)?;
+    if let Some(level) = again {
+        let predicted = sizes.predicted(&search.measure(level)?);
+        if sizes.worth_it(predicted) {
+            info!(
+                level,
+                ?predicted,
+                original = sizes.original,
+                "chose a level for compressing again"
+            );
+            return Ok(Found::Level { encoder, level });
         }
     }
-    info!(?choices, "lighter choices");
-    Ok(Found::Lighter(choices))
+    info!(original = sizes.original, "already as small as it gets");
+    Ok(Found::AsSmallAsItGets)
 }
 
 /// The original's size, and what the result's size is judged against.
@@ -347,16 +300,6 @@ struct Search<'a> {
 }
 
 impl<'a> Search<'a> {
-    /// A search of the same video with the main video leaving in `shape`.
-    fn with_shape(&self, shape: Shape) -> Search<'a> {
-        Search {
-            shape,
-            starts: self.starts.clone(),
-            measured: BTreeMap::new(),
-            ..*self
-        }
-    }
-
     /// The highest level in `levels` whose score reaches `target`, assuming scores fall as
     /// levels rise. Starts from what is already measured, then tries `hint` first if given. Stops
     /// with [`Halt::GaveUp`] as soon as `give_up` holds for a new measurement.
@@ -397,7 +340,6 @@ impl<'a> Search<'a> {
         info!(
             level,
             score = measured.score,
-            size = ?self.shape.size,
             video_mb = measured.video_bytes.map(|bytes| (bytes / 1e6).round()),
             "measured a quality level"
         );

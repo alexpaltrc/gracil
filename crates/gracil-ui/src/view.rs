@@ -3,7 +3,6 @@
 use gracil_core::job::JobState;
 use gracil_core::plan::output_extension;
 use gracil_core::queue::Job;
-use gracil_core::search::Lighter;
 use iced::widget::text::Wrapping;
 use iced::widget::{Canvas, Space, button, column, container, row, scrollable, text, tooltip};
 use iced::{Center, Element, Fill, window};
@@ -122,9 +121,6 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
                 details = details.push(caption(change));
             }
         }
-        Some(Outcome::Lighter(offered)) => {
-            details = details.push(lighter_choices(state, job, offered));
-        }
         Some(Outcome::Failed(Failure::NotSmaller)) => {
             // Shown turned off, so it is clear there was nothing worth keeping (spec §40.1).
             details = details.push(choices(state, job, false));
@@ -179,9 +175,6 @@ fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         // The choice is made right here, without opening the big window.
         Some(Outcome::Ready { placing, .. }) => {
             details = details.push(mini_choices(state, job, !placing));
-        }
-        Some(Outcome::Lighter(offered)) => {
-            details = details.push(mini_lighter_choices(state, job, offered));
         }
         Some(Outcome::Placed { choice, path, .. }) => {
             details = details.push(caption(placed_caption(state, job, *choice, path)));
@@ -277,35 +270,6 @@ fn mini_choices(state: &Gracil, job: &Job, enabled: bool) -> Element<'static, Me
     .into()
 }
 
-/// The lighter versions of an already-compressed video, one above the other, each with its
-/// predicted size (ADR 0029). Picking one compresses it.
-fn lighter_choices(state: &Gracil, job: &Job, offered: &[Lighter]) -> Element<'static, Message> {
-    let buttons = offered.iter().map(|&choice| {
-        button(text(state.text.lighter(&choice, false)).size(size::BODY))
-            .padding([space::XS, space::M])
-            .style(style::action_button)
-            .on_press(Message::Lighten(job.id, choice))
-            .into()
-    });
-    column(buttons).spacing(space::S).align_x(Center).into()
-}
-
-/// The same versions in few words, side by side, for the mini-window.
-fn mini_lighter_choices(
-    state: &Gracil,
-    job: &Job,
-    offered: &[Lighter],
-) -> Element<'static, Message> {
-    let buttons = offered.iter().map(|&choice| {
-        button(text(state.text.lighter(&choice, true)).size(size::CAPTION))
-            .padding([2.0, space::S])
-            .style(style::action_button)
-            .on_press(Message::Lighten(job.id, choice))
-            .into()
-    });
-    row(buttons).spacing(space::XS).into()
-}
-
 fn placed_caption(state: &Gracil, job: &Job, choice: Choice, path: &std::path::Path) -> String {
     let placed_name = path.file_name().unwrap_or_default().to_string_lossy();
     match choice {
@@ -397,10 +361,6 @@ fn status(state: &Gracil, job: &Job) -> Status {
                 Some(Outcome::Failed(Failure::NotSmaller)) => Status {
                     label: state.text.not_smaller.into(),
                     notice: Some(state.text.failure(Failure::NotSmaller)),
-                },
-                Some(Outcome::Lighter(_)) => Status {
-                    label: state.text.already_compressed.into(),
-                    notice: Some(state.text.why_lighter),
                 },
                 Some(Outcome::Failed(Failure::AsSmallAsItGets)) => Status {
                     label: state.text.already_compressed.into(),

@@ -65,8 +65,6 @@ pub struct Capabilities {
     pub nvenc: NvencLevel,
     /// x265 can encode 10-bit video.
     pub x265_10bit: bool,
-    /// Resizing on the GPU, for videos decoded there.
-    pub scale_cuda: bool,
     /// VMAF, to measure each video's quality level.
     pub vmaf: bool,
     /// VMAF on the GPU (`libvmaf_cuda`), used instead of the CPU when this FFmpeg has it and the
@@ -100,7 +98,6 @@ impl Capabilities {
             cuda_decode,
             nvenc: nvenc.unwrap_or_default(),
             x265_10bit,
-            scale_cuda: lists_filter(&filters, "scale_cuda"),
             vmaf: lists_filter(&filters, "libvmaf"),
             vmaf_cuda: cuda_decode
                 && ["libvmaf_cuda", "scale_cuda", "hwupload_cuda"]

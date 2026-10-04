@@ -7,11 +7,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
 
-use gracil_core::compress::{CompressError, Compressed, Engine, compress_with};
+use gracil_core::compress::{CompressError, Compressed, Engine, compress};
 use gracil_core::encode::JobControl;
 use gracil_core::leftovers;
 use gracil_core::output::{replace_original, save_as_new};
-use gracil_core::search::Lighter;
 use gracil_core::toolchain;
 use iced::Task;
 use iced::futures::SinkExt;
@@ -27,7 +26,8 @@ pub enum Failure {
     Unreadable,
     CouldNotCompress,
     NotSmaller,
-    /// Already compressed, and no lighter version would be clearly smaller (ADR 0029).
+    /// Already compressed, and not even compressing it again would make it clearly smaller (ADR
+    /// 0029, ADR 0033).
     AsSmallAsItGets,
     CouldNotSave,
     NameTaken,
@@ -55,9 +55,6 @@ pub enum Outcome {
         path: PathBuf,
         smaller_by: f64,
     },
-    /// Already compressed: nothing was encoded, and these lighter versions wait for the user to
-    /// pick one (ADR 0029).
-    Lighter(Vec<Lighter>),
     Failed(Failure),
     Cancelled,
 }
@@ -66,11 +63,6 @@ impl Outcome {
     /// Compressed, and waiting for the user to choose replace or copy.
     pub fn is_waiting(&self) -> bool {
         matches!(self, Self::Ready { placing: false, .. })
-    }
-
-    /// Waiting for the user: to choose replace or copy, or to pick a lighter version.
-    pub fn needs_choice(&self) -> bool {
-        self.is_waiting() || matches!(self, Self::Lighter(_))
     }
 }
 
@@ -105,17 +97,11 @@ fn tidy_leftovers(private_dir: &Path) {
     }
 }
 
-/// Compresses `source`, leaving the result beside it for the user to place. `choice` is the lighter
-/// version the user picked for an already-compressed video.
-pub fn compress_video(
-    engine: Arc<Engine>,
-    source: PathBuf,
-    choice: Option<Lighter>,
-    control: JobControl,
-) -> Task<Report> {
+/// Compresses `source`, leaving the result beside it for the user to place.
+pub fn compress_video(engine: Arc<Engine>, source: PathBuf, control: JobControl) -> Task<Report> {
     on_thread(move |mut sender: Sender<Report>| {
         let mut progress = sender.clone();
-        let result = compress_with(&engine, &source, choice, &control, &mut |update| {
+        let result = compress(&engine, &source, &control, &mut |update| {
             // Progress is best effort: when the window is busy, a skipped update costs nothing.
             let _ = progress.try_send(Report::Progress(update.fraction));
         });
@@ -123,13 +109,9 @@ pub fn compress_video(
         let outcome = match result {
             Ok(compressed) => ready(compressed, &source),
             Err(CompressError::Cancelled) => Outcome::Cancelled,
-            Err(CompressError::AlreadyCompressed(choices)) if choices.is_empty() => {
+            Err(CompressError::AsSmallAsItGets) => {
                 info!("already as small as it gets");
                 Outcome::Failed(Failure::AsSmallAsItGets)
-            }
-            Err(CompressError::AlreadyCompressed(choices)) => {
-                info!(?choices, "already compressed; lighter versions offered");
-                Outcome::Lighter(choices)
             }
             Err(e) => {
                 warn!(error = %e, "compression failed");
@@ -139,7 +121,7 @@ pub fn compress_video(
                     CompressError::Io(_) => Failure::CouldNotSave,
                     CompressError::Failed(_)
                     | CompressError::Cancelled
-                    | CompressError::AlreadyCompressed(_) => Failure::CouldNotCompress,
+                    | CompressError::AsSmallAsItGets => Failure::CouldNotCompress,
                 })
             }
         };

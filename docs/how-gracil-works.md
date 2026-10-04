@@ -148,28 +148,22 @@ the result will be clearly smaller, about a fifth smaller or more.
 
 Some videos have already been squeezed hard, like most downloads from the web or a video Gracil
 already compressed once. Compressing them again without any visible change would barely make them
-smaller, so Gracil doesn't spend minutes doing it. Instead it says **Already compressed** and
-offers two lighter versions, each with the size it will roughly have:
+smaller. If you give Gracil one of these, you are asking for it to be smaller still, so Gracil
+does that on its own, without asking: it compresses a little harder, keeping the picture's size.
+It may look a little less sharp than the first time. Looking exactly like the original is the
+promise of a video's first compression; after that, you decide by compressing it again.
 
-- **Keep 1080p, compress more** keeps the picture's size and compresses harder. It may look a
-  little less sharp.
-- **Make it 720p** also makes the picture one size smaller: Full HD becomes 720p, 720p becomes
-  480p. Nothing ever goes below 480p, and videos that small don't get this choice.
+Gracil still only goes ahead when the result will be clearly smaller. If not even compressing
+harder would manage that, the video stays as it is, and it shows **Already compressed** with a
+small "!" saying it is already about as small as it can get.
 
-Pick one and the video goes back in line and compresses that way, with no more waiting to
-measure. Gracil only offers a version that will really make the video lighter, and the second one
-only when it is lighter than the first. If neither would, the video stays as it is, and a small
-"!" says it is already about as small as it can get.
-
-Finding these versions takes a little longer than usual, up to about a minute and a half for a
-long Full HD video. Losing some sharpness is only ever your choice: Gracil never does it on its
-own.
+Checking this takes a little longer than usual for these videos, up to about a minute for a long
+Full HD video.
 
 ## Size and smoothness
 
-- Videos larger than Full HD (1080p), such as 4K, become Full HD. That keeps them sharp on
-  phones, laptops and most TVs, and makes them much smaller. Full HD and smaller videos keep their
-  size: a 480p video stays 480p.
+- Every video keeps its picture size: a 4K video stays 4K and a 480p video stays 480p. Gracil
+  never makes the picture smaller.
 - Videos with more than 30 frames per second (60 fps, or slow motion recorded at 120 or 240)
   become 30 frames per second. Videos at 30 or fewer keep exactly the rate they had. Slow-motion
   clips that your phone plays slowed down lose that effect, because the extra frames that made it
@@ -295,12 +289,11 @@ Click the marble and a small window opens right next to it, wherever your taskba
 the video being compressed and how far along it is; click its circle to pause or carry on, just
 like in the big window. When a video is done, it shows how much smaller it became with
 **Replace** and **Save copy**, so you can choose right there without opening the big window
-(unless **Always** already chose for you). If a video is already compressed, its two lighter versions
-show up here too, as short buttons with their sizes, so you can pick one right away. If more videos finish while another is compressing, it
-says how many are ready and shows them one by one when the work is done. It also tells you how many videos are waiting and, once one is placed,
-where it went. You can drop more videos on it. It stays open while you do other things; close it
-with its **×** or by clicking the marble again, and use **Open Gracil** in it to get the big
-window.
+(unless **Always** already chose for you). If more videos finish while another is compressing,
+it says how many are ready and shows them one by one when the work is done. It also tells you how
+many videos are waiting and, once one is placed, where it went. You can drop more videos on it.
+It stays open while you do other things; close it with its **×** or by clicking the marble
+again, and use **Open Gracil** in it to get the big window.
 
 When you compress from File Explorer, this small window opens by itself so you can see the
 work happen. If you'd rather it didn't, right-click the marble and untick **Show mini-window when

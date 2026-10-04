@@ -81,16 +81,15 @@ Gracil is still being built, but you can already compress videos with it.
 - Gracil makes videos lighter, never heavier. Those same short moments tell it how big the video
   will come out, so it only compresses when the result will be clearly smaller, instead of working
   for minutes to find out it isn't.
-- Videos that are already compressed, like most web downloads, show **Already compressed** with
-  two lighter versions and the size each will roughly have: **Keep 1080p, compress more**, or
-  **Make it 720p** (one size smaller, never below 480p). They may look a little less sharp, so
-  Gracil only does it if you pick one. You can choose in the big window or in the small one next
-  to the clock. If neither would make the video lighter, it stays as it is and a small "!" says
-  it's already about as small as it can get.
+- Videos that are already compressed, like most web downloads or a video Gracil already
+  compressed, are compressed a little harder on their own, without asking. They may look a little
+  less sharp than the first time, which is what compressing a video again asks for. If not even
+  that would make the video clearly lighter, it stays as it is and shows **Already compressed**
+  with a small "!" saying it's already about as small as it can get.
 - Colours are stored more finely, so skies and shadows stay smooth instead of banded.
-- Videos larger than Full HD, such as 4K, become Full HD; smaller videos keep their size. Videos
-  with more than 30 frames per second become 30; slower ones keep exactly the rate they had. Slow
-  motion recorded by a phone loses its slowed-down effect.
+- Every video keeps its picture size, 4K included. Videos with more than 30 frames per second
+  become 30; slower ones keep exactly the rate they had. Slow motion recorded by a phone loses its
+  slowed-down effect.
 - Sound that takes much more room than it needs, such as uncompressed sound from cameras, is made
   compact and still sounds the same for normal listening.
 - If a video is unusual, Gracil quietly tries simpler ways until one works, instead of giving up.

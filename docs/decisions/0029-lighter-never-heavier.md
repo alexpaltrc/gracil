@@ -1,8 +1,10 @@
 # 0029 — Lighter, never heavier: predicted sizes and already-compressed videos
 
-**Status:** Accepted. Decided by the product owner (2026-10-03). Amends ADR 0028: removes adaptive
-quantization and the temporal filter from the NVENC tiers, and adds a size check to the quality
-search.
+**Status:** Accepted; items 4 and 5 (lighter choices, asking) are superseded by
+[0033](0033-keep-the-resolution.md): an already-compressed video is compressed again at VMAF 90,
+at its own size, without asking. Decided by the product owner (2026-10-03). Amends ADR 0028:
+removes adaptive quantization and the temporal filter from the NVENC tiers, and adds a size check
+to the quality search.
 
 **Context.** With ADR 0028's settings, three real videos (an H.264 web download and two earlier
 Gracil results, 0.03–0.05 bits per pixel) came out 18–79% *larger* than their sources, after four
