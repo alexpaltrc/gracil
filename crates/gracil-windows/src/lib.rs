@@ -9,6 +9,7 @@ mod icon;
 mod instance;
 mod lifetime;
 mod process;
+mod theme;
 mod tray;
 
 pub use appear::{park, unpark};
@@ -17,6 +18,7 @@ pub use icon::set_window_icon;
 pub use instance::{claim, forward, is_running, serve};
 pub use lifetime::end_children_with_this_process;
 pub use process::set_suspended;
+pub use theme::light_apps;
 pub use tray::{Tray, TrayEvent, TrayMenu, TrayState};
 
 use std::ffi::OsStr;

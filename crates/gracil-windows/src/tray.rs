@@ -16,7 +16,6 @@ use std::thread;
 
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows_sys::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
 use windows_sys::Win32::UI::HiDpi::{GetDpiForSystem, GetSystemMetricsForDpi};
 use windows_sys::Win32::UI::Shell::{
     NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NIM_SETVERSION,
@@ -127,7 +126,7 @@ impl Tray {
                 icon: 0,
                 added: false,
                 gone: false,
-                light_taskbar: light_taskbar(),
+                light_taskbar: crate::theme::light_taskbar(),
                 explorer_mini_window: false,
             }),
         };
@@ -302,7 +301,7 @@ unsafe extern "system" fn window_procedure(
         }
         WM_SETTINGCHANGE if is_theme_change(lparam) => {
             if let Some(shared) = SHARED.get() {
-                lock(shared).light_taskbar = light_taskbar();
+                lock(shared).light_taskbar = crate::theme::light_taskbar();
             }
             refresh(window);
             0
@@ -472,29 +471,6 @@ fn make_icon(state: TrayState, light_taskbar: bool) -> Option<HICON> {
         )
     };
     (!icon.is_null()).then_some(icon)
-}
-
-/// Whether the taskbar is light. Windows 11's taskbar is dark unless the user chose light.
-fn light_taskbar() -> bool {
-    let key = wide(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-    let value = wide("SystemUsesLightTheme");
-    let mut data: u32 = 0;
-    let mut size = size_of::<u32>() as u32;
-    // SAFETY: the names are NUL-terminated UTF-16 buffers, and `data` has room for the DWORD that
-    // the flags restrict the answer to.
-    #[allow(unsafe_code)]
-    let status = unsafe {
-        RegGetValueW(
-            HKEY_CURRENT_USER,
-            key.as_ptr(),
-            value.as_ptr(),
-            RRF_RT_REG_DWORD,
-            ptr::null_mut(),
-            (&raw mut data).cast(),
-            &mut size,
-        )
-    };
-    status == 0 && data != 0
 }
 
 /// Whether a settings broadcast is about light and dark.

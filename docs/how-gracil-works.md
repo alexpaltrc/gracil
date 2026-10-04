@@ -22,7 +22,8 @@ to set: if Windows is in Spanish, Gracil is too; otherwise it's in English.
 
 Gracil follows Windows' light or dark mode, with nothing to set. Its colors are soft mineral greys
 and ivory. If you switch Windows between light and dark while Gracil is open, Gracil follows right
-away, fading gently from one to the other instead of flashing.
+away, fading gently from one to the other instead of flashing. Its windows always open
+in the right one from the very first moment.
 Every word and every button is chosen to stay easy to read in both, by the usual accessibility
 measure: the buttons for what to do with a finished video are filled, so they stand out clearly.
 

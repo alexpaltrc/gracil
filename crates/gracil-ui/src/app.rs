@@ -176,6 +176,10 @@ impl Gracil {
         if let Some(tray) = &tray {
             tray.check_explorer_mini_window(settings.explorer_mini_window);
         }
+        // Read from Windows itself: Iced only learns the theme once a window exists, so its first
+        // answer would come too late and the first window would fade from light (ADR 0015).
+        let mode =
+            gracil_windows::light_apps().map(|light| if light { Mode::Light } else { Mode::Dark });
         let state = Self {
             queue: Queue::default(),
             outcomes: HashMap::new(),
@@ -185,8 +189,8 @@ impl Gracil {
             selected: None,
             last_placed: None,
             text,
-            theme: style::theme(style::palette(Mode::Light)),
-            mode: None,
+            theme: style::theme(style::palette(mode.unwrap_or(Mode::Light))),
+            mode,
             shift: None,
             running: None,
             main: None,
@@ -972,7 +976,7 @@ impl Gracil {
     /// Follows Windows between light and dark. The first answer is applied at once, so Gracil
     /// opens in the right colors; later changes fade softly (ADR 0015).
     fn follow_theme(&mut self, mode: Mode, now: Instant) {
-        if self.mode == Some(mode) {
+        if mode == Mode::None || self.mode == Some(mode) {
             return;
         }
         let first = self.mode.is_none();

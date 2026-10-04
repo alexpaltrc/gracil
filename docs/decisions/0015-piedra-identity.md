@@ -41,9 +41,12 @@ those names so they match the delivery's checksums.
    [`../design/previous-palette.md`](../design/previous-palette.md).
 2. The dial borrows the logo: its trail is the support color and the stone-grey marble rests on
    it, edged in the background color so it stays readable in both themes.
-3. Gracil always follows Windows' light or dark theme. The first answer is applied at once, so the
-   window opens in the right colors; later changes fade between the two palettes over 600 ms,
-   slow at both ends. Frames are requested only during the fade (spec §51).
+3. Gracil always follows Windows' light or dark theme. At start it reads the apps' theme from
+   Windows' settings (`gracil_windows::light_apps`) and applies it at once, so the first window
+   opens in the right colors: Iced only learns the theme once a window exists, and a mini-window
+   opened from File Explorer used to appear light and then fade to dark. Later changes fade
+   between the two palettes over 600 ms, slow at both ends. Frames are
+   requested only during the fade (spec §51).
 4. The identity's files live in the repository: icons (ICO, PNG, SVG) in `assets/icons/`, MSIX
    assets in `packaging/msix/Assets/`, the presentation and its notes in `docs/design/piedra/`.
 
