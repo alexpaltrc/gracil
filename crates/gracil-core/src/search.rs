@@ -10,6 +10,9 @@
 //!
 //! When that level would not make the video clearly smaller, the video is already compressed:
 //! nothing is encoded, and two lighter choices are measured for the user instead.
+//!
+//! With the "Always" resolution pill on its circle (ADR 0032), a video that would be clearly smaller
+//! is also measured one size down; when that is lighter still, the user picks between the two.
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -25,7 +28,7 @@ use crate::capabilities::{Capabilities, VideoEncoder};
 use crate::encode::{self, EncodeOutcome, JobControl};
 use crate::plan::{self, Attempt, EncodePlan, StreamAction};
 use crate::probe::{MediaInfo, Stream, file_url};
-use crate::standard::{self, Shape};
+use crate::standard::{self, Resize, Shape};
 use crate::toolchain::Toolchain;
 
 /// Length of one sample.
@@ -48,9 +51,10 @@ pub enum Found {
         encoder: VideoEncoder,
         level: u8,
     },
-    /// The video is already compressed: compressing it to look the same would not make it
-    /// clearly smaller. These are the lighter choices worth offering, keeping the size first;
-    /// none when even they would not be.
+    /// The user chooses: the video is already compressed, and compressing it to look the same
+    /// would not make it clearly smaller, so these are the lighter choices worth offering (none
+    /// when even they would not be); or the "Always" resolution pill asks, and these are the two
+    /// sizes, both looking the same. Keeping the size comes first.
     Lighter(Vec<Lighter>),
     /// Nothing could be measured; each encoder uses its fallback level.
     Fallback,
@@ -67,7 +71,8 @@ impl Found {
     }
 }
 
-/// A lighter way to compress an already-compressed video, which the user may choose (ADR 0029).
+/// A version the user may choose (ADR 0029, ADR 0032): a lighter one for an already-compressed
+/// video, or one of two sizes when the "Always" resolution pill asks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Lighter {
     pub encoder: VideoEncoder,
@@ -76,6 +81,8 @@ pub struct Lighter {
     pub shape: Shape,
     /// Whether the picture becomes smaller than Gracil would normally make it.
     pub smaller: bool,
+    /// Whether it looks the same as the original at its size, rather than a little less sharp.
+    pub looks_same: bool,
     /// The picture's short side afterwards, such as 720 for 720p, when known.
     pub short_side: Option<u32>,
     /// The whole file's predicted size, in bytes.
@@ -93,11 +100,13 @@ impl Lighter {
     }
 }
 
-/// Searches the level for `plan`'s main video, encoded the way `plan.attempt` would.
+/// Searches the level for `plan`'s main video, encoded the way `plan.attempt` would, at the size
+/// `plan` gives it; `resize` says whether another size may be offered.
 pub fn find_level(
     toolchain: &Toolchain,
     plan: &EncodePlan,
     info: &MediaInfo,
+    resize: Resize,
     control: &JobControl,
 ) -> Found {
     let encoder = plan.attempt.encoder;
@@ -137,7 +146,7 @@ pub fn find_level(
             kept: kept_bytes(info, plan, original, duration),
         }
     });
-    match choose(&mut search, sizes, stream) {
+    match choose(&mut search, sizes, stream, resize) {
         Ok(found) => found,
         Err(Halt::Cancelled) => Found::Cancelled,
         Err(Halt::Failed(error)) => {
@@ -148,8 +157,14 @@ pub fn find_level(
     }
 }
 
-/// Picks the level that looks the same; if that is not worth it, the lighter choices.
-fn choose(search: &mut Search, sizes: Option<Sizes>, stream: &Stream) -> Result<Found, Halt> {
+/// Picks the level that looks the same, and with "Ask", offers one size down too when it is
+/// lighter (ADR 0032). If looking the same is not worth it, the lighter choices.
+fn choose(
+    search: &mut Search,
+    sizes: Option<Sizes>,
+    stream: &Stream,
+    resize: Resize,
+) -> Result<Found, Halt> {
     let encoder = search.attempt.encoder;
     let levels = standard::levels(encoder);
     // A level that already misses the target and is still too big: every level that reaches the
@@ -169,9 +184,38 @@ fn choose(search: &mut Search, sizes: Option<Sizes>, stream: &Stream) -> Result<
         info!(level, "chose a quality level");
         return Ok(Found::Level { encoder, level });
     };
+    let never = |_: &Measured| false;
+    let normal = Shape::of(stream);
+    let choice = |search: &Search, level: u8, looks_same: bool, predicted: u64| Lighter {
+        encoder,
+        level,
+        shape: search.shape,
+        smaller: search.shape != normal,
+        looks_same,
+        short_side: search.shape.short_side(stream),
+        predicted,
+    };
     if let Some(level) = chosen {
         let predicted = sizes.predicted(&search.measure(level)?);
         if sizes.worth_it(predicted) {
+            if let (Resize::Ask, Some(shape), Some(kept)) =
+                (resize, Shape::reduced(stream), predicted)
+            {
+                let mut smaller = search.with_shape(shape);
+                let down = smaller
+                    .highest(levels.clone(), standard::TARGET_SCORE, Some(level), &never)?
+                    .unwrap_or(*levels.start());
+                if let Some(down_predicted) = sizes.predicted(&smaller.measure(down)?)
+                    && down_predicted < kept
+                {
+                    let choices = vec![
+                        choice(search, level, true, kept),
+                        choice(&smaller, down, true, down_predicted),
+                    ];
+                    info!(?choices, "two sizes offered");
+                    return Ok(Found::Lighter(choices));
+                }
+            }
             info!(
                 level,
                 ?predicted,
@@ -187,9 +231,8 @@ fn choose(search: &mut Search, sizes: Option<Sizes>, stream: &Stream) -> Result<
     );
 
     let lighter_levels = standard::lighter_levels(encoder);
-    let never = |_: &Measured| false;
     let mut choices: Vec<Lighter> = Vec::with_capacity(2);
-    let mut offer = |search: &mut Search, level: u8, smaller: bool| -> Result<(), Halt> {
+    let mut offer = |search: &mut Search, level: u8| -> Result<(), Halt> {
         let Some(predicted) = sizes.predicted(&search.measure(level)?) else {
             return Ok(());
         };
@@ -198,14 +241,7 @@ fn choose(search: &mut Search, sizes: Option<Sizes>, stream: &Stream) -> Result<
             .first()
             .is_none_or(|first| predicted < first.predicted);
         if sizes.worth_it(Some(predicted)) && lighter_than_first {
-            choices.push(Lighter {
-                encoder,
-                level,
-                shape: search.shape,
-                smaller,
-                short_side: search.shape.short_side(stream),
-                predicted,
-            });
+            choices.push(choice(search, level, false, predicted));
         }
         Ok(())
     };
@@ -216,13 +252,14 @@ fn choose(search: &mut Search, sizes: Option<Sizes>, stream: &Stream) -> Result<
         &never,
     )?;
     if let Some(level) = kept {
-        offer(search, level, false)?;
+        offer(search, level)?;
     }
-    if let Some(shape) = Shape::one_size_down(stream) {
+    // "Keep" and "Reduce" already settled the size; only "Ask" offers another.
+    if let (Resize::Ask, Some(shape)) = (resize, Shape::one_size_down(stream)) {
         let mut smaller = search.with_shape(shape);
         let level = smaller.highest(lighter_levels, standard::LIGHTER_SCORE, kept, &never)?;
         if let Some(level) = level {
-            offer(&mut smaller, level, true)?;
+            offer(&mut smaller, level)?;
         }
     }
     info!(?choices, "lighter choices");

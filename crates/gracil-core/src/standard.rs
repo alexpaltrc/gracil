@@ -17,6 +17,19 @@ pub const LIGHTER_SCORE: f64 = 90.0;
 /// original (ADR 0029).
 pub const WORTH_IT: f64 = 0.8;
 
+/// What happens to a video's picture size, as the "Always" resolution pill says (ADR 0032).
+/// Above 1080p, videos always become 1080p.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Resize {
+    /// Keep the size; only an already-compressed video is offered a lighter version at it.
+    Keep,
+    /// When a video can be made one size smaller, offer both sizes with their predicted sizes.
+    #[default]
+    Ask,
+    /// Make every video one size smaller, never below 480p.
+    Reduce,
+}
+
 /// The levels searched (CQ for NVENC, CRF for x265), from best quality to smallest file.
 pub fn levels(encoder: VideoEncoder) -> RangeInclusive<u8> {
     match encoder {
@@ -145,6 +158,17 @@ impl Shape {
         })
     }
 
+    /// The size for "Reduce" (ADR 0032): one size down from the source's own, for videos
+    /// [`Self::of`] keeps. `None` above 1080p, where becoming 1080p is already the step down, at
+    /// 480 or smaller, or when the size is unknown.
+    pub fn reduced(stream: &Stream) -> Option<Self> {
+        let (width, height) = stream.width.zip(stream.height)?;
+        if width.min(height) > MAX_SHORT_SIDE {
+            return None;
+        }
+        Self::one_size_down(stream)
+    }
+
     /// The short side of the picture this shape gives `stream`, when known.
     pub fn short_side(self, stream: &Stream) -> Option<u32> {
         self.size
@@ -260,6 +284,21 @@ mod tests {
                     "keeps the rate rule"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn reducing_steps_down_from_the_source() {
+        for ((w, h), expected) in [
+            ((3840, 2160), None),
+            ((1920, 1080), Some((1280, 720))),
+            ((1280, 720), Some((854, 480))),
+            ((900, 1600), Some((720, 1280))),
+            ((854, 480), None),
+            ((640, 360), None),
+        ] {
+            let shape = Shape::reduced(&video(w, h, 30, 1));
+            assert_eq!(shape.map(|shape| shape.size), expected.map(Some), "{w}x{h}");
         }
     }
 

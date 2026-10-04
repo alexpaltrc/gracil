@@ -1,17 +1,20 @@
-//! Gracil's two settings (spec §66, ADR 0025): whether the mini-window appears when compressing
-//! from File Explorer, and whether finished videos are always replaced or always saved as copies
-//! instead of asking. They are kept in `%LOCALAPPDATA%\Gracil\settings.txt` as `name=value`
+//! Gracil's three settings (spec §66, ADR 0025, ADR 0032): whether the mini-window appears when
+//! compressing from File Explorer, whether finished videos are always replaced or always saved as
+//! copies instead of asking, and whether videos keep their size, are made smaller, or Gracil asks. They are kept in `%LOCALAPPDATA%\Gracil\settings.txt` as `name=value`
 //! lines, so a later setting only adds a line.
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use gracil_core::standard::Resize;
+
 use crate::work::Choice;
 
 const FILE: &str = "settings.txt";
 const EXPLORER_MINI_WINDOW: &str = "explorer_mini_window";
 const ALWAYS: &str = "always";
+const RESIZE: &str = "resize";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Settings {
@@ -20,6 +23,8 @@ pub struct Settings {
     /// What to do with every finished video without asking (ADR 0025). `None`, the default,
     /// asks after each one.
     pub always: Option<Choice>,
+    /// Whether videos keep their size, become one size smaller, or Gracil asks (ADR 0032).
+    pub resize: Resize,
 }
 
 impl Default for Settings {
@@ -27,6 +32,7 @@ impl Default for Settings {
         Self {
             explorer_mini_window: true,
             always: None,
+            resize: Resize::Ask,
         }
     }
 }
@@ -57,6 +63,9 @@ impl Settings {
                 Some((ALWAYS, "replace")) => settings.always = Some(Choice::Replace),
                 Some((ALWAYS, "copy")) => settings.always = Some(Choice::SaveCopy),
                 Some((ALWAYS, "ask")) => settings.always = None,
+                Some((RESIZE, "keep")) => settings.resize = Resize::Keep,
+                Some((RESIZE, "ask")) => settings.resize = Resize::Ask,
+                Some((RESIZE, "reduce")) => settings.resize = Resize::Reduce,
                 _ => {}
             }
         }
@@ -77,9 +86,14 @@ impl Settings {
             Some(Choice::SaveCopy) => "copy",
             None => "ask",
         };
+        let resize = match self.resize {
+            Resize::Keep => "keep",
+            Resize::Ask => "ask",
+            Resize::Reduce => "reduce",
+        };
         fs::write(
             path,
-            format!("{EXPLORER_MINI_WINDOW}={mini_window}\n{ALWAYS}={always}\n"),
+            format!("{EXPLORER_MINI_WINDOW}={mini_window}\n{ALWAYS}={always}\n{RESIZE}={resize}\n"),
         )
     }
 }
@@ -108,6 +122,7 @@ mod tests {
         let settings = Settings::read(&dir.join(FILE));
         assert!(settings.explorer_mini_window);
         assert_eq!(settings.always, None);
+        assert_eq!(settings.resize, Resize::Ask);
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -115,10 +130,15 @@ mod tests {
     fn saved_settings_come_back() {
         let dir = fresh_dir("saved");
         let path = dir.join("nested").join(FILE);
-        for always in [Some(Choice::Replace), Some(Choice::SaveCopy), None] {
+        let resizes = [Resize::Keep, Resize::Ask, Resize::Reduce];
+        for (always, resize) in [Some(Choice::Replace), Some(Choice::SaveCopy), None]
+            .into_iter()
+            .zip(resizes)
+        {
             let saved = Settings {
                 explorer_mini_window: false,
                 always,
+                resize,
             };
             saved.write(&path).unwrap();
             assert_eq!(Settings::read(&path), saved);
@@ -134,11 +154,12 @@ mod tests {
         let path = dir.join(FILE);
         fs::write(
             &path,
-            "something=else\nexplorer_mini_window = off\nalways=sometimes\ngarbage",
+            "something=else\nexplorer_mini_window = off\nalways=sometimes\nresize=huge\ngarbage",
         )
         .unwrap();
         let settings = Settings::read(&path);
         assert!(!settings.explorer_mini_window);
+        assert_eq!(settings.resize, Resize::Ask);
         assert_eq!(settings.always, None);
         fs::remove_dir_all(dir).unwrap();
     }

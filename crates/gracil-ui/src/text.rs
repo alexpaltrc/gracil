@@ -52,6 +52,9 @@ pub struct Text {
     pub already_compressed: &'static str,
     /// Why the lighter versions are offered, behind the "!".
     pub why_lighter: &'static str,
+    /// A video that can keep its size or become one size smaller, both looking the same, waiting
+    /// for the user to pick (ADR 0032).
+    pub choose_size: &'static str,
     pub cancelled: &'static str,
     pub replaced: &'static str,
     pub copy_saved: &'static str,
@@ -69,6 +72,9 @@ pub struct Text {
     /// The pill's two ends: always replace, always save a copy. Its middle, "ask each time", is a
     /// small circle rather than a word.
     pub always_choices: [&'static str; 2],
+    /// The resolution pill's two ends: always keep the size, always make it smaller (ADR 0032).
+    /// Its middle, "ask each time", is the same small circle.
+    pub resize_choices: [&'static str; 2],
     smaller: fn(u32) -> String,
     videos: fn(usize) -> String,
     ready: fn(usize) -> String,
@@ -136,11 +142,13 @@ impl Text {
         (self.exit_explanation)(stops_one, waiting)
     }
 
-    /// A lighter version as its button says it, with its predicted size: "Keep 1080p, compress
-    /// more · ~120 MB", or for the mini-window just "1080p · ~120 MB".
+    /// A version as its button says it, with its predicted size: "Keep 1080p, compress more · ~120
+    /// MB" (or "Keep 1080p · ~120 MB" when it looks the same), or for the mini-window just "1080p ·
+    /// ~120 MB".
     pub fn lighter(&self, choice: &Lighter, short: bool) -> String {
         let label = LighterLabel {
             smaller: choice.smaller,
+            looks_same: choice.looks_same,
             short_side: choice.short_side,
             short,
         };
@@ -183,6 +191,7 @@ static ENGLISH: Text = Text {
     not_smaller: "Not smaller",
     not_compressed: "Not compressed",
     already_compressed: "Already compressed",
+    choose_size: "Choose a size",
     why_lighter: "Compressing it again without any visible change would barely make it smaller. \n                  A lighter version makes it much smaller, though it may look a little less sharp.",
     cancelled: "Cancelled",
     replaced: "Replaced",
@@ -206,6 +215,7 @@ static ENGLISH: Text = Text {
     explorer_mini_window: "Show mini-window when compressing from File Explorer",
     always: "Always",
     always_choices: ["Replace", "Save a copy"],
+    resize_choices: ["Keep resolution", "Reduce"],
     in_line: |count| format!("{count} waiting"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
@@ -231,6 +241,9 @@ static ENGLISH: Text = Text {
     lighter: |label, size| {
         let p = |side: u32| format!("{side}p");
         match (label.smaller, label.short_side, label.short) {
+            (false, Some(side), false) if label.looks_same => format!("Keep {} · {size}", p(side)),
+            (false, None, false) if label.looks_same => format!("Keep the size · {size}"),
+            (false, None, true) if label.looks_same => format!("Same size · {size}"),
             (false, Some(side), false) => format!("Keep {}, compress more · {size}", p(side)),
             (false, None, false) => format!("Keep the size, compress more · {size}"),
             (true, Some(side), false) => format!("Make it {} · {size}", p(side)),
@@ -272,6 +285,7 @@ static SPANISH: Text = Text {
     not_smaller: "No se redujo",
     not_compressed: "Sin comprimir",
     already_compressed: "Ya está comprimido",
+    choose_size: "Elige un tamaño",
     why_lighter: "Volver a comprimirlo sin ningún cambio visible apenas lo haría más pequeño. \n                  Una versión más ligera lo reduce mucho más, aunque puede verse un poco menos \n                  nítido.",
     cancelled: "Cancelado",
     replaced: "Reemplazado",
@@ -298,6 +312,7 @@ static SPANISH: Text = Text {
     explorer_mini_window: "Mostrar miniventana al comprimir desde el Explorador de archivos",
     always: "Siempre",
     always_choices: ["Reemplazar", "Guardar como copia"],
+    resize_choices: ["Mantener resolución", "Reducir"],
     in_line: |count| format!("{count} en espera"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
@@ -324,6 +339,11 @@ static SPANISH: Text = Text {
     lighter: |label, size| {
         let p = |side: u32| format!("{side}p");
         match (label.smaller, label.short_side, label.short) {
+            (false, Some(side), false) if label.looks_same => {
+                format!("Mantener {} · {size}", p(side))
+            }
+            (false, None, false) if label.looks_same => format!("Mantener el tamaño · {size}"),
+            (false, None, true) if label.looks_same => format!("Mismo tamaño · {size}"),
             (false, Some(side), false) => format!("Mantener {}, comprimir más · {size}", p(side)),
             (false, None, false) => format!("Mantener el tamaño, comprimir más · {size}"),
             (true, Some(side), false) => format!("Reducir a {} · {size}", p(side)),
@@ -349,6 +369,8 @@ static SPANISH: Text = Text {
 struct LighterLabel {
     /// The picture becomes smaller, rather than keeping its size.
     smaller: bool,
+    /// It looks the same as the original, so keeping the size needs no "compress more".
+    looks_same: bool,
     /// The picture's short side afterwards (720 for 720p), when known.
     short_side: Option<u32>,
     /// Few words, for the mini-window.
@@ -424,6 +446,7 @@ mod tests {
         let es = Text::get(Language::Spanish);
         let keep = LighterLabel {
             smaller: false,
+            looks_same: false,
             short_side: Some(1080),
             short: false,
         };
@@ -443,6 +466,21 @@ mod tests {
             ..down
         };
         assert_eq!((es.lighter)(short, "~80 MB"), "720p · ~80 MB");
+        let same = LighterLabel {
+            looks_same: true,
+            ..keep
+        };
+        assert_eq!((es.lighter)(same, "~120 MB"), "Mantener 1080p · ~120 MB");
+        assert_eq!(
+            (es.lighter)(
+                LighterLabel {
+                    short: true,
+                    ..same
+                },
+                "~120 MB"
+            ),
+            "1080p · ~120 MB"
+        );
         assert_eq!(file_size(1_436_000_000), "~1.4 GB");
         assert_eq!(file_size(200_000), "~1 MB");
     }

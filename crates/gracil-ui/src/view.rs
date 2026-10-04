@@ -4,6 +4,7 @@ use gracil_core::job::JobState;
 use gracil_core::plan::output_extension;
 use gracil_core::queue::Job;
 use gracil_core::search::Lighter;
+use gracil_core::standard::Resize;
 use iced::widget::text::Wrapping;
 use iced::widget::{Canvas, Space, button, column, container, row, scrollable, text, tooltip};
 use iced::{Center, Element, Fill, window};
@@ -44,7 +45,7 @@ pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     if state.drawer_open && !state.queue.is_empty() {
         content = content.push(drawer(state));
     }
-    content = content.push(always(state));
+    content = content.push(always(state)).push(resize(state));
     container(content).padding(space::M).into()
 }
 
@@ -61,6 +62,35 @@ fn always(state: &Gracil) -> Element<'_, Message> {
             0 => Some(Choice::Replace),
             2 => Some(Choice::SaveCopy),
             _ => None,
+        })
+    });
+    container(
+        row![
+            text(state.text.always)
+                .size(size::CAPTION)
+                .style(style::muted),
+            pill,
+        ]
+        .spacing(space::S)
+        .align_y(Center),
+    )
+    .center_x(Fill)
+    .into()
+}
+
+/// "Always (Keep resolution / ○ / Reduce)": whether every video keeps its size, becomes one size
+/// smaller, or, in the middle, Gracil offers both sizes when the smaller one is lighter (ADR 0032).
+fn resize(state: &Gracil) -> Element<'_, Message> {
+    let selected = match state.resize() {
+        Resize::Keep => 0,
+        Resize::Ask => 1,
+        Resize::Reduce => 2,
+    };
+    let pill = pill(state.text.resize_choices, selected, |index| {
+        Message::Resize(match index {
+            0 => Resize::Keep,
+            2 => Resize::Reduce,
+            _ => Resize::Ask,
         })
     });
     container(
@@ -398,6 +428,11 @@ fn status(state: &Gracil, job: &Job) -> Status {
                     label: state.text.not_smaller.into(),
                     notice: Some(state.text.failure(Failure::NotSmaller)),
                 },
+                Some(Outcome::Lighter(offered))
+                    if !offered.is_empty() && offered.iter().all(|choice| choice.looks_same) =>
+                {
+                    Status::plain(state.text.choose_size)
+                }
                 Some(Outcome::Lighter(_)) => Status {
                     label: state.text.already_compressed.into(),
                     notice: Some(state.text.why_lighter),

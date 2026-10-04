@@ -12,6 +12,7 @@ use gracil_core::encode::JobControl;
 use gracil_core::leftovers;
 use gracil_core::output::{replace_original, save_as_new};
 use gracil_core::search::Lighter;
+use gracil_core::standard::Resize;
 use gracil_core::toolchain;
 use iced::Task;
 use iced::futures::SinkExt;
@@ -105,17 +106,18 @@ fn tidy_leftovers(private_dir: &Path) {
     }
 }
 
-/// Compresses `source`, leaving the result beside it for the user to place. `choice` is the lighter
-/// version the user picked for an already-compressed video.
+/// Compresses `source`, leaving the result beside it for the user to place. `choice` is the version
+/// the user picked among those offered; `resize` is the "Always" resolution pill (ADR 0032).
 pub fn compress_video(
     engine: Arc<Engine>,
     source: PathBuf,
     choice: Option<Lighter>,
+    resize: Resize,
     control: JobControl,
 ) -> Task<Report> {
     on_thread(move |mut sender: Sender<Report>| {
         let mut progress = sender.clone();
-        let result = compress_with(&engine, &source, choice, &control, &mut |update| {
+        let result = compress_with(&engine, &source, choice, resize, &control, &mut |update| {
             // Progress is best effort: when the window is busy, a skipped update costs nothing.
             let _ = progress.try_send(Report::Progress(update.fraction));
         });
@@ -128,7 +130,7 @@ pub fn compress_video(
                 Outcome::Failed(Failure::AsSmallAsItGets)
             }
             Err(CompressError::AlreadyCompressed(choices)) => {
-                info!(?choices, "already compressed; lighter versions offered");
+                info!(?choices, "versions offered");
                 Outcome::Lighter(choices)
             }
             Err(e) => {
