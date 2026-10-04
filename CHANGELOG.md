@@ -57,7 +57,7 @@ Gracil is still being built, but you can already compress videos and images with
 - Moving images (such as GIF), camera RAW files, JPEG XL and photos stored in HDR aren't
   compressed: they are left exactly as they are, and a small "!" says why.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
-  advances. The middle of the ring holds the controls, as symbols instead of words: the top part
+  advances, filling an invisible circle with color behind it. The middle of the ring holds the controls, as symbols instead of words: the top part
   pauses (II) and turns into play (▶) to resume, and the bottom part stops (■). Pausing frees up
   your computer while keeping the work done so far; resuming carries on from the same point.
   **View files** shows every other video and image, how much smaller each one became and where it

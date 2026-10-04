@@ -974,7 +974,7 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   of the ring) is no longer drawn: only the marble and the part it has filled are seen, so the
   marble fills an invisible circle. The thin line between pause and stop in the middle of the
   ring goes too. Meant to look more elegant and give Gracil personality. Changes the look recorded
-  in ADR 0014, so an ADR amends it when it is built.
+  in ADR 0014, so an ADR amends it when it is built. *Built 2026-10-04 (ADR 0038).*
 - **Several images at once.** Gracil compresses one file at a time, so a long list of images
   (14,916 still waiting in the owner's folder) takes far longer than it needs to. Images should
   be compressed several at a time, and fewer when the images are very large, so memory never runs

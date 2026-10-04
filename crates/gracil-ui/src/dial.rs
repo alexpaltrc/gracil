@@ -1,5 +1,5 @@
-//! The dial: a pipe that a marble fills clockwise as the video compresses, with the controls in
-//! its middle. The top of the middle pauses and resumes; the bottom stops.
+//! The dial: a marble that fills an invisible circle clockwise as the video compresses, with the
+//! controls in its middle (ADR 0038). The top of the middle pauses and resumes; the bottom stops.
 //!
 //! It animates itself: every value eases towards what the app says, and the dial only asks for
 //! new frames while something is still moving (spec §51).
@@ -23,7 +23,7 @@ pub const SMALL: f32 = 76.0;
 const PIPE_WIDTH: f32 = 13.0;
 /// Space between the pipe and the buttons in its middle.
 const GAP: f32 = 7.0;
-/// Where the line between the two buttons sits, as a share of the middle's radius below its
+/// Where the two buttons meet, as a share of the middle's radius below its
 /// centre. At 0.404 the bottom button is a quarter of the middle's area.
 const DIVIDER: f32 = 0.404;
 
@@ -183,26 +183,9 @@ impl canvas::Program<Message> for Dial {
         let pipe_width = PIPE_WIDTH * scale;
         let outer = SIZE * scale / 2.0 - 1.0;
         let pipe = outer - pipe_width / 2.0;
-        let inner = outer - pipe_width;
         let radius = middle_radius(bounds.size());
-        let wall = |alpha: f32| {
-            Stroke::default()
-                .with_width(1.0)
-                .with_color(palette.text.scale_alpha(alpha))
-        };
 
-        // The pipe: a faint channel between two thin walls.
-        frame.stroke(
-            &Path::circle(center, pipe),
-            Stroke::default()
-                .with_width(pipe_width)
-                .with_color(palette.text.scale_alpha(0.04)),
-        );
-        let edge = Stroke::default().with_width(1.0).with_color(tokens.border);
-        frame.stroke(&Path::circle(center, outer), edge);
-        frame.stroke(&Path::circle(center, inner), edge);
-
-        // What has gone through the pipe, from twelve o'clock clockwise, behind the marble: the
+        // No pipe is drawn, only what the marble has filled (ADR 0038): from twelve o'clock clockwise, behind the marble: the
         // accent, like the filled part of Windows' own sliders.
         let head = -FRAC_PI_2 + TAU * state.fill;
         if state.fill > 0.001 {
@@ -238,7 +221,6 @@ impl canvas::Program<Message> for Dial {
 
         // The middle: two buttons that light up softly under the pointer.
         let divider_y = center.y + DIVIDER * radius;
-        let side = (radius * radius - (DIVIDER * radius).powi(2)).sqrt();
         let below = (DIVIDER).asin();
         let top = Path::new(|path| {
             path.arc(canvas::path::Arc {
@@ -260,13 +242,6 @@ impl canvas::Program<Message> for Dial {
         });
         frame.fill(&top, palette.text.scale_alpha(0.06 * state.hover_top));
         frame.fill(&bottom, palette.text.scale_alpha(0.06 * state.hover_bottom));
-        frame.stroke(
-            &Path::line(
-                Point::new(center.x - side * 0.7, divider_y),
-                Point::new(center.x + side * 0.7, divider_y),
-            ),
-            wall(0.12),
-        );
 
         let symbol = |hover: f32, enabled: bool| {
             if enabled {
@@ -333,7 +308,7 @@ impl canvas::Program<Message> for Dial {
     }
 }
 
-/// The radius of the buttons in the middle of the pipe.
+/// The radius of the buttons in the middle of the circle.
 fn middle_radius(bounds: Size) -> f32 {
     let scale = scale(bounds);
     SIZE * scale / 2.0 - 1.0 - (PIPE_WIDTH + GAP) * scale

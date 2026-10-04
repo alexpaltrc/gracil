@@ -44,13 +44,13 @@ format: MP4" (videos) and "Images" (photos and pictures) below.
 
 - Gracil compresses one file at a time, in the order you added them, except that images go
   before videos that are still waiting: an image takes seconds and a video minutes. The video
-  being compressed is never interrupted. The one being compressed
-  is shown large, inside a ring: a marble rolls around it clockwise from the top as the work
-  advances, and when it gets back to the top the video is done. The percentage is written just
-  below.
+  being compressed is never interrupted. The one being compressed is shown large, inside a ring:
+  a marble rolls clockwise from the top as the work advances, filling an invisible circle with
+  color behind it, and when it gets back to the top the video is done. The percentage is written
+  just below.
 - The middle of the ring holds the controls. Its top part is **pause** (II); click it and it turns
-  into **play** (▶), which resumes. Its bottom part, under a thin line, is **stop** (■), which
-  cancels. While Gracil is still getting ready, only stop works.
+  into **play** (▶), which resumes. Its bottom part is **stop** (■), which cancels.
+  While Gracil is still getting ready, only stop works.
 - Pausing freezes the work exactly where it is, and Gracil stops using the processor and
   graphics card. Resuming carries on from the same point; nothing is lost or started over. You
   can also stop while paused.

@@ -1,6 +1,7 @@
 # 0014 — Progress is a dial that holds the controls
 
-**Status:** Accepted. Refines the look of spec §31; the interaction model is unchanged.
+**Status:** Accepted. Refines the look of spec §31; the interaction model is unchanged. The track
+and the line between the buttons are no longer drawn (ADR 0038).
 
 **Context.** The video in focus showed a thin progress bar with **Pause** and **Cancel** written
 under it. The product owner wants a cleaner window with more personality and even fewer words,

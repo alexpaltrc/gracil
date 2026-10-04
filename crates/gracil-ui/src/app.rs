@@ -48,7 +48,7 @@ pub struct Gracil {
     /// The main window, while it is open.
     main: Option<window::Id>,
     /// Whether the main window was ever shown. A Gracil started only for background work leaves
-    /// on its own once that work is done (spec Â§53).
+    /// on its own once that work is done (spec §53).
     window_shown: bool,
     /// Whether any request has arrived yet; until then there is nothing to be done or finished.
     requested: bool,
@@ -66,11 +66,11 @@ pub struct Gracil {
     tray: Option<Tray>,
     /// What the tray icon was last told to show, so it is only told about changes.
     tray_shown: Option<(TrayState, String)>,
-    /// Exit was chosen while work was in progress; the window asks before stopping it (Â§54.1).
+    /// Exit was chosen while work was in progress; the window asks before stopping it (§54.1).
     pub confirming_exit: bool,
     /// Something went wrong while no window was open; the tray icon says so until one opens.
     unseen_problem: bool,
-    /// The mini-window next to the tray icon, while it is open (spec Â§55).
+    /// The mini-window next to the tray icon, while it is open (spec §55).
     mini: Option<window::Id>,
     /// Windows just shown but still out of sight, until they have drawn themselves, so they never
     /// appear blank (white) first: their handle, how many frames they have started and where
@@ -162,7 +162,7 @@ pub enum Message {
 
 impl Gracil {
     /// Starts without a window: the first request (from the command line) decides whether one
-    /// is needed (spec Â§62).
+    /// is needed (spec §62).
     pub fn boot() -> (Self, Task<Message>) {
         let text = Text::get(Language::detect());
         let settings = Settings::load();
@@ -245,7 +245,7 @@ impl Gracil {
             }),
             system::theme_changes().map(Message::ThemeChanged),
             outside::subscription().map(Message::Outside),
-            // Frames only while the theme is changing (spec Â§51).
+            // Frames only while the theme is changing (spec §51).
             if self.shift.is_some() {
                 window::frames().map(Message::ThemeFrame)
             } else {
@@ -283,7 +283,7 @@ impl Gracil {
         task
     }
 
-    /// Tells the tray icon what to show, when that changed (spec Â§54).
+    /// Tells the tray icon what to show, when that changed (spec §54).
     fn sync_tray(&mut self) {
         let Some(tray) = &self.tray else {
             return;
@@ -464,7 +464,7 @@ impl Gracil {
                     // Without the icon there would be no way back, so closing exits instead.
                     return self.ask_to_exit();
                 }
-                // Closing only hides Gracil; the work goes on in the tray (spec Â§54.1).
+                // Closing only hides Gracil; the work goes on in the tray (spec §54.1).
                 if self.main == Some(id) {
                     self.main = None;
                     self.confirming_exit = false;
@@ -521,7 +521,7 @@ impl Gracil {
         }
     }
 
-    /// Opens the mini-window next to the tray icon (spec Â§55). It opens hidden, is put in place,
+    /// Opens the mini-window next to the tray icon (spec §55). It opens hidden, is put in place,
     /// and only then shown, so it never appears somewhere else first.
     fn open_mini(&mut self) -> Task<Message> {
         // What it shows includes whatever went wrong.
@@ -570,7 +570,7 @@ impl Gracil {
         self.mini == Some(window)
     }
 
-    /// Exit (spec Â§54.1): straight away when nothing is in progress; otherwise the window opens
+    /// Exit (spec §54.1): straight away when nothing is in progress; otherwise the window opens
     /// and says what would stop.
     fn ask_to_exit(&mut self) -> Task<Message> {
         if self.running.is_none() && self.waiting_to_compress() == 0 {
@@ -617,7 +617,7 @@ impl Gracil {
             && self.main.is_none()
         {
             // Compressing from File Explorer: the mini-window shows it happening, unless Gracil's
-            // window already does (spec Â§56).
+            // window already does (spec §56).
             self.open_mini()
         } else {
             Task::none()
@@ -737,7 +737,7 @@ impl Gracil {
     }
 
     /// Whether this Gracil was started only for background work and that work is over: nothing
-    /// waiting or running, and no result left for anyone to decide on (spec Â§53). While the
+    /// waiting or running, and no result left for anyone to decide on (spec §53). While the
     /// mini-window is open, the user is still looking, so Gracil waits for it to close.
     fn background_work_done(&self) -> bool {
         self.requested
@@ -1054,7 +1054,7 @@ impl Gracil {
         }
     }
 
-    /// Freezes or thaws the running compression (spec Â§47). Only a compression that has started
+    /// Freezes or thaws the running compression (spec §47). Only a compression that has started
     /// can pause; a failure leaves it as it was and is only logged.
     fn pause(&mut self, paused: bool) {
         let Some((id, control)) = &self.running else {
