@@ -391,6 +391,11 @@ drag operation is not a new session. The same applies to the file picker.
 Exact duplicate-path behavior is not yet a product requirement. Choose the simplest safe interim
 behavior, keep it easy to change, and document it.
 
+*Current behavior (2026-10-03, at the product owner's request):* the list never stops a file from
+being compressed again. Adding a path whose entry is finished (put in place, failed or cancelled)
+removes that entry and adds the file again as new. Adding a path that is still waiting, running,
+or waiting for the replace-or-copy choice does nothing.
+
 # 30. Multiple files and UI philosophy
 
 The application internally has a queue/scheduler. The interface should NOT look like a

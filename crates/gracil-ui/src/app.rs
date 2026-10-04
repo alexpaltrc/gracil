@@ -771,8 +771,24 @@ impl Gracil {
             )
     }
 
+    /// Adds videos to the list. A video the list is done with (put in place, failed, cancelled)
+    /// leaves it first, so the list never stops a video from being compressed again (spec §29).
+    /// One still waiting, running or waiting for a choice stays as it is.
     fn add(&mut self, paths: Vec<PathBuf>) -> Task<Message> {
-        let added = self.queue.add(files(paths));
+        let paths: Vec<PathBuf> = files(paths).collect();
+        let done_with: Vec<JobId> = paths
+            .iter()
+            .filter_map(|path| self.queue.find(path))
+            .filter(|job| {
+                job.state.is_finished()
+                    && !matches!(self.outcomes.get(&job.id), Some(Outcome::Ready { .. }))
+            })
+            .map(|job| job.id)
+            .collect();
+        for id in done_with {
+            self.remove(id);
+        }
+        let added = self.queue.add(paths);
         if added > 0 && matches!(self.engine, EngineState::Unavailable) {
             self.engine = EngineState::Starting;
             return work::start_engine().map(Message::EngineStarted);

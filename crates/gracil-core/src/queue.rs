@@ -1,7 +1,8 @@
 //! The set of videos the user has added, and which one runs next (spec §26–§36).
 //!
 //! Videos run one at a time, oldest first. Adding is always additive. A path already in the set is
-//! not added twice (the interim duplicate rule of §29; remove the earlier entry to add it again).
+//! not added twice; the app removes a finished entry first, so a file can always be compressed
+//! again (§29).
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};

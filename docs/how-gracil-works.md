@@ -54,7 +54,10 @@ time, even while Gracil is working.
 - **View files**, under it, shows every video you added and how each one went: how much smaller
   it became, or why it couldn't be compressed. Click a video there to show it large. The **×**
   beside it takes it off the list, and **Clear** empties the list. Neither touches your original.
-- Adding a video that is already on the list does nothing. Folders are ignored for now.
+- You can always compress a video again, even one already on the list: if the list is done with
+  it (it was replaced, saved, couldn't be compressed or was stopped), it starts again as new.
+  Adding a video that is still waiting, being compressed or waiting for your choice does nothing.
+  Folders are ignored for now.
 
 ## Replace, or keep a copy
 

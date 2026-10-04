@@ -47,7 +47,8 @@ Gracil is still being built, but you can already compress videos with it.
   pauses (II) and turns into play (▶) to resume, and the bottom part stops (■). Pausing frees up
   your computer while keeping the work done so far; resuming carries on from the same point.
   **View files** shows every other video and how much smaller each one became. Click one to show
-  it large, or take it off the list with **×** or **Clear**.
+  it large, or take it off the list with **×** or **Clear**. A video can always be compressed
+  again, even right after replacing it, without clearing the list first.
 - When a video is done, you see how much smaller it became and choose: **Replace** puts it in
   place of the original, keeping its name and the date it was created; **Save copy** keeps your
   original and saves the smaller one next to it as `Gracil-` followed by its name. With several
