@@ -64,6 +64,8 @@ format: MP4" (videos) and "Images" (photos and pictures) below.
   3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says it in a few words, for
   example **5 files · 1.2 GB smaller · View files**. Only what is still on the list counts:
   taking files off it, or **Clear**, takes them out of the total.
+  The list opens and closes at once, even with tens of thousands of files: Gracil only draws the
+  rows you can see.
 - Click a file in **View files** to show it large; it stays lit in the list while it shows. To go
   back to the work, click it again, close **View files**, or click the quiet line under it that
   names the file being compressed and how far along it is (‹ name · 42%). That line appears

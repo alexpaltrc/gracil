@@ -22,6 +22,7 @@ use crate::request::Request;
 use crate::settings::Settings;
 use crate::style;
 use crate::text::{Language, Text};
+use crate::view::DrawerScroll;
 use crate::work::{self, Choice, Failure, Outcome, Report, Sizes};
 
 pub struct Gracil {
@@ -31,6 +32,9 @@ pub struct Gracil {
     /// The window files are being dragged over, if any.
     pub hovering: Option<window::Id>,
     pub drawer_open: bool,
+    /// How far down the list is scrolled and how tall its visible part is, so only the rows in
+    /// sight are built (spec §77.3).
+    pub drawer_scroll: DrawerScroll,
     /// The video the user picked in the drawer to look at, if any.
     pub selected: Option<JobId>,
     /// The last video put in place, so the window stays on it once nothing else needs a choice.
@@ -130,6 +134,7 @@ pub enum Message {
     Remove(JobId),
     Clear,
     ToggleDrawer,
+    DrawerScrolled(DrawerScroll),
     ThemeChanged(Mode),
     ThemeFrame(Instant),
     /// The main window exists, still hidden; it is given its icon and shown out of sight.
@@ -191,6 +196,7 @@ impl Gracil {
             engine: EngineState::Starting,
             hovering: None,
             drawer_open: false,
+            drawer_scroll: DrawerScroll::default(),
             selected: None,
             last_placed: None,
             text,
@@ -404,10 +410,16 @@ impl Gracil {
             }
             Message::ToggleDrawer => {
                 self.drawer_open = !self.drawer_open;
+                // A list opened again starts at the top.
+                self.drawer_scroll = DrawerScroll::default();
                 // Closing the list puts away what was picked in it, too.
                 if !self.drawer_open {
                     self.selected = None;
                 }
+                Task::none()
+            }
+            Message::DrawerScrolled(scroll) => {
+                self.drawer_scroll = scroll;
                 Task::none()
             }
             Message::ThemeChanged(mode) => {

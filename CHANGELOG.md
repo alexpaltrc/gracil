@@ -61,7 +61,8 @@ Gracil is still being built, but you can already compress videos and images with
   advances, filling an invisible circle with color behind it. The middle of the ring holds the controls, as symbols instead of words: the top part
   pauses (II) and turns into play (▶) to resume, and the bottom part stops (■). Pausing frees up
   your computer while keeping the work done so far; resuming carries on from the same point.
-  **View files** shows every other video and image, how much smaller each one became and where it
+  **View files**, which opens at once even with thousands of files, shows every other video and
+  image, how much smaller each one became and where it
   went, for example **−35% · Replaced**. With two or more done, it adds them all up, for example
   **In all: 3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says how much room
   they freed. Click a file to show it large; click it again, close **View files**, or click the

@@ -1,6 +1,7 @@
 //! Focus + Drawer (spec §31–§32): one video in focus, everything else one quiet click away.
 
 use std::ffi::OsStr;
+use std::ops::Range;
 
 use gracil_core::job::JobState;
 use gracil_core::queue::Job;
@@ -19,6 +20,37 @@ const FOCUS_NAME_CHARS: usize = 28;
 const DRAWER_NAME_CHARS: usize = 26;
 const TOOLTIP_WIDTH: f32 = 240.0;
 const DRAWER_MAX_HEIGHT: f32 = 148.0;
+/// The height of every row in the list. All rows are the same height, so only the rows in sight
+/// are built, however long the list is (spec §77.3).
+const ROW_HEIGHT: f32 = 30.0;
+/// Rows built beyond each edge of what is in sight, so scrolling never shows a gap.
+const ROWS_BEYOND: usize = 4;
+
+/// How far down the list is scrolled and how tall its visible part is, in logical pixels.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DrawerScroll {
+    pub offset: f32,
+    pub height: f32,
+}
+
+impl Default for DrawerScroll {
+    fn default() -> Self {
+        Self {
+            offset: 0.0,
+            height: DRAWER_MAX_HEIGHT,
+        }
+    }
+}
+
+impl DrawerScroll {
+    /// The rows of a list of `len` that are in sight, or nearly.
+    fn rows(self, len: usize) -> Range<usize> {
+        let first = (self.offset.max(0.0) / ROW_HEIGHT) as usize;
+        let last = ((self.offset.max(0.0) + self.height.max(0.0)) / ROW_HEIGHT).ceil() as usize;
+        let start = first.saturating_sub(ROWS_BEYOND).min(len);
+        start..(last + ROWS_BEYOND).clamp(start, len)
+    }
+}
 const MINI_NAME_CHARS: usize = 22;
 
 pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
@@ -501,7 +533,11 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
     let (total, done) = state.total();
     let in_all = (done >= 2).then(|| caption(state.text.in_all(total)));
 
-    let rows = state.queue.jobs().iter().map(|job| {
+    let jobs = state.queue.jobs();
+    let shown = state.drawer_scroll.rows(jobs.len());
+    let above = shown.start as f32 * ROW_HEIGHT;
+    let below = (jobs.len() - shown.end) as f32 * ROW_HEIGHT;
+    let rows = jobs[shown].iter().map(|job| {
         let line = row![
             container(name(job, DRAWER_NAME_CHARS, size::BODY)).width(Fill),
             status_line(&drawer_status(state, job), size::CAPTION),
@@ -525,6 +561,7 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
             remove,
         ]
         .align_y(Center)
+        .height(ROW_HEIGHT)
         .into()
     });
 
@@ -533,9 +570,19 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
         content = content.push(container(line).padding([0.0, space::S]));
     }
     content = content.push(
-        scrollable(column(rows).spacing(space::XS))
-            .spacing(space::XS)
-            .height(iced::Shrink),
+        scrollable(
+            column![Space::new().height(above)]
+                .extend(rows)
+                .push(Space::new().height(below)),
+        )
+        .spacing(space::XS)
+        .height(iced::Shrink)
+        .on_scroll(|viewport| {
+            Message::DrawerScrolled(DrawerScroll {
+                offset: viewport.absolute_offset().y,
+                height: viewport.bounds().height,
+            })
+        }),
     );
     container(content)
         .max_height(DRAWER_MAX_HEIGHT)
@@ -577,6 +624,25 @@ fn shorten(name: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_rows_in_sight_are_built() {
+        let top = DrawerScroll::default();
+        assert_eq!(top.rows(0), 0..0);
+        assert_eq!(top.rows(3), 0..3);
+        // 148 pixels show five rows of 30, plus four beyond the bottom edge.
+        assert_eq!(top.rows(15_031), 0..9);
+        let further = DrawerScroll {
+            offset: 300.0 * ROW_HEIGHT + 10.0,
+            height: 148.0,
+        };
+        assert_eq!(further.rows(15_031), 296..310);
+        let end = DrawerScroll {
+            offset: 15_026.0 * ROW_HEIGHT,
+            height: 148.0,
+        };
+        assert_eq!(end.rows(15_031), 15_022..15_031);
+    }
 
     #[test]
     fn short_names_are_untouched() {

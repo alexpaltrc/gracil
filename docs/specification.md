@@ -427,6 +427,10 @@ Selecting the subtle file-count control opens the file drawer, which lets the us
 current set of files, remove individual removable items, and quickly clear removable files. The
 drawer is not visually dominant. When closed, the user should mostly forget a queue exists.
 
+The drawer opens and closes at once however long the list is: every row has the same height and
+only the rows in sight (and a few beyond) are built; the rest of the list is empty space of the
+right height, so the scroll bar stays true.
+
 # 32.1 Picking a file, and the way back (ADR 0036)
 
 Clicking a file in the drawer shows it in the focus, and its row stays lightly marked. Picking is
@@ -961,7 +965,7 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
 
 - **A list that opens instantly.** With a very long list (15,031 files and growing while Gracil
   still looks through the folder), opening and closing **View files** in the main window takes a
-  few seconds. It must respond at once, however long the list is.
+  few seconds. It must respond at once, however long the list is. *Built 2026-10-04 (§32).*
 - **Numbers in the system's format.** Large counts must use the separators Windows is set to,
   for example *15,031 files* rather than *15031 files*. The same goes for every number Gracil
   shows. *Built 2026-10-04 (§32.2).*
