@@ -828,12 +828,24 @@ Every milestone compiles and is testable.
 
 Do not attempt to build every milestone in one giant pass.
 
-# 77.1 Next: image compression (planned)
+# 77.1 Image compression
 
-*Added 2026-10-03. Only a plan: nothing of it is built yet. All open decisions below are settled by
+*Added 2026-10-03 as a plan; built 2026-10-04. All open decisions below are settled by
 [ADR 0034](decisions/0034-image-standard.md), Gracil's image standard.*
 
-Gracil will compress images with the same philosophy as video:
+What Gracil reads, and what it writes (videos: §77.2):
+
+| Opened | Saved as |
+|---|---|
+| JPEG (`.jpg`, `.jpeg`, `.jpe`, `.jfif`) | JPEG, same name |
+| PNG (`.png`) | PNG, same name |
+| HEIC, HEIF, AVIF, WebP, TIFF (`.tif`, `.tiff`), BMP | JPEG (`.jpg`), or PNG with transparency |
+| GIF, animated PNG or WebP, JPEG XL, camera RAW, true HDR (PQ, HLG) | not compressed: the quiet "!" |
+
+Every JPEG is encoded by jpegli; libjpeg-turbo, built into jpegli, only reads JPEG. Images are
+read inside Gracil and by a hidden FFmpeg; no window ever opens.
+
+Gracil compresses images with the same philosophy as video:
 
 - **Two output formats, chosen by Gracil, never by the user** *(decided 2026-10-03 by the product
   owner)*. A PNG stays a PNG, made smaller without losing anything (a lossless optimizer such as
@@ -883,13 +895,29 @@ Open decisions, to settle before any work starts:
    *Decided:* the JPEG encoder is jpegli only (Google's, the newest and the best at high
    quality), built by Gracil from Google's official repository (github.com/google/jpegli) at a
    pinned commit and shipped inside the package; nothing from libjxl or JPEG XL is used (ADR
-   0034). It reads JPEG directly (through the libjpeg-turbo copy in jpegli's repository); other
-   formats are read first by Windows or FFmpeg.
+   0034). It reads JPEG directly (through the libjpeg-turbo copy in jpegli's repository).
+   *Built (2026-10-04):* other formats are read inside Gracil (the `image` crate for WebP, TIFF
+   and BMP) or by the hidden FFmpeg (HEIC, HEIF, AVIF); WIC was set aside (ADR 0034, item 9).
 5. **How images and videos share the list**, the dial and the tray without adding complexity.
    *Decided 2026-10-03 by the product owner (ADR 0034, item 13):* one list for every file;
    images are compressed before waiting videos, since they take seconds; with more than one file
    the dial's whole circle is the whole list, and the marble leaves a hollow marble at the end of
-   each file's part. A design pass to make the dial more refined comes later.
+   each file's part. A design pass to make the dial more refined comes later. *Built
+   (2026-10-04):* the one list and images first; the dial and the tray still show only the file
+   being compressed.
+
+# 77.2 Video formats
+
+What Gracil reads, and what it writes (ADR 0012):
+
+| Opened | Saved as |
+|---|---|
+| MP4 (`.mp4`) | MP4 (H.265), same name |
+| M4V, MOV, MKV, AVI, WMV, WebM, MTS, M2TS, TS, 3GP, FLV, MPG, MPEG | MP4 (H.265), `.mp4` |
+
+These are the extensions offered by the file picker and File Explorer's menu
+(`media::VIDEO_EXTENSIONS`). Any other file dropped on the window that is not a known image is
+handed to FFmpeg as a video and tried, never rejected up front (§2).
 
 # 78. Temporary UI decisions
 
