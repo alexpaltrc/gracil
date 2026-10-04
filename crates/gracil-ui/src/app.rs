@@ -10,7 +10,6 @@ use gracil_core::encode::JobControl;
 use gracil_core::job::{JobEvent, JobState};
 use gracil_core::queue::{Job, JobId, Queue};
 use gracil_core::search::Lighter;
-use gracil_core::standard::Resize;
 use gracil_windows::{Tray, TrayEvent, TrayMenu, TrayState};
 use iced::theme::{Mode, Palette};
 use iced::window::settings::PlatformSpecific;
@@ -125,8 +124,6 @@ pub enum Message {
     ChooseAll(Choice),
     /// The "Always" pill: replace, ask (`None`) or save a copy for every video that finishes.
     Always(Option<Choice>),
-    /// The "Always" resolution pill: keep the size, ask, or make every video one size smaller.
-    Resize(Resize),
     Placed(JobId, Choice, Result<PathBuf, Failure>),
     Select(JobId),
     Remove(JobId),
@@ -363,13 +360,6 @@ impl Gracil {
             Message::Lighten(id, choice) => self.lighten(id, choice),
             Message::Always(always) => {
                 self.settings.always = always;
-                if let Err(error) = self.settings.save() {
-                    warn!(%error, "could not save the settings");
-                }
-                Task::none()
-            }
-            Message::Resize(resize) => {
-                self.settings.resize = resize;
                 if let Err(error) = self.settings.save() {
                     warn!(%error, "could not save the settings");
                 }
@@ -781,10 +771,6 @@ impl Gracil {
         self.settings.always
     }
 
-    pub fn resize(&self) -> Resize {
-        self.settings.resize
-    }
-
     pub fn waiting_count(&self) -> usize {
         self.outcomes.values().filter(|o| o.is_waiting()).count()
     }
@@ -937,7 +923,7 @@ impl Gracil {
         let control = JobControl::default();
         self.running = Some((id, control.clone()));
         let choice = self.lighter.get(&id).copied();
-        work::compress_video(engine.clone(), path, choice, self.settings.resize, control)
+        work::compress_video(engine.clone(), path, choice, control)
             .map(move |report| Message::Job(id, report))
     }
 

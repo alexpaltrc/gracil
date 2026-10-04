@@ -18,7 +18,6 @@ use crate::plan::{self, Attempt, EncodePlan};
 use crate::probe::{self, MediaInfo, ProbeError, StreamKind};
 use crate::progress::fraction;
 use crate::search::{self, Found, Lighter};
-use crate::standard::{Resize, Shape};
 use crate::toolchain::{self, Resolved, Toolchain, ToolchainError};
 
 /// A ready FFmpeg and what it can do on this computer. Built once per process.
@@ -85,16 +84,15 @@ pub fn compress(
     control: &JobControl,
     on_update: &mut dyn FnMut(Update),
 ) -> Result<Compressed, CompressError> {
-    compress_with(engine, source, None, Resize::default(), control, on_update)
+    compress_with(engine, source, None, control, on_update)
 }
 
-/// Like [`compress`], with the size the "Always" resolution pill asks for (ADR 0032), and a choice
-/// the user made among those offered: its size and level are used without searching again.
+/// Like [`compress`], with a lighter choice the user made for an already-compressed video: its
+/// size and level are used without searching again.
 pub fn compress_with(
     engine: &Engine,
     source: &Path,
     choice: Option<Lighter>,
-    resize: Resize,
     control: &JobControl,
     on_update: &mut dyn FnMut(Update),
 ) -> Result<Compressed, CompressError> {
@@ -104,15 +102,7 @@ pub fn compress_with(
     }
     let temp = reserve_temp(source)?;
 
-    let result = run_attempts(
-        engine,
-        source,
-        &temp,
-        &info,
-        Wanted { choice, resize },
-        control,
-        on_update,
-    );
+    let result = run_attempts(engine, source, &temp, &info, choice, control, on_update);
     if result.is_err()
         && let Err(error) = fs::remove_file(&temp)
     {
@@ -121,39 +111,21 @@ pub fn compress_with(
     result
 }
 
-/// What the user asked for: a choice among those offered, and the "Always" resolution pill.
-struct Wanted {
-    choice: Option<Lighter>,
-    resize: Resize,
-}
-
 fn run_attempts(
     engine: &Engine,
     source: &Path,
     temp: &Path,
     info: &MediaInfo,
-    wanted: Wanted,
+    choice: Option<Lighter>,
     control: &JobControl,
     on_update: &mut dyn FnMut(Update),
 ) -> Result<Compressed, CompressError> {
     let capabilities = engine.capabilities;
-    let Wanted { choice, resize } = wanted;
-    // "Reduce" makes every video one size smaller, never below 480p.
-    let reduced = (resize == Resize::Reduce)
-        .then(|| {
-            let first = plan::attempts(capabilities).into_iter().next()?;
-            let (index, _) =
-                EncodePlan::new(source, temp, info, first, capabilities, 0).main_video()?;
-            let stream = info.streams.iter().find(|s| s.index == index)?;
-            Shape::reduced(stream)
-        })
-        .flatten();
     let plan_for = |attempt: Attempt, level| {
         let plan = EncodePlan::new(source, temp, info, attempt, capabilities, level);
-        match (choice, reduced) {
-            (Some(choice), _) => plan.with_shape(choice.shape),
-            (None, Some(shape)) => plan.with_shape(shape),
-            (None, None) => plan,
+        match choice {
+            Some(choice) => plan.with_shape(choice.shape),
+            None => plan,
         }
     };
     // Resizing frames left on the GPU needs `scale_cuda`; without it those attempts are skipped.
@@ -179,13 +151,7 @@ fn run_attempts(
         (Some(_), _) | (None, None) => Found::Fallback,
         (None, Some(&first)) => {
             let fallback = Found::Fallback.level_for(first.encoder);
-            search::find_level(
-                &engine.toolchain,
-                &plan_for(first, fallback),
-                info,
-                resize,
-                control,
-            )
+            search::find_level(&engine.toolchain, &plan_for(first, fallback), info, control)
         }
     };
     match found {

@@ -56,11 +56,6 @@ Gracil is still being built, but you can already compress videos with it.
   **Always**, then **Replace**, a small circle, and **Save a copy**. Pick either end and Gracil
   does that with every video that finishes from then on. On the circle in the middle, where it
   starts, Gracil asks each time.
-- A second **Always** line decides the picture's size: **Keep resolution**, a small circle, and
-  **Reduce**. On the circle, where it starts, Gracil checks whether the video would look just as
-  good one size smaller (Full HD becomes 720p, 720p becomes 480p) and, if that makes it lighter,
-  lets you choose between both sizes, each with the size it will roughly have. **Keep resolution**
-  always keeps the size, and **Reduce** always makes it one size smaller. Nothing goes below 480p.
 - Replacing is done safely: if anything goes wrong, your original is put back. No other file is
   ever overwritten.
 - If Gracil is closed suddenly, for example when the computer loses power or it is forced to
@@ -88,15 +83,14 @@ Gracil is still being built, but you can already compress videos with it.
   for minutes to find out it isn't.
 - Videos that are already compressed, like most web downloads, show **Already compressed** with
   two lighter versions and the size each will roughly have: **Keep 1080p, compress more**, or
-  **Make it 720p** (one size smaller, never below 480p, and only when the size line allows it).
-  They may look a little less sharp, so Gracil only does it if you pick one. You can choose in the
-  big window or in the small one next to the clock. If neither would make the video lighter, it
-  stays as it is and a small "!" says it's already about as small as it can get.
+  **Make it 720p** (one size smaller, never below 480p). They may look a little less sharp, so
+  Gracil only does it if you pick one. You can choose in the big window or in the small one next
+  to the clock. If neither would make the video lighter, it stays as it is and a small "!" says
+  it's already about as small as it can get.
 - Colours are stored more finely, so skies and shadows stay smooth instead of banded.
-- Videos larger than Full HD, such as 4K, become Full HD; smaller videos keep their size unless
-  you choose otherwise with the size line. Videos with more than 30 frames per second become 30;
-  slower ones keep exactly the rate they had. Slow motion recorded by a phone loses its
-  slowed-down effect.
+- Videos larger than Full HD, such as 4K, become Full HD; smaller videos keep their size. Videos
+  with more than 30 frames per second become 30; slower ones keep exactly the rate they had. Slow
+  motion recorded by a phone loses its slowed-down effect.
 - Sound that takes much more room than it needs, such as uncompressed sound from cameras, is made
   compact and still sounds the same for normal listening.
 - If a video is unusual, Gracil quietly tries simpler ways until one works, instead of giving up.

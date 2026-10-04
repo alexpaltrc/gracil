@@ -77,16 +77,6 @@ keep waiting, and if Gracil can't do what you picked for a video (for example re
 overwrite another file), that video waits for you with a **!** that explains why. When you
 compress from File Explorer, the command you clicked decides instead.
 
-Under it is a second line for the picture's size: **Always**, followed by **Keep resolution**, a
-small circle and **Reduce**. On the circle, where it starts, Gracil checks whether the video would
-also look the same one size smaller (Full HD becomes 720p, 720p becomes 480p). If that would make
-it lighter, the video waits with **Choose a size** and two buttons with the size each will roughly
-have, such as **Keep 1080p · ~120 MB** and **Make it 720p · ~80 MB**, in the big window and in
-the small one next to the clock. Otherwise it simply compresses at its size. Checking both sizes
-makes getting ready take about twice as long. Pick **Keep resolution** and videos keep their size
-without asking; pick **Reduce** and every video becomes one size smaller without asking. Nothing
-ever goes below 480p, and videos larger than Full HD always become Full HD.
-
 A finished video waits until you choose. If you take it off the list or exit Gracil without
 choosing, the smaller version is deleted and your original stays exactly as it was.
 
@@ -165,8 +155,6 @@ offers two lighter versions, each with the size it will roughly have:
   little less sharp.
 - **Make it 720p** also makes the picture one size smaller: Full HD becomes 720p, 720p becomes
   480p. Nothing ever goes below 480p, and videos that small don't get this choice.
-  It isn't offered when the size line says **Keep resolution**, and with **Reduce** the video is
-  already one size smaller, so it gets just the one choice.
 
 Pick one and the video goes back in line and compresses that way, with no more waiting to
 measure. Gracil only offers a version that will really make the video lighter, and the second one
@@ -181,8 +169,7 @@ own.
 
 - Videos larger than Full HD (1080p), such as 4K, become Full HD. That keeps them sharp on
   phones, laptops and most TVs, and makes them much smaller. Full HD and smaller videos keep their
-  size: a 480p video stays 480p. The size line under **Always** can make them one size smaller
-  instead (see above).
+  size: a 480p video stays 480p.
 - Videos with more than 30 frames per second (60 fps, or slow motion recorded at 120 or 240)
   become 30 frames per second. Videos at 30 or fewer keep exactly the rate they had. Slow-motion
   clips that your phone plays slowed down lose that effect, because the extra frames that made it
@@ -308,8 +295,8 @@ Click the marble and a small window opens right next to it, wherever your taskba
 the video being compressed and how far along it is; click its circle to pause or carry on, just
 like in the big window. When a video is done, it shows how much smaller it became with
 **Replace** and **Save copy**, so you can choose right there without opening the big window
-(unless **Always** already chose for you). If a video is already compressed, or waits for you to choose a size, its
-choices show up here too, as short buttons with their sizes, so you can pick one right away. If more videos finish while another is compressing, it
+(unless **Always** already chose for you). If a video is already compressed, its two lighter versions
+show up here too, as short buttons with their sizes, so you can pick one right away. If more videos finish while another is compressing, it
 says how many are ready and shows them one by one when the work is done. It also tells you how many videos are waiting and, once one is placed,
 where it went. You can drop more videos on it. It stays open while you do other things; close it
 with its **×** or by clicking the marble again, and use **Open Gracil** in it to get the big

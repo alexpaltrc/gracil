@@ -329,8 +329,6 @@ This was the starting point. Gracil's own quality standard replaces its fixed va
   source (VMAF), and the smallest level that still scores at least 95 is used. CQ 27 remains the
   fallback when no measurement is possible.
 - A video whose short side is above 1080 pixels becomes 1080; smaller ones keep their size.
-  *Update (ADR 0032):* the "Always" resolution pill can keep that size, make every video one
-  size smaller (never below 480p), or, by default, offer both sizes when the smaller is lighter.
 - Above 30 frames per second becomes 30; 30 or fewer is kept.
 - Audio is copied where compatible, except heavy audio (lossless, or a very high bitrate), which
   becomes AAC.
@@ -728,11 +726,6 @@ thread count or advanced encoder configuration.
 *Update (ADR 0025):* a second setting, requested by the product owner: **Always (Replace / ○ /
 Save a copy)** in the main window. The middle, the default, asks after each video as in §37.1; an
 end answers that question ahead of time for every video that finishes afterwards.
-
-*Update (ADR 0032):* a third setting, requested by the product owner: **Always (Keep resolution /
-○ / Reduce)**, under the first. The middle, the default, offers a video at its size and one size
-smaller when that is lighter; the ends keep the size or always make it one size smaller (never
-below 480p). Above 1080p videos always become 1080p.
 
 # 67. Error handling
 

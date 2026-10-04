@@ -1,9 +1,9 @@
 # 0032 — "Always": keep the resolution, ask, or reduce
 
-**Status:** Accepted. Requested by the product owner (2026-10-03). Adds a third setting to spec
-§66 and amends [0029](0029-lighter-never-heavier.md). Spec §81 forbids exposing advanced settings
-silently; this is not an encoder setting but a choice about the picture's size, asked for by the
-product owner, and recorded here.
+**Status:** Withdrawn by the product owner (2026-10-03), the same day, and replaced by
+[0033](0033-keep-the-resolution.md): a setting and a question about size made Gracil something to
+think about, which it must never be. Kept as a record of why there is no such pill. It had added
+a third setting to spec §66 and amended [0029](0029-lighter-never-heavier.md).
 
 **Context.** Gracil keeps every video's size up to 1080p (spec §21) and only offers one size down
 for videos that are already compressed (ADR 0029). Some people would rather have every video

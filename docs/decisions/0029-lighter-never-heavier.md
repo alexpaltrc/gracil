@@ -2,8 +2,7 @@
 
 **Status:** Accepted. Decided by the product owner (2026-10-03). Amends ADR 0028: removes adaptive
 quantization and the temporal filter from the NVENC tiers, and adds a size check to the quality
-search. Amended by [0032](0032-resolution-pill.md): the "Always" resolution pill decides whether
-the one-size-down choice is offered.
+search.
 
 **Context.** With ADR 0028's settings, three real videos (an H.264 web download and two earlier
 Gracil results, 0.03–0.05 bits per pixel) came out 18–79% *larger* than their sources, after four
