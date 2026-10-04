@@ -28,9 +28,9 @@ impl Language {
 /// The interface's words in one language.
 pub struct Text {
     pub release_to_add: &'static str,
-    pub drop_videos_here: &'static str,
+    pub drop_files_here: &'static str,
     pub or_choose_files: &'static str,
-    pub add_videos: &'static str,
+    pub add_files: &'static str,
     pub view_files: &'static str,
     pub hide_files: &'static str,
     pub replace: &'static str,
@@ -46,27 +46,27 @@ pub struct Text {
     pub saving: &'static str,
     pub not_smaller: &'static str,
     pub not_compressed: &'static str,
-    /// A video already about as small as it gets (ADR 0029, ADR 0033).
+    /// A file already about as small as it gets (ADR 0029, ADR 0033).
     pub already_compressed: &'static str,
     pub cancelled: &'static str,
     pub replaced: &'static str,
     pub copy_saved: &'static str,
     pub replaced_the_original: &'static str,
-    pub choose_videos: &'static str,
-    pub videos_filter: &'static str,
+    pub choose_files: &'static str,
+    pub media_filter: &'static str,
     pub all_files_filter: &'static str,
     pub open_gracil: &'static str,
     pub exit: &'static str,
     pub exit_question: &'static str,
     pub keep_working: &'static str,
     pub explorer_mini_window: &'static str,
-    /// "Always", before the pill that picks what to do with every finished video (ADR 0025).
+    /// "Always", before the pill that picks what to do with every finished file (ADR 0025).
     pub always: &'static str,
     /// The pill's two ends: always replace, always save a copy. Its middle, "ask each time", is a
     /// small circle rather than a word.
     pub always_choices: [&'static str; 2],
     smaller: fn(u32) -> String,
-    videos: fn(usize) -> String,
+    files: fn(usize) -> String,
     ready: fn(usize) -> String,
     in_line: fn(usize) -> String,
     saved_as: fn(&str) -> String,
@@ -84,6 +84,10 @@ struct Failures {
     as_small_as_it_gets: &'static str,
     could_not_save: &'static str,
     name_taken: &'static str,
+    animated: &'static str,
+    not_accepted: &'static str,
+    hdr: &'static str,
+    no_encoder: &'static str,
 }
 
 impl Text {
@@ -99,15 +103,15 @@ impl Text {
         (self.smaller)((smaller_by * 100.0).round() as u32)
     }
 
-    pub fn videos(&self, count: usize) -> String {
-        (self.videos)(count)
+    pub fn files(&self, count: usize) -> String {
+        (self.files)(count)
     }
 
     pub fn ready(&self, count: usize) -> String {
         (self.ready)(count)
     }
 
-    /// How many videos are waiting their turn.
+    /// How many files are waiting their turn.
     pub fn in_line(&self, count: usize) -> String {
         (self.in_line)(count)
     }
@@ -126,7 +130,7 @@ impl Text {
     }
 
     /// What Exit will do to the work in progress (spec §54.1): whether a compression stops, and
-    /// how many videos waiting won't be compressed.
+    /// how many files waiting won't be compressed.
     pub fn exit_explanation(&self, stops_one: bool, waiting: usize) -> String {
         (self.exit_explanation)(stops_one, waiting)
     }
@@ -142,15 +146,19 @@ impl Text {
             Failure::AsSmallAsItGets => failures.as_small_as_it_gets,
             Failure::CouldNotSave => failures.could_not_save,
             Failure::NameTaken => failures.name_taken,
+            Failure::Animated => failures.animated,
+            Failure::NotAccepted => failures.not_accepted,
+            Failure::Hdr => failures.hdr,
+            Failure::NoEncoder => failures.no_encoder,
         }
     }
 }
 
 static ENGLISH: Text = Text {
     release_to_add: "Release to add",
-    drop_videos_here: "Drop videos here",
+    drop_files_here: "Drop videos or images here",
     or_choose_files: "or choose files",
-    add_videos: "Add videos",
+    add_files: "Add files",
     view_files: "View files",
     hide_files: "Hide files",
     replace: "Replace",
@@ -160,7 +168,7 @@ static ENGLISH: Text = Text {
     clear: "Clear",
     getting_ready: "Getting ready",
     waiting: "Waiting",
-    needs_internet_once: "Gracil needs an internet connection once, to set up its video engine",
+    needs_internet_once: "Gracil needs an internet connection once, to finish setting up",
     compressing: "Compressing",
     paused: "Paused",
     saving: "Saving",
@@ -171,13 +179,13 @@ static ENGLISH: Text = Text {
     replaced: "Replaced",
     copy_saved: "Copy saved",
     replaced_the_original: "Replaced the original",
-    choose_videos: "Choose videos",
-    videos_filter: "Videos",
+    choose_files: "Choose files",
+    media_filter: "Videos and images",
     all_files_filter: "All files",
     smaller: |percent| format!("{percent}% smaller"),
-    videos: |count| match count {
-        1 => "1 video".to_owned(),
-        n => format!("{n} videos"),
+    files: |count| match count {
+        1 => "1 file".to_owned(),
+        n => format!("{n} files"),
     },
     ready: |count| format!("{count} ready"),
     saved_as: |name| format!("Saved as {name}"),
@@ -200,33 +208,37 @@ static ENGLISH: Text = Text {
         let mut parts = Vec::new();
         if stops_one {
             parts.push(
-                "The video being compressed stops, and its original stays exactly as it was."
+                "The file being compressed stops, and its original stays exactly as it was."
                     .to_owned(),
             );
         }
         match waiting {
             0 => {}
-            1 => parts.push("1 video waiting won't be compressed.".to_owned()),
-            n => parts.push(format!("{n} videos waiting won't be compressed.")),
+            1 => parts.push("1 file waiting won't be compressed.".to_owned()),
+            n => parts.push(format!("{n} files waiting won't be compressed.")),
         }
         parts.join(" ")
     },
     failures: Failures {
         no_video: "This file has no video",
-        unreadable: "This file can't be opened as a video",
-        could_not_compress: "This video couldn't be compressed",
-        not_smaller: "This video couldn't be made smaller than the original, so it isn't saved",
-        as_small_as_it_gets: "This video is already compressed about as much as it can be, so it was left as it is",
-        could_not_save: "The compressed video couldn't be saved in this folder",
-        name_taken: "Another file already has this video's new name, so the original was kept",
+        unreadable: "This file can't be opened as a video or an image",
+        could_not_compress: "This file couldn't be compressed",
+        not_smaller: "This file couldn't be made smaller than the original, so it isn't saved",
+        as_small_as_it_gets: "This file is already compressed about as much as it can be, so it was left as it is",
+        could_not_save: "The compressed file couldn't be saved in this folder",
+        name_taken: "Another file already has this file's new name, so the original was kept",
+        animated: "Gracil doesn't compress moving images, so it was left as it is",
+        not_accepted: "Gracil doesn't compress this kind of image, so it was left as it is",
+        hdr: "This photo is stored in HDR, which Gracil doesn't compress, so it was left as it is",
+        no_encoder: "Gracil's photo compressor is missing. Reinstalling Gracil fixes it",
     },
 };
 
 static SPANISH: Text = Text {
     release_to_add: "Suelta para agregar",
-    drop_videos_here: "Suelta videos aquí",
+    drop_files_here: "Suelta videos o imágenes aquí",
     or_choose_files: "o elige archivos",
-    add_videos: "Agregar videos",
+    add_files: "Agregar archivos",
     view_files: "Ver archivos",
     hide_files: "Ocultar archivos",
     replace: "Reemplazar",
@@ -236,7 +248,7 @@ static SPANISH: Text = Text {
     clear: "Limpiar",
     getting_ready: "Preparando",
     waiting: "En espera",
-    needs_internet_once: "Gracil necesita internet una sola vez, para preparar su motor de video",
+    needs_internet_once: "Gracil necesita internet una sola vez, para terminar de prepararse",
     compressing: "Comprimiendo",
     paused: "En pausa",
     saving: "Guardando",
@@ -247,13 +259,13 @@ static SPANISH: Text = Text {
     replaced: "Reemplazado",
     copy_saved: "Copia guardada",
     replaced_the_original: "Se reemplazó el original",
-    choose_videos: "Elegir videos",
-    videos_filter: "Videos",
+    choose_files: "Elegir archivos",
+    media_filter: "Videos e imágenes",
     all_files_filter: "Todos los archivos",
     smaller: |percent| format!("{percent}% más pequeño"),
-    videos: |count| match count {
-        1 => "1 video".to_owned(),
-        n => format!("{n} videos"),
+    files: |count| match count {
+        1 => "1 archivo".to_owned(),
+        n => format!("{n} archivos"),
     },
     ready: |count| match count {
         1 => "1 listo".to_owned(),
@@ -279,26 +291,30 @@ static SPANISH: Text = Text {
         let mut parts = Vec::new();
         if stops_one {
             parts.push(
-                "El video que se está comprimiendo se detiene, y su original queda exactamente \
+                "El archivo que se está comprimiendo se detiene, y su original queda exactamente \
                  como estaba."
                     .to_owned(),
             );
         }
         match waiting {
             0 => {}
-            1 => parts.push("1 video en espera no se comprimirá.".to_owned()),
-            n => parts.push(format!("{n} videos en espera no se comprimirán.")),
+            1 => parts.push("1 archivo en espera no se comprimirá.".to_owned()),
+            n => parts.push(format!("{n} archivos en espera no se comprimirán.")),
         }
         parts.join(" ")
     },
     failures: Failures {
         no_video: "Este archivo no tiene video",
-        unreadable: "Este archivo no se puede abrir como video",
-        could_not_compress: "Este video no se pudo comprimir",
-        not_smaller: "Este video no se pudo hacer más pequeño que el original, así que no se guarda",
-        as_small_as_it_gets: "Este video ya está comprimido casi al máximo, así que se dejó como está",
-        could_not_save: "El video comprimido no se pudo guardar en esta carpeta",
-        name_taken: "Ya hay otro archivo con el nuevo nombre de este video, así que se conservó el original",
+        unreadable: "Este archivo no se puede abrir como video ni como imagen",
+        could_not_compress: "Este archivo no se pudo comprimir",
+        not_smaller: "Este archivo no se pudo hacer más pequeño que el original, así que no se guarda",
+        as_small_as_it_gets: "Este archivo ya está comprimido casi al máximo, así que se dejó como está",
+        could_not_save: "El archivo comprimido no se pudo guardar en esta carpeta",
+        name_taken: "Ya hay otro archivo con el nuevo nombre de este archivo, así que se conservó el original",
+        animated: "Gracil no comprime imágenes en movimiento, así que se dejó como está",
+        not_accepted: "Gracil no comprime este tipo de imagen, así que se dejó como está",
+        hdr: "Esta foto está guardada en HDR, que Gracil no comprime, así que se dejó como está",
+        no_encoder: "Falta el compresor de fotos de Gracil. Reinstalar Gracil lo arregla",
     },
 };
 
@@ -316,17 +332,17 @@ mod tests {
         let en = Text::get(Language::English);
         assert!(
             en.exit_explanation(true, 0)
-                .starts_with("The video being compressed stops")
+                .starts_with("The file being compressed stops")
         );
         assert!(!en.exit_explanation(true, 0).contains("waiting"));
         assert_eq!(
             en.exit_explanation(false, 2),
-            "2 videos waiting won't be compressed."
+            "2 files waiting won't be compressed."
         );
         let es = Text::get(Language::Spanish);
         assert!(
             es.exit_explanation(true, 1)
-                .ends_with("1 video en espera no se comprimirá.")
+                .ends_with("1 archivo en espera no se comprimirá.")
         );
     }
 
@@ -343,8 +359,8 @@ mod tests {
     #[test]
     fn counts_agree_with_their_number() {
         let (en, es) = (Text::get(Language::English), Text::get(Language::Spanish));
-        assert_eq!(en.videos(1), "1 video");
-        assert_eq!(en.videos(3), "3 videos");
+        assert_eq!(en.files(1), "1 file");
+        assert_eq!(en.files(3), "3 files");
         assert_eq!(es.ready(1), "1 listo");
         assert_eq!(es.ready(2), "2 listos");
     }

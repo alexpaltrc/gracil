@@ -60,6 +60,28 @@ impl Toolchain {
     }
 }
 
+/// jpegli's `cjpegli.exe` (ADR 0034): next to Gracil's own executable, where the package puts it,
+/// or, while developing, where `scripts/build-jpegli.ps1` builds it inside `target`.
+pub fn find_jpegli() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let found = exe
+        .ancestors()
+        .skip(1)
+        .take(4)
+        .flat_map(|dir| {
+            [
+                dir.join("cjpegli.exe"),
+                dir.join(r"jpegli\build\tools\cjpegli.exe"),
+            ]
+        })
+        .find(|path| path.is_file());
+    match &found {
+        Some(path) => info!(path = %path.display(), "using jpegli"),
+        None => warn!("jpegli not found; photos cannot be compressed"),
+    }
+    found
+}
+
 pub(crate) fn hidden_command(program: &Path) -> Command {
     let mut command = Command::new(program);
     command.stdin(Stdio::null());

@@ -4,7 +4,7 @@ What's new in each version of Gracil.
 
 ## 0.0.1 (in development)
 
-Gracil is still being built, but you can already compress videos with it.
+Gracil is still being built, but you can already compress videos and images with it.
 
 ### New
 
@@ -18,8 +18,8 @@ Gracil is still being built, but you can already compress videos with it.
   menu and File Explorer. It sits on a small tile in Windows' own greys, always the opposite of
   Windows: dark when Windows is light, light when Windows is dark, so it stands out in both. It
   stays sharp at any screen size.
-- Drop videos onto the window, or choose them, and Gracil compresses them one after another. You
-  can keep adding videos while it works.
+- Drop videos or images onto the window, or choose them, and Gracil compresses them one after
+  another. You can keep adding files while it works.
 - Gracil runs only once. Opening it again, or opening videos with it while it is running, brings
   the open Gracil forward and adds the videos to the same list.
 - Closing the window no longer stops Gracil: it keeps working next to the clock. Its marble there
@@ -33,15 +33,24 @@ Gracil is still being built, but you can already compress videos with it.
   one went, and you can drop more videos on it. When a video is done, you can choose **Replace**
   or **Save copy** right there, without opening the big window. It stays open while you do other things until you
   close it or click the marble again; **Open Gracil** in it brings up the big window.
-- Right-click videos in File Explorer and choose **Gracil**, which shows how many videos you
-  picked, for example **Gracil (3)**. Inside are **Compress and replace** and **Compress and save
-  a copy**. The videos are compressed without opening the big window, and other files picked along
+- Right-click videos or images in File Explorer and choose **Gracil**, which shows how many files
+  you picked, for example **Gracil (3)**. Inside are **Compress and replace** and **Compress and
+  save a copy**. The files are compressed without opening the big window, and other files picked along
   with them are left alone. The small window opens by itself so you can watch; if you'd rather it
   didn't, untick **Show mini-window when compressing from File Explorer** in the marble's
   right-click menu.
 - Gracil installs like any other Windows app, and starts by itself when you sign in, waiting
   quietly next to the clock until you give it videos. To stop that, turn Gracil off in Windows'
   **Settings → Apps → Startup**.
+- Gracil compresses photos and other images too, the same way as videos: drop them in, then
+  **Replace** or **Save copy**. A PNG stays a PNG; JPEG, HEIC from an iPhone, WebP, AVIF, TIFF and
+  BMP become a JPEG, which opens everywhere, or a PNG when the image has see-through parts. Every
+  JPEG is made with jpegli, Google's modern photo compressor, which comes inside Gracil. The first
+  time, a photo looks the same as before and keeps its full size, its date, camera, place,
+  captions, colors and which way is up. Nothing pops up while Gracil works on images.
+- Images go before videos that are still waiting, since they take seconds and videos minutes.
+- Moving images (such as GIF), camera RAW files, JPEG XL and photos stored in HDR aren't
+  compressed: they are left exactly as they are, and a small "!" says why.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
   advances. The middle of the ring holds the controls, as symbols instead of words: the top part
   pauses (II) and turns into play (▶) to resume, and the bottom part stops (■). Pausing frees up

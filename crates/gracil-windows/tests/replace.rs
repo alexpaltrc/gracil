@@ -4,6 +4,7 @@ use std::fs::{self, File};
 use std::time::{Duration, SystemTime};
 
 use gracil_core::output::replace_original;
+use gracil_core::plan::output_extension;
 use gracil_windows::replace_file;
 
 #[test]
@@ -26,7 +27,8 @@ fn replaced_video_keeps_its_creation_date_and_shows_when_it_changed() {
     fs::write(&temp, b"compressed").unwrap();
 
     let replacing = SystemTime::now();
-    let placed = replace_original(&temp, &source, replace_file).unwrap();
+    let placed =
+        replace_original(&temp, &source, &output_extension(&source), replace_file).unwrap();
     let metadata = fs::metadata(&placed).unwrap();
     let content = fs::read(&placed).unwrap();
     let entries = fs::read_dir(&dir).unwrap().count();

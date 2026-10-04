@@ -20,11 +20,14 @@ use crate::progress::fraction;
 use crate::search::{self, Found};
 use crate::toolchain::{self, Resolved, Toolchain, ToolchainError};
 
-/// A ready FFmpeg and what it can do on this computer. Built once per process.
+/// A ready FFmpeg and what it can do on this computer, and jpegli for photos. Built once per
+/// process.
 #[derive(Debug, Clone)]
 pub struct Engine {
     pub toolchain: Toolchain,
     pub capabilities: Capabilities,
+    /// `cjpegli.exe`, shipped with Gracil (ADR 0034). Without it, photos cannot be compressed.
+    pub jpegli: Option<PathBuf>,
 }
 
 impl Engine {
@@ -39,6 +42,7 @@ impl Engine {
         Self {
             toolchain: resolved.toolchain,
             capabilities,
+            jpegli: toolchain::find_jpegli(),
         }
     }
 }
@@ -209,7 +213,7 @@ fn durations_match(expected: Duration, actual: Duration) -> bool {
 
 /// Creates an empty, uniquely named file next to `source` (same volume, so the final move is a
 /// rename) and returns its path. Named `<file name>.gracil-<id>.part`.
-fn reserve_temp(source: &Path) -> io::Result<PathBuf> {
+pub(crate) fn reserve_temp(source: &Path) -> io::Result<PathBuf> {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     let file_name = source
         .file_name()

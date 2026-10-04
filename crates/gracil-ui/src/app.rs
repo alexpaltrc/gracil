@@ -802,6 +802,7 @@ impl Gracil {
         };
         let Some(Outcome::Ready {
             temp,
+            extension,
             placing,
             problem,
             ..
@@ -814,7 +815,7 @@ impl Gracil {
         }
         *placing = true;
         *problem = None;
-        work::place(temp.clone(), source, choice)
+        work::place(temp.clone(), source, extension.clone(), choice)
             .map(move |placed| Message::Placed(id, choice, placed))
     }
 
@@ -889,7 +890,7 @@ impl Gracil {
         let (id, path) = (job.id, job.path.clone());
         let control = JobControl::default();
         self.running = Some((id, control.clone()));
-        work::compress_video(engine.clone(), path, control)
+        work::compress_file(engine.clone(), path, control)
             .map(move |report| Message::Job(id, report))
     }
 
@@ -1016,16 +1017,23 @@ impl Gracil {
     }
 }
 
-/// Folders and anything else that is not a file are ignored; FFprobe later decides what is video.
+/// Folders and anything else that is not a file are ignored; images are known by their name, and
+/// FFprobe later decides what is video.
 fn files(paths: impl IntoIterator<Item = PathBuf>) -> impl Iterator<Item = PathBuf> {
     paths.into_iter().filter(|path| path.is_file())
 }
 
-/// The picker shows videos by default. Only a convenience: any file FFmpeg reads is accepted.
+/// The picker shows videos and images by default. Only a convenience: any video FFmpeg reads is
+/// accepted.
 async fn choose_files(text: &'static Text) -> Vec<PathBuf> {
+    let media: Vec<&str> = gracil_core::media::VIDEO_EXTENSIONS
+        .iter()
+        .chain(gracil_core::media::IMAGE_EXTENSIONS)
+        .copied()
+        .collect();
     rfd::AsyncFileDialog::new()
-        .set_title(text.choose_videos)
-        .add_filter(text.videos_filter, gracil_core::media::VIDEO_EXTENSIONS)
+        .set_title(text.choose_files)
+        .add_filter(text.media_filter, &media)
         .add_filter(text.all_files_filter, &["*"])
         .pick_files()
         .await

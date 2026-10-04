@@ -3,6 +3,7 @@
 pub mod capabilities;
 pub mod compress;
 pub mod encode;
+pub mod images;
 pub mod job;
 pub mod leftovers;
 pub mod media;

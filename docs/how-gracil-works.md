@@ -36,12 +36,15 @@ opposite of Windows so it stands out: a dark tile when Windows is light, a light
 is dark. The window's icon changes with Windows' theme too. Next to the clock it appears without a
 tile, in black on a light taskbar and in white on a dark one.
 
-## Adding videos
+## Adding videos and images
 
-Drop videos onto the window, or choose them with **or choose files**. You can add more at any
-time, even while Gracil is working.
+Drop videos or images onto the window, or choose them with **or choose files**. You can add more
+at any time, even while Gracil is working. The kinds of files Gracil takes are listed under "One
+format: MP4" (videos) and "Images" (photos and pictures) below.
 
-- Gracil compresses one video at a time, in the order you added them. The one being compressed
+- Gracil compresses one file at a time, in the order you added them, except that images go
+  before videos that are still waiting: an image takes seconds and a video minutes. The video
+  being compressed is never interrupted. The one being compressed
   is shown large, inside a ring: a marble rolls around it clockwise from the top as the work
   advances, and when it gets back to the top the video is done. The percentage is written just
   below.
@@ -207,6 +210,15 @@ Every video Gracil compresses comes out as an MP4, whatever it was before: MOV f
 MKV, AVI and the rest. MP4 plays everywhere (Windows, iPhone, Mac, Android, TVs and web
 browsers), so you never have to wonder whether the result will open.
 
+| You add | You get |
+|---|---|
+| MP4 (`.mp4`) | MP4, same name |
+| M4V, MOV, MKV, AVI, WMV, WebM, MTS, M2TS, TS, 3GP, FLV, MPG, MPEG | MP4 (`.mp4` at the end of the name) |
+
+These are the kinds the file picker and File Explorer's menu offer. A video of another kind that
+you drop onto the window is tried too: Gracil never turns a video away just because it is
+unusual.
+
 A few things only some formats can hold don't fit in MP4, so they are left out and the video is
 kept:
 
@@ -219,26 +231,45 @@ kept:
 A video that was already an MP4 keeps its name. Any other video gets `.mp4` at the end of its
 name.
 
-## Images (in progress)
+## Images
 
-Gracil will compress photos and other images the same way it compresses videos. None of this
-works yet; it is how it will work.
+Gracil compresses photos and other images the same way it compresses videos: you add them, it
+makes them smaller, and you choose **Replace** or **Save copy**.
+
+| You add | You get |
+|---|---|
+| JPEG (`.jpg`, `.jpeg`, `.jpe`, `.jfif`) | JPEG, same name |
+| PNG (`.png`) | PNG, same name |
+| HEIC and HEIF (iPhone photos), AVIF, WebP, TIFF (`.tif`, `.tiff`), BMP | JPEG (`.jpg` at the end of the name), or PNG if the image has see-through parts |
+| GIF, moving PNG or WebP, JPEG XL, camera RAW (`.dng`, `.cr2`, `.nef`, `.arw` and the like) | Not compressed: left exactly as it is, with a small "!" |
 
 - **Two formats, chosen by Gracil.** A PNG stays a PNG, so screenshots and graphics stay sharp.
-  Every other image (JPEG, HEIC from an iPhone, WebP, TIFF, BMP) becomes a JPEG, which opens
-  everywhere. An image with see-through parts becomes a PNG, since JPEG can't hold them.
+  Every other image becomes a JPEG, which opens everywhere. An image with see-through parts
+  becomes a PNG, since JPEG can't hold them.
+- **One photo compressor: jpegli.** Every JPEG Gracil makes is made by jpegli, Google's modern
+  JPEG compressor, which gives smaller photos at the same look than the usual one. It comes
+  inside Gracil; nothing is downloaded for it.
+- **Nothing pops up.** Gracil reads images itself, in the background. No image viewer or other
+  window opens while it works.
 - **Looks the same.** The first time, a photo is made smaller without any difference you can see,
-  at its own size: Gracil never makes an image smaller in width or height.
+  at its own size: Gracil never makes an image smaller in width or height. A PNG is first packed
+  more tightly without changing a single dot; when using fewer colors looks the same, Gracil
+  does that too.
 - **Compressing again** an image Gracil already made smaller loses a little, without asking, as
-  it does for videos. If it still can't get clearly smaller, the image gets the quiet "!".
-- **Never heavier.** An image is only replaced when the result is clearly smaller.
-- **What stays:** the date taken, the camera, the place, which way is up, and the colors.
-- **Not accepted:** moving images (GIF and the like, for now), camera RAW files and JPEG XL. They
-  are left exactly as they are.
-- **With videos.** Images and videos share one list. Images go before waiting videos, because
-  they take seconds. With more than one file, the whole circle stands for the whole list: the
-  marble crosses one part per file and leaves a hollow marble behind each one it finishes, so you
-  can see how many are done and how many are left.
+  it does for videos. If it still can't get clearly smaller, it shows **Already compressed** with
+  a small "!".
+- **Never heavier.** An image is only offered when the result is clearly smaller.
+- **What stays:** the date taken, the camera, the place, descriptions and captions, which way is
+  up, and the colors.
+- **Not accepted:** moving images (for now), camera RAW files, JPEG XL, and photos stored in HDR.
+  They are left exactly as they are, and the "!" says why. They aren't offered in the file
+  picker or in File Explorer's menu.
+- **How long:** a phone photo takes under a second; a large PNG a few seconds.
+- **With videos.** Images and videos share one list, and images go before waiting videos.
+- **The circle for the whole list (in progress).** With more than one file, the whole circle will
+  stand for the whole list: the marble crosses one part per file and leaves a hollow marble behind
+  each one it finishes, so you can see how many are done and how many are left. For now the circle
+  shows the file being compressed.
 
 ## Your original is safe
 
@@ -278,13 +309,13 @@ existing file.
 Gracil runs once. If you open it again, or open videos with it while it is already running, the
 Gracil you have comes forward and the videos join the same list.
 
-Right-click videos in File Explorer and you'll find **Gracil** in the menu, with
-the number of videos in brackets when you picked more than one, for example **Gracil (3)**. Other
-files you picked along with them are left alone, and if none of them is a video the menu doesn't
-show Gracil at all. Inside are two choices: **Compress and replace** and **Compress and save a
-copy**. Either one compresses the videos without opening the big window, and replaces them or
-saves copies as you chose. If Gracil is already running, the videos join its list. If Gracil wasn't
-running, it starts for that, and closes by itself once the work is done.
+Right-click videos or images in File Explorer and you'll find **Gracil** in the menu, with the
+number of files in brackets when you picked more than one, for example **Gracil (3)**. Other files
+you picked along with them are left alone, and if none of them is a video or an image Gracil
+takes, the menu doesn't show Gracil at all. Inside are two choices: **Compress and replace** and
+**Compress and save a copy**. Either one compresses the files without opening the big window, and
+replaces them or saves copies as you chose. If Gracil is already running, the files join its
+list. If Gracil wasn't running, it starts for that, and closes by itself once the work is done.
 
 ## Starting with Windows
 

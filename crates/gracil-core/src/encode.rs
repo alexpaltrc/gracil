@@ -2,7 +2,7 @@
 
 use std::ffi::OsString;
 use std::io::{self, BufRead, BufReader, Read};
-use std::process::{Child, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
@@ -128,6 +128,17 @@ pub(crate) fn run_ffmpeg(
     control: &JobControl,
     on_line: &mut dyn FnMut(&str),
 ) -> (EncodeOutcome, String) {
+    run_program(toolchain.ffmpeg(), args, control, on_line)
+}
+
+/// Runs `command` with `args` under `control`, so another program (jpegli) can be paused, resumed
+/// and cancelled exactly like FFmpeg. Same reporting as [`run_ffmpeg`].
+pub(crate) fn run_program(
+    mut command: Command,
+    args: Vec<OsString>,
+    control: &JobControl,
+    on_line: &mut dyn FnMut(&str),
+) -> (EncodeOutcome, String) {
     let failed = |error: String| {
         let outcome = EncodeOutcome::Failed {
             error,
@@ -136,15 +147,19 @@ pub(crate) fn run_ffmpeg(
         (outcome, String::new())
     };
 
-    let mut child = match toolchain
-        .ffmpeg()
+    let mut child = match command
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
     {
         Ok(child) => child,
-        Err(error) => return failed(format!("could not start FFmpeg: {error}")),
+        Err(error) => {
+            return failed(format!(
+                "could not start {:?}: {error}",
+                command.get_program()
+            ));
+        }
     };
     let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
         let _ = child.kill();

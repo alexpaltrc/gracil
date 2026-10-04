@@ -1,7 +1,8 @@
 //! Focus + Drawer (spec §31–§32): one video in focus, everything else one quiet click away.
 
+use std::ffi::OsStr;
+
 use gracil_core::job::JobState;
-use gracil_core::plan::output_extension;
 use gracil_core::queue::Job;
 use iced::widget::text::Wrapping;
 use iced::widget::{Canvas, Space, button, column, container, row, scrollable, text, tooltip};
@@ -83,7 +84,7 @@ fn focus(state: &Gracil, hovering: bool) -> Element<'_, Message> {
     match state.focused() {
         Some(job) => focused(state, job),
         None => column![
-            text(state.text.drop_videos_here).size(size::TITLE),
+            text(state.text.drop_files_here).size(size::TITLE),
             button(text(state.text.or_choose_files).size(size::BODY))
                 .style(style::quiet_button)
                 .on_press(Message::ChooseFiles),
@@ -115,9 +116,11 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         .spacing(space::S)
         .align_x(Center);
     match state.outcomes.get(&job.id) {
-        Some(Outcome::Ready { placing, .. }) => {
+        Some(Outcome::Ready {
+            placing, extension, ..
+        }) => {
             details = details.push(choices(state, job, !placing));
-            if let Some(change) = format_change(job) {
+            if let Some(change) = format_change(job, extension) {
                 details = details.push(caption(change));
             }
         }
@@ -142,7 +145,7 @@ fn mini(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     } else {
         match state.mini_job() {
             Some(job) => mini_job(state, job),
-            None => text(state.text.drop_videos_here).size(size::BODY).into(),
+            None => text(state.text.drop_files_here).size(size::BODY).into(),
         }
     };
     let side = column![
@@ -285,12 +288,12 @@ fn placed_caption(state: &Gracil, job: &Job, choice: Choice, path: &std::path::P
     }
 }
 
-/// Every result is an MP4 (ADR 0012). When that changes the name, say so before the user
+/// Every video becomes an MP4 (ADR 0012), and every image other than a PNG a JPEG, or a PNG when
+/// it has transparency (ADR 0034). When that changes the name, say so before the user
 /// chooses, in the plainest words there are: `IMG_0042.MOV → IMG_0042.mp4`.
-fn format_change(job: &Job) -> Option<String> {
+fn format_change(job: &Job, output: &OsStr) -> Option<String> {
     let source = job.path.extension();
-    let output = output_extension(&job.path);
-    if source == Some(output.as_os_str()) {
+    if source == Some(output) {
         return None;
     }
     let renamed = job.path.with_extension(output);
@@ -414,7 +417,7 @@ fn name(job: &Job, max_chars: usize, text_size: f32) -> Element<'static, Message
 }
 
 fn footer(state: &Gracil) -> Element<'_, Message> {
-    let mut summary = state.text.videos(state.queue.len());
+    let mut summary = state.text.files(state.queue.len());
     match state.waiting_count() {
         0 => {}
         n => summary.push_str(&format!("  ·  {}", state.text.ready(n))),
@@ -429,7 +432,7 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
             .style(style::quiet_button)
             .on_press(Message::ToggleDrawer),
         Space::new().width(Fill),
-        button(text(state.text.add_videos).size(size::CAPTION))
+        button(text(state.text.add_files).size(size::CAPTION))
             .style(style::quiet_button)
             .on_press(Message::ChooseFiles),
     ]

@@ -24,6 +24,11 @@ codegen-units = 1
 strip = "symbols"
 
 [workspace.dependencies]
+exoquant = "0.2.0"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "tiff", "bmp"] }
+oxipng = { version = "9.1.5", default-features = false, features = ["parallel"] }
+rgb = "0.8.53"
+ssimulacra2 = "0.5.1"
 gracil-core = { path = "crates/gracil-core" }
 gracil-windows = { path = "crates/gracil-windows" }
 embed-resource = "3.0.11"

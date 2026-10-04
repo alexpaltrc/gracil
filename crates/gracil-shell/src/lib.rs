@@ -2,8 +2,8 @@
 //!
 //! Explorer loads this DLL into its own process, so a mistake here would freeze or crash the whole
 //! shell. It does as little as it can: it reads the names of the selected files, counts the ones
-//! that look like videos, shows **Gracil (N)** with its two commands, and on a click hands the
-//! videos to `gracil.exe` and returns. It never opens a file, never waits for Gracil, and holds no
+//! that look like videos or images, shows **Gracil (N)** with its two commands, and on a click
+//! hands them to `gracil.exe` and returns. It never opens a file, never waits for Gracil, and holds no
 //! product logic.
 //!
 //! This is one of the crates allowed to use `unsafe`, only to talk to Windows; each use says why it
@@ -19,7 +19,7 @@ use std::ptr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
-use gracil_core::media::looks_like_video;
+use gracil_core::media::looks_like_media;
 use windows::Win32::Foundation::{
     CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, E_NOTIMPL, E_POINTER, HMODULE, S_FALSE, S_OK,
 };
@@ -122,7 +122,7 @@ use objects::{
 
 impl IExplorerCommand_Impl for Menu_Impl {
     fn GetTitle(&self, items: Ref<IShellItemArray>) -> Result<PWSTR> {
-        duplicate(&title(videos(items.as_ref()).len()))
+        duplicate(&title(media(items.as_ref()).len()))
     }
 
     fn GetIcon(&self, _items: Ref<IShellItemArray>) -> Result<PWSTR> {
@@ -138,10 +138,10 @@ impl IExplorerCommand_Impl for Menu_Impl {
         Ok(CLSID)
     }
 
-    /// Hidden when nothing selected looks like a video. Only names are read, so this is quick
-    /// however Explorer asks (spec §59).
+    /// Hidden when nothing selected looks like a video or an image. Only names are read, so this
+    /// is quick however Explorer asks (spec §59).
     fn GetState(&self, items: Ref<IShellItemArray>, _ok_to_be_slow: BOOL) -> Result<u32> {
-        let state = if videos(items.as_ref()).is_empty() {
+        let state = if media(items.as_ref()).is_empty() {
             ECS_HIDDEN
         } else {
             ECS_ENABLED
@@ -193,9 +193,9 @@ impl IExplorerCommand_Impl for Compress_Impl {
     }
 
     fn Invoke(&self, items: Ref<IShellItemArray>, _context: Ref<IBindCtx>) -> Result<()> {
-        let videos = videos(items.as_ref());
-        if !videos.is_empty() {
-            deliver(self.action, videos);
+        let files = media(items.as_ref());
+        if !files.is_empty() {
+            deliver(self.action, files);
         }
         Ok(())
     }
@@ -350,8 +350,9 @@ pub extern "system" fn DllCanUnloadNow() -> HRESULT {
     }
 }
 
-/// The selected files that look like videos. Folders and things that aren't files are skipped.
-fn videos(items: Option<&IShellItemArray>) -> Vec<PathBuf> {
+/// The selected files that look like videos or images. Folders and things that aren't files are
+/// skipped.
+fn media(items: Option<&IShellItemArray>) -> Vec<PathBuf> {
     let Some(items) = items else {
         return Vec::new();
     };
@@ -366,7 +367,7 @@ fn videos(items: Option<&IShellItemArray>) -> Vec<PathBuf> {
                 let name = item.GetDisplayName(SIGDN_FILESYSPATH).ok()?;
                 let path = PathBuf::from(OsString::from_wide(name.as_wide()));
                 CoTaskMemFree(Some(name.0 as *const c_void));
-                looks_like_video(&path).then_some(path)
+                looks_like_media(&path).then_some(path)
             })
             .collect()
     }
@@ -421,17 +422,17 @@ fn launcher() -> Option<PathBuf> {
     }
 }
 
-/// Hands the videos to Gracil on a thread of its own, so Explorer's menu closes at once (spec §60).
+/// Hands the files to Gracil on a thread of its own, so Explorer's menu closes at once (spec §60).
 /// Gracil running gets them through the pipe; otherwise it is started with them, and any that
 /// don't fit on its command line follow through the pipe once it is up.
-fn deliver(action: Action, videos: Vec<PathBuf>) {
+fn deliver(action: Action, files: Vec<PathBuf>) {
     let alive = Alive::new();
     let _ = thread::Builder::new()
         .name("gracil-deliver".into())
         .spawn(move || {
             let _alive = alive;
             let flag = OsString::from(action.flag());
-            let paths: Vec<OsString> = videos.into_iter().map(PathBuf::into_os_string).collect();
+            let paths: Vec<OsString> = files.into_iter().map(PathBuf::into_os_string).collect();
             let rest = if gracil_windows::is_running() {
                 &paths[..]
             } else {

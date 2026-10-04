@@ -1,6 +1,8 @@
-//! The set of videos the user has added, and which one runs next (spec §26–§36).
+//! The set of videos and images the user has added, and which one runs next (spec §26–§36).
 //!
-//! Videos run one at a time, oldest first. Adding is always additive. A path already in the set is
+//! Files run one at a time, oldest first, except that images go before videos still waiting: they
+//! take seconds and videos take minutes (ADR 0034, item 13). The running file is never
+//! interrupted. Adding is always additive. A path already in the set is
 //! not added twice; the app removes a finished entry first, so a file can always be compressed
 //! again (§29).
 
@@ -8,6 +10,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::job::{InvalidTransition, JobEvent, JobState};
+use crate::media::{self, Kind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct JobId(u64);
@@ -89,15 +92,19 @@ impl Queue {
             .count()
     }
 
-    /// Starts the oldest pending job when nothing else is running.
+    /// Starts the oldest pending image, or else the oldest pending video, when nothing else is
+    /// running.
     pub fn start_next(&mut self) -> Option<&Job> {
         if self.active().is_some() {
             return None;
         }
-        let job = self
+        let pending = |job: &Job| job.state == JobState::Pending;
+        let at = self
             .jobs
-            .iter_mut()
-            .find(|job| job.state == JobState::Pending)?;
+            .iter()
+            .position(|job| pending(job) && media::kind_of(&job.path) == Kind::Image)
+            .or_else(|| self.jobs.iter().position(pending))?;
+        let job = &mut self.jobs[at];
         job.state = job.state.apply(JobEvent::Start).ok()?;
         Some(job)
     }
@@ -206,6 +213,17 @@ mod tests {
         queue.apply(first, JobEvent::Fail).unwrap();
         assert_eq!(queue.start_next().unwrap().file_name(), "b.mp4");
         assert_eq!(queue.pending_count(), 0);
+    }
+
+    #[test]
+    fn images_go_before_waiting_videos() {
+        let mut queue = queue(&["a.mp4", "b.mp4", "c.jpg", "d.png"]);
+        let mut order = Vec::new();
+        for _ in 0..4 {
+            let id = finish(&mut queue, JobEvent::Complete);
+            order.push(queue.get(id).unwrap().file_name());
+        }
+        assert_eq!(order, ["c.jpg", "d.png", "a.mp4", "b.mp4"]);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! Putting a finished compression in its final place: beside the original (spec §40) or in its
 //! place (§38–§39).
 
+use std::ffi::OsStr;
 use std::fs::{self, File, FileTimes};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -9,13 +10,12 @@ use std::time::{Duration, Instant, SystemTime};
 
 use crate::leftovers;
 use crate::naming::save_as_new_candidate;
-use crate::plan::output_extension;
 use tracing::warn;
 
-/// Moves the validated `temp` file next to `source` as `Gracil-<name>`, never overwriting
-/// anything. Returns the final path.
-pub fn save_as_new(temp: &Path, source: &Path) -> io::Result<PathBuf> {
-    let named_like = source.with_extension(output_extension(source));
+/// Moves the validated `temp` file next to `source` as `Gracil-<name>.<extension>`, never
+/// overwriting anything. Returns the final path.
+pub fn save_as_new(temp: &Path, source: &Path, extension: &OsStr) -> io::Result<PathBuf> {
+    let named_like = source.with_extension(extension);
     for attempt in 1..=u32::MAX {
         let candidate = save_as_new_candidate(&named_like, attempt);
         if candidate.try_exists()? {
@@ -55,8 +55,13 @@ pub type Swap = fn(original: &Path, replacement: &Path, backup: &Path) -> io::Re
 ///   like the same video, compressed. Its modified date becomes the moment it was replaced (ADR 0010).
 /// - Changed format (`Clip.mov` becomes MP4): `Clip.mp4` is created first, never over an existing
 ///   file, and only then is `Clip.mov` deleted.
-pub fn replace_original(temp: &Path, source: &Path, swap: Swap) -> io::Result<PathBuf> {
-    let target = source.with_extension(output_extension(source));
+pub fn replace_original(
+    temp: &Path,
+    source: &Path,
+    extension: &OsStr,
+    swap: Swap,
+) -> io::Result<PathBuf> {
+    let target = source.with_extension(extension);
     let times = replaced_times(&fs::metadata(source)?);
 
     if target == source {
@@ -212,6 +217,7 @@ fn replaced_times(metadata: &fs::Metadata) -> FileTimes {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::plan::output_extension;
 
     #[test]
     fn places_copy_beside_source_without_overwriting() {
@@ -222,7 +228,7 @@ mod tests {
         let temp = dir.join("Clip.AVI.gracil-1.part");
         fs::write(&temp, b"compressed").unwrap();
 
-        let placed = save_as_new(&temp, &source).unwrap();
+        let placed = save_as_new(&temp, &source, &output_extension(&source)).unwrap();
         let placed_content = fs::read(&placed).unwrap();
         let other = fs::read(dir.join("Gracil-Clip.mp4")).unwrap();
         let temp_left = temp.exists();
@@ -281,7 +287,13 @@ mod tests {
         fs::write(&source, b"original").unwrap();
         fs::write(&temp, b"compressed").unwrap();
 
-        replace_original(&temp, &source, swap_then_scanned).unwrap();
+        replace_original(
+            &temp,
+            &source,
+            &output_extension(&source),
+            swap_then_scanned,
+        )
+        .unwrap();
         let kept_while_held = temp.with_extension("bak").exists();
         HELD.lock().unwrap().take();
         finish_tidying(Duration::from_secs(5));
@@ -312,7 +324,8 @@ mod tests {
         fs::write(&temp, b"compressed").unwrap();
 
         let replacing = std::time::SystemTime::now();
-        let placed = replace_original(&temp, &source, rename_swap).unwrap();
+        let placed =
+            replace_original(&temp, &source, &output_extension(&source), rename_swap).unwrap();
         let content = fs::read(&placed).unwrap();
         let modified = fs::metadata(&placed).unwrap().modified().unwrap();
         let entries = fs::read_dir(&dir).unwrap().count();
@@ -336,7 +349,7 @@ mod tests {
         fs::write(&source, b"original").unwrap();
         fs::write(&temp, b"compressed").unwrap();
 
-        let result = replace_original(&temp, &source, failing_swap);
+        let result = replace_original(&temp, &source, &output_extension(&source), failing_swap);
         let original = fs::read(&source).unwrap();
         let temp_kept = temp.exists();
         fs::remove_dir_all(&dir).unwrap();
@@ -354,7 +367,8 @@ mod tests {
         fs::write(&source, b"original").unwrap();
         fs::write(&temp, b"compressed").unwrap();
 
-        let placed = replace_original(&temp, &source, rename_swap).unwrap();
+        let placed =
+            replace_original(&temp, &source, &output_extension(&source), rename_swap).unwrap();
         let content = fs::read(&placed).unwrap();
         let entries = fs::read_dir(&dir).unwrap().count();
         fs::remove_dir_all(&dir).unwrap();
@@ -374,7 +388,7 @@ mod tests {
         fs::write(&other, b"someone else's").unwrap();
         fs::write(&temp, b"compressed").unwrap();
 
-        let result = replace_original(&temp, &source, rename_swap);
+        let result = replace_original(&temp, &source, &output_extension(&source), rename_swap);
         let contents = (
             fs::read(&source).unwrap(),
             fs::read(&other).unwrap(),
