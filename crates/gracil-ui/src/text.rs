@@ -28,6 +28,10 @@ impl Language {
 /// The interface's words in one language.
 pub struct Text {
     pub release_to_add: &'static str,
+    /// Folders from File Explorer are being looked through and nothing was found yet (ADR 0037).
+    pub looking: &'static str,
+    /// The same, once some files are on the list already.
+    pub looking_for_more: &'static str,
     pub drop_files_here: &'static str,
     pub or_choose_files: &'static str,
     pub add_files: &'static str,
@@ -201,6 +205,8 @@ impl Text {
 
 static ENGLISH: Text = Text {
     release_to_add: "Release to add",
+    looking: "Looking through the folder…",
+    looking_for_more: "looking for more",
     drop_files_here: "Drop videos or images here",
     or_choose_files: "or choose files",
     add_files: "Add files",
@@ -284,6 +290,8 @@ static ENGLISH: Text = Text {
 
 static SPANISH: Text = Text {
     release_to_add: "Suelta para agregar",
+    looking: "Buscando en la carpeta…",
+    looking_for_more: "buscando más",
     drop_files_here: "Suelta videos o imágenes aquí",
     or_choose_files: "o elige archivos",
     add_files: "Agregar archivos",

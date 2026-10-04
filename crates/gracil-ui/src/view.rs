@@ -83,6 +83,7 @@ fn focus(state: &Gracil, hovering: bool) -> Element<'_, Message> {
     }
     match state.focused() {
         Some(job) => focused(state, job),
+        None if state.gathering > 0 => text(state.text.looking).size(size::TITLE).into(),
         None => column![
             text(state.text.drop_files_here).size(size::TITLE),
             button(text(state.text.or_choose_files).size(size::BODY))
@@ -168,6 +169,7 @@ fn mini(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     } else {
         match state.mini_job() {
             Some(job) => mini_job(state, job),
+            None if state.gathering > 0 => text(state.text.looking).size(size::BODY).into(),
             None => text(state.text.drop_files_here).size(size::BODY).into(),
         }
     };
@@ -448,6 +450,9 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
     let (total, done) = state.total();
     if done >= 2 {
         summary.push_str(&format!("  ·  {}", state.text.less(total)));
+    }
+    if state.gathering > 0 {
+        summary.push_str(&format!("  ·  {}", state.text.looking_for_more));
     }
     let toggle = if state.drawer_open {
         state.text.hide_files

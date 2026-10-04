@@ -147,6 +147,26 @@ fn tidy_leftovers(private_dir: &Path) {
     }
 }
 
+/// What looking through File Explorer's files and folders turns up (ADR 0037).
+#[derive(Debug, Clone)]
+pub enum Found {
+    /// The files of one folder, or the files sent by themselves.
+    Files(Vec<PathBuf>),
+    /// Everything has been looked through.
+    Done,
+}
+
+/// Looks through `paths` away from the window, which a slow folder (on a network or cloud drive)
+/// would otherwise freeze, handing over each folder's files as soon as they are known.
+pub fn gather(paths: Vec<PathBuf>, only: Option<Kind>) -> Task<Found> {
+    on_thread(move |mut sender: Sender<Found>| {
+        media::gather_each(paths, only, &mut |files| {
+            let _ = block_on(sender.send(Found::Files(files)));
+        });
+        let _ = block_on(sender.send(Found::Done));
+    })
+}
+
 /// Compresses `source`, a video or an image, leaving the result beside it for the user to place.
 pub fn compress_file(engine: Arc<Engine>, source: PathBuf, control: JobControl) -> Task<Report> {
     on_thread(move |mut sender: Sender<Report>| {

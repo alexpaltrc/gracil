@@ -40,7 +40,10 @@ Gracil is still being built, but you can already compress videos and images with
   "Compress and save copies of…" on Save a copy, and just "Compress…" on the circle, which opens
   Gracil's window and asks after each file. Other files picked along are left alone. The small
   window opens by itself so you can watch; if you'd rather it didn't, untick **Show mini-window
-  when compressing from File Explorer** in the marble's right-click menu.
+  when compressing from File Explorer** in the marble's right-click menu. Gracil looks through
+  folders in the background, so it keeps responding even with large folders or folders on a
+  network or cloud drive: files join the list folder by folder and compressing starts with the
+  first ones found.
 - Gracil installs like any other Windows app, and starts by itself when you sign in, waiting
   quietly next to the clock until you give it videos. To stop that, turn Gracil off in Windows'
   **Settings → Apps → Startup**.

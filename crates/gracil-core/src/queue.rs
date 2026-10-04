@@ -6,7 +6,8 @@
 //! not added twice; the app removes a finished entry first, so a file can always be compressed
 //! again (§29).
 
-use std::collections::HashSet;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::path::{Path, PathBuf};
 
 use crate::job::{InvalidTransition, JobEvent, JobState};
@@ -36,7 +37,8 @@ impl Job {
 #[derive(Debug, Default)]
 pub struct Queue {
     jobs: Vec<Job>,
-    keys: HashSet<String>,
+    /// Each job by its path (see [`key`]), so finding one never goes through the whole list.
+    keys: HashMap<String, JobId>,
     next_id: u64,
 }
 
@@ -45,8 +47,9 @@ impl Queue {
     pub fn add(&mut self, paths: impl IntoIterator<Item = PathBuf>) -> usize {
         let before = self.jobs.len();
         for path in paths {
-            if self.keys.insert(key(&path)) {
+            if let Entry::Vacant(slot) = self.keys.entry(key(&path)) {
                 self.next_id += 1;
+                slot.insert(JobId(self.next_id));
                 self.jobs.push(Job {
                     id: JobId(self.next_id),
                     path,
@@ -76,8 +79,7 @@ impl Queue {
 
     /// The job for `path`, matched the way adding matches duplicates.
     pub fn find(&self, path: &Path) -> Option<&Job> {
-        let wanted = key(path);
-        self.jobs.iter().find(|job| key(&job.path) == wanted)
+        self.keys.get(&key(path)).and_then(|&id| self.get(id))
     }
 
     /// The job being worked on, if any. At most one job is active at a time.

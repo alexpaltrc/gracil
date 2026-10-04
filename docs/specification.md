@@ -698,6 +698,10 @@ accepted too, there are three commands (videos and images, videos, images), and 
 the **Always** setting: "Compress and replace", "Compress and save copies of", or just "Compress",
 which opens the window and asks.
 
+*Amended by [ADR 0037](decisions/0037-looking-through-folders-in-the-background.md) (2026-10-04):*
+folders are looked through away from the window, folder by folder, and work starts with the
+first files found.
+
 # 59. Dynamic Explorer count
 
 Use the selected item collection to count supported videos for the title. Do not perform

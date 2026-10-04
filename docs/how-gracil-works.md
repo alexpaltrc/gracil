@@ -338,6 +338,14 @@ image inside it, subfolders included. *… videos* leaves the images alone and *
 videos alone. For files, you see the command that fits what you picked: only videos, only images,
 or all three when you picked both.
 
+Gracil looks through a folder in the background, so its window keeps responding even when the
+folder is large or lives on a network or cloud drive (OneDrive, Filen, a NAS…). Files join the
+list folder by folder, and compressing starts with the first ones found while Gracil keeps
+looking; until it finds the first, the window says **Looking through the folder…**, and after
+that the line with **View files** says **looking for more**. Looking only reads the names of the
+files. On a cloud drive, each file is still downloaded when its turn comes to be compressed, and
+the smaller version is uploaded when it is saved, so that part goes as fast as your connection.
+
 With **Replace** or **Save a copy**, the files are compressed without opening the big window. If
 Gracil is already running, the files join its list. If Gracil wasn't running, it starts for that,
 and closes by itself once the work is done.

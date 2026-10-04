@@ -58,6 +58,8 @@ pub struct Gracil {
     /// Choices made before compressing, by File Explorer's commands: the result is placed as soon
     /// as it is ready.
     intents: HashMap<JobId, Choice>,
+    /// How many requests from File Explorer are still being looked through (ADR 0037).
+    pub gathering: usize,
     /// Leaving was asked for; Gracil leaves as soon as nothing is half done.
     exiting: bool,
     /// The icon next to the clock, unless Windows refused it.
@@ -119,6 +121,8 @@ pub enum Message {
     /// The "Always" pill: replace, ask (`None`) or save a copy for every video that finishes.
     Always(Option<Choice>),
     Placed(JobId, Choice, Result<PathBuf, Failure>),
+    /// Files found in what File Explorer sent, with the choice it came with.
+    Found(Option<Choice>, work::Found),
     /// A file picked in the list is shown large; picking it again goes back to the work.
     Select(JobId),
     /// Back from a file picked in the list to what Gracil is working on.
@@ -200,6 +204,7 @@ impl Gracil {
             requested: false,
             resident: false,
             intents: HashMap::new(),
+            gathering: 0,
             exiting: false,
             tray,
             tray_shown: None,
@@ -378,6 +383,7 @@ impl Gracil {
                 self.selected = (self.selected != Some(id)).then_some(id);
                 Task::none()
             }
+            Message::Found(choice, found) => self.on_found(choice, found),
             Message::ShowCurrent => {
                 self.selected = None;
                 Task::none()
@@ -616,11 +622,27 @@ impl Gracil {
         } else {
             Task::none()
         };
-        // Folders from File Explorer are looked through here (ADR 0035).
-        let paths = gracil_core::media::gather(request.paths, request.only);
-        let added = self.add(paths.clone());
-        let mut tasks = vec![show, added];
-        if let Some(choice) = request.choice {
+        // Folders from File Explorer are looked through away from the window, which a slow
+        // drive would otherwise freeze; files join the list folder by folder (ADR 0035, 0037).
+        self.gathering += 1;
+        let choice = request.choice;
+        let gather = work::gather(request.paths, request.only)
+            .map(move |found| Message::Found(choice, found));
+        Task::batch([show, gather])
+    }
+
+    fn on_found(&mut self, choice: Option<Choice>, found: work::Found) -> Task<Message> {
+        let paths = match found {
+            work::Found::Files(paths) => paths,
+            work::Found::Done => {
+                self.gathering = self.gathering.saturating_sub(1);
+                return Task::none();
+            }
+        };
+        // Found in a folder listing or checked already, so nothing is asked of the drive again.
+        let added = self.add_checked(paths.clone());
+        let mut tasks = vec![added];
+        if let Some(choice) = choice {
             let ids: Vec<JobId> = paths
                 .iter()
                 .filter_map(|path| self.queue.find(path).map(|job| job.id))
@@ -815,7 +837,11 @@ impl Gracil {
     /// leaves it first, so the list never stops a video from being compressed again (spec §29).
     /// One still waiting, running or waiting for a choice stays as it is.
     fn add(&mut self, paths: Vec<PathBuf>) -> Task<Message> {
-        let paths: Vec<PathBuf> = files(paths).collect();
+        self.add_checked(files(paths).collect())
+    }
+
+    /// [`Self::add`] for paths known to be files already.
+    fn add_checked(&mut self, paths: Vec<PathBuf>) -> Task<Message> {
         let done_with: Vec<JobId> = paths
             .iter()
             .filter_map(|path| self.queue.find(path))

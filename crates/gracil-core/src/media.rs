@@ -59,41 +59,65 @@ pub fn looks_like_media(path: &Path) -> bool {
 
 /// The files to compress from what File Explorer sent (ADR 0035). A file given by itself is kept
 /// whatever its name, unless `only` asks for one kind. A folder is looked through, subfolders
-/// included, for the videos and images in it (of the `only` kind, when given), in name order.
-/// Links to other folders are not followed, so a folder can never lead back to itself.
+/// included, for the videos and images in it (of the `only` kind, when given): each folder's own
+/// files in name order, then its subfolders in name order. Links to other folders are not
+/// followed, so a folder can never lead back to itself.
 pub fn gather(paths: impl IntoIterator<Item = PathBuf>, only: Option<Kind>) -> Vec<PathBuf> {
-    let wanted = |path: &Path| only.is_none_or(|kind| kind_of(path) == kind);
     let mut found = Vec::new();
-    for path in paths {
-        if path.is_dir() {
-            walk(
-                &path,
-                &|path| looks_like_media(path) && wanted(path),
-                &mut found,
-            );
-        } else if path.is_file() && (only.is_none() || looks_like_media(&path) && wanted(&path)) {
-            found.push(path);
-        }
-    }
+    gather_each(paths, only, &mut |batch| found.extend(batch));
     found
 }
 
-fn walk(dir: &Path, wanted: &dyn Fn(&Path) -> bool, found: &mut Vec<PathBuf>) {
+/// [`gather`], handing over what it finds folder by folder as soon as each folder is read, so
+/// work can start before a large or slow folder (a network or cloud drive) is looked through
+/// (ADR 0037). Only names are read: no file is opened, so nothing has to be downloaded.
+pub fn gather_each(
+    paths: impl IntoIterator<Item = PathBuf>,
+    only: Option<Kind>,
+    found: &mut dyn FnMut(Vec<PathBuf>),
+) {
+    let wanted = |path: &Path| only.is_none_or(|kind| kind_of(path) == kind);
+    let mut loose = Vec::new();
+    for path in paths {
+        if path.is_dir() {
+            if !loose.is_empty() {
+                found(std::mem::take(&mut loose));
+            }
+            walk(&path, &|path| looks_like_media(path) && wanted(path), found);
+        } else if path.is_file() && (only.is_none() || looks_like_media(&path) && wanted(&path)) {
+            loose.push(path);
+        }
+    }
+    if !loose.is_empty() {
+        found(loose);
+    }
+}
+
+fn walk(dir: &Path, wanted: &dyn Fn(&Path) -> bool, found: &mut dyn FnMut(Vec<PathBuf>)) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
     let mut entries: Vec<_> = entries.flatten().collect();
     entries.sort_by_key(std::fs::DirEntry::file_name);
+    let mut files = Vec::new();
+    let mut folders = Vec::new();
     for entry in entries {
+        // What kind of entry it is comes with the folder's listing; nothing more is asked.
         let Ok(kind) = entry.file_type() else {
             continue;
         };
         let path = entry.path();
         if kind.is_dir() {
-            walk(&path, wanted, found);
+            folders.push(path);
         } else if kind.is_file() && wanted(&path) {
-            found.push(path);
+            files.push(path);
         }
+    }
+    if !files.is_empty() {
+        found(files);
+    }
+    for folder in folders {
+        walk(&folder, wanted, found);
     }
 }
 
@@ -157,6 +181,15 @@ mod tests {
                 .collect()
         };
         let all = names(gather([root.clone()], None));
+        let mut batches = Vec::new();
+        gather_each([root.clone()], None, &mut |batch| {
+            batches.push(names(batch))
+        });
+        assert_eq!(
+            batches,
+            [vec!["a.jpg", "b.mp4"], vec!["c.MOV", "d.heic"]],
+            "folder by folder"
+        );
         assert_eq!(all, ["a.jpg", "b.mp4", "c.MOV", "d.heic"]);
         assert_eq!(
             names(gather([root.clone()], Some(Kind::Video))),
