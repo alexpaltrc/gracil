@@ -15,16 +15,18 @@ Gracil is still being built, but you can already compress videos with it.
   dark mode and your accent color, and when you change either, Gracil fades gently to match.
   Every word and button stays easy to read in both.
 - Gracil has its own icon, a marble resting on a support, in the window, the taskbar, the Start
-  menu and File Explorer. On the taskbar it sits on a small tile in Gracil's own colours, dark or
-  light to match your taskbar. It stays sharp at any screen size.
+  menu and File Explorer. It sits on a small tile in Windows' own greys, always the opposite of
+  Windows: dark when Windows is light, light when Windows is dark, so it stands out in both. It
+  stays sharp at any screen size.
 - Drop videos onto the window, or choose them, and Gracil compresses them one after another. You
   can keep adding videos while it works.
 - Gracil runs only once. Opening it again, or opening videos with it while it is running, brings
   the open Gracil forward and adds the videos to the same list.
 - Closing the window no longer stops Gracil: it keeps working next to the clock. Its marble there
-  fills up as a video compresses, shows two bars when paused, and turns amber if something went
-  wrong while the window was closed. Right-click it for **Open Gracil** or **Exit**. If a video
-  is compressing or waiting, Gracil first asks, and tells you exactly what would stop.
+  fills up as a video compresses, shows two bars when paused, and changes to Windows' warning
+  color if something went wrong while the window was closed. Right-click it for **Open Gracil**
+  or **Exit**. If a video is compressing or waiting, Gracil first asks, and tells you exactly what
+  would stop.
 - Click the marble next to the clock and a small window opens beside it, wherever your taskbar
   is. It shows the video being compressed and how far along it is, and its ring pauses and
   resumes just like the big one. It also says how many videos are waiting and where a finished

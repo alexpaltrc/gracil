@@ -1,11 +1,13 @@
-//! The window's icon, taken from the one linked into gracil.exe (ADR 0016).
+//! The window's icon, taken from the ones linked into gracil.exe (ADR 0016, ADR 0031).
 //!
 //! Windows picks the closest picture in the icon file for each size, so the small icon in the
-//! title bar uses the version drawn for 16 px instead of a shrunken large one.
+//! title bar uses the version drawn for 16 px instead of a shrunken large one. The icon is the
+//! opposite of Windows' theme: the dark tile in light mode, the light tile in dark mode.
 
 use std::io;
 use std::ptr;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, MutexGuard};
 
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::HiDpi::{GetDpiForWindow, GetSystemMetricsForDpi};
@@ -14,11 +16,32 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     SM_CXSMICON, SendMessageW, WM_SETICON,
 };
 
-/// The icon's number in gracil.rc.
-const ICON_ID: u16 = 1;
+/// The icons' numbers in gracil.rc: the dark tile, for light mode, and the light tile.
+const DARK_TILE: u16 = 1;
+const LIGHT_TILE: u16 = 2;
+
+/// Whether Windows is in dark mode, so windows get the light tile.
+static DARK_MODE: AtomicBool = AtomicBool::new(false);
 
 /// The icons Gracil gave each window, as addresses, so they can be released when replaced.
 static GIVEN: Mutex<Vec<(u64, [usize; 2])>> = Mutex::new(Vec::new());
+
+/// Follows Windows' theme: every window Gracil gave an icon gets the one for `light`, and later
+/// windows too. Windows that have closed since are forgotten, and their icons released.
+pub fn set_icon_theme(light: bool) {
+    if DARK_MODE.swap(!light, Ordering::Relaxed) == !light {
+        return;
+    }
+    let windows: Vec<u64> = given().iter().map(|(window, _)| *window).collect();
+    for window in windows {
+        if set_window_icon(window).is_err() {
+            let mut given = given();
+            if let Some(index) = given.iter().position(|(handle, _)| *handle == window) {
+                given.swap_remove(index).1.into_iter().for_each(release);
+            }
+        }
+    }
+}
 
 /// Gives the window Gracil's icon at the sizes its current scale needs. Call it again when the
 /// window's scale changes. `window` is the window's handle, as Iced's `window::raw_id` gives it.
@@ -48,9 +71,7 @@ pub fn set_window_icon(window: u64) -> io::Result<()> {
         };
     }
 
-    let mut given = GIVEN
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut given = given();
     let icons = [small as usize, big as usize];
     match given.iter_mut().find(|(handle, _)| *handle == window) {
         Some((_, previous)) => std::mem::replace(previous, icons)
@@ -62,6 +83,11 @@ pub fn set_window_icon(window: u64) -> io::Result<()> {
 }
 
 fn load(metric: i32, dpi: u32) -> io::Result<HICON> {
+    let id = if DARK_MODE.load(Ordering::Relaxed) {
+        LIGHT_TILE
+    } else {
+        DARK_TILE
+    };
     // SAFETY: only reads system metrics.
     #[allow(unsafe_code)]
     let size = unsafe { GetSystemMetricsForDpi(metric, dpi) };
@@ -72,7 +98,7 @@ fn load(metric: i32, dpi: u32) -> io::Result<HICON> {
         let module = GetModuleHandleW(ptr::null());
         LoadImageW(
             module,
-            usize::from(ICON_ID) as *const u16,
+            usize::from(id) as *const u16,
             IMAGE_ICON,
             size,
             size,
@@ -83,6 +109,12 @@ fn load(metric: i32, dpi: u32) -> io::Result<HICON> {
         return Err(io::Error::last_os_error());
     }
     Ok(icon)
+}
+
+fn given() -> MutexGuard<'static, Vec<(u64, [usize; 2])>> {
+    GIVEN
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn release(icon: usize) {

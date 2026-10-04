@@ -59,10 +59,11 @@ The script maps `X.Y.Z` and `X.Y.Z-dev` to `X.Y.Z.0`
 
 ## Icons
 
-`scripts/icons.ps1` draws the app-list icons in `packaging/msix/Assets` from the marble's shapes
-and the Piedra palette: a graphite tile for a dark taskbar, an ivory one for a light taskbar
-([ADR 0026](../decisions/0026-icon-tile.md)). The PNGs are committed; run the script again only
-when the artwork or the palette changes. `package.ps1` indexes them in `resources.pri` with
+`scripts/icons.ps1` draws the package icons in `packaging/msix/Assets` and the window's two icon
+files in `assets/icons/ico` from the marble's shapes, in Windows 11's neutrals: a dark tile for a
+light taskbar or theme, a light one for a dark taskbar or theme
+([ADR 0031](../decisions/0031-windows-11-colors.md)). The files are committed; run the script
+again only when the artwork or the colors change. `package.ps1` indexes them in `resources.pri` with
 MakePri (Windows SDK), so Windows can pick the right one; without that index it would show the
 plain icon on the accent colour. Windows keeps icons in a cache, so a changed icon may only show
 after signing out.

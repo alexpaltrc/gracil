@@ -1,5 +1,5 @@
 //! The tray icon's pictures, drawn from the same shapes as the delivered tray artwork
-//! (`assets/icons/vector/piedra-tray-*.svg`): the support and the marble resting on it. Every
+//! (`assets/icons/vector/gracil-tray-*.svg`): the support and the marble resting on it. Every
 //! state is drawn the same way at the size the taskbar asks for, so switching states never shifts
 //! a pixel (ADR 0020).
 //!
@@ -33,20 +33,20 @@ const SAMPLES: u32 = 4;
 /// The share of the marble's radius kept as its rim while a video compresses.
 const RIM: f32 = 0.3;
 
-/// Colours as 0xRRGGBB. The support takes the taskbar's contrasting stone tone, as in the
-/// artwork; the warning tone is the same amber as the quiet "!" in the window.
+/// Colors as 0xRRGGBB, Windows 11's own (ADR 0031): the shape takes the text color that contrasts
+/// with the taskbar, and the warning is the same caution color as the quiet "!" in the window.
 struct Inks {
-    stone: u32,
+    ink: u32,
     warning: u32,
 }
 
 const ON_LIGHT: Inks = Inks {
-    stone: 0x4D4B46,
-    warning: 0xC28010,
+    ink: 0x1A1A1A,
+    warning: 0x9D5D00,
 };
 const ON_DARK: Inks = Inks {
-    stone: 0xDAD8CF,
-    warning: 0xF0B44C,
+    ink: 0xFFFFFF,
+    warning: 0xFCE100,
 };
 
 #[derive(Clone, Copy)]
@@ -99,7 +99,7 @@ fn ink_at(
     (x, y): (f32, f32),
 ) -> Option<u32> {
     if inside(support, x, y) {
-        return Some(inks.stone);
+        return Some(inks.ink);
     }
     let (cx, cy, rx, ry) = MARBLE;
     let (dx, dy) = ((x - cx) / rx, (y - cy) / ry);
@@ -108,16 +108,16 @@ fn ink_at(
         return None;
     }
     match state {
-        TrayState::Idle => Some(inks.stone),
+        TrayState::Idle => Some(inks.ink),
         // The marble fills clockwise from the top as the video advances, inside its rim.
         TrayState::Processing(fraction) => {
             let turn = (dx.atan2(-dy) / std::f32::consts::TAU).rem_euclid(1.0);
-            (reach >= 1.0 - RIM || turn <= fraction).then_some(inks.stone)
+            (reach >= 1.0 - RIM || turn <= fraction).then_some(inks.ink)
         }
         // Two bars in place of the marble.
         TrayState::Paused => {
             let bar = (0.2..=0.75).contains(&dx.abs()) && dy.abs() <= 0.8;
-            bar.then_some(inks.stone)
+            bar.then_some(inks.ink)
         }
         TrayState::Error => Some(inks.warning),
     }
@@ -196,7 +196,7 @@ mod tests {
         let pixels = draw(TrayState::Idle, true, SIZE);
         let (cx, cy) = marble_centre();
         assert_eq!(alpha(&pixels, cx, cy), 255);
-        assert_eq!(colour(&pixels, cx, cy), ON_LIGHT.stone);
+        assert_eq!(colour(&pixels, cx, cy), ON_LIGHT.ink);
         // The foot of the support, near the bottom right.
         assert_eq!(alpha(&pixels, 27, 27), 255);
         // The top right corner is empty.
@@ -233,8 +233,8 @@ mod tests {
     fn the_support_follows_the_taskbar() {
         let on_light = draw(TrayState::Idle, true, SIZE);
         let on_dark = draw(TrayState::Idle, false, SIZE);
-        assert_eq!(colour(&on_light, 27, 27), ON_LIGHT.stone);
-        assert_eq!(colour(&on_dark, 27, 27), ON_DARK.stone);
+        assert_eq!(colour(&on_light, 27, 27), ON_LIGHT.ink);
+        assert_eq!(colour(&on_dark, 27, 27), ON_DARK.ink);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 # 0016 — The app icon lives in gracil.exe
 
-**Status:** Accepted. Carries out the icon part of [0015](0015-piedra-identity.md).
+**Status:** Accepted. Carries out the icon part of [0015](0015-piedra-identity.md). The icon files
+and their colors are now those of [0031](0031-windows-11-colors.md), which links two icons.
 
 **Context.** File Explorer, the taskbar and the window's title bar each need Gracil's icon, at
 sizes that depend on the screen's scale. Iced can set a window icon only from a single bitmap,

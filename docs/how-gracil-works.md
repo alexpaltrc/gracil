@@ -31,10 +31,10 @@ measure: the buttons for what to do with a finished video are filled, so they st
 
 Gracil's symbol is a marble resting on a support: the marble is your video, and the support is
 Gracil, which takes care of the technical work. It is Gracil's icon in the window, the taskbar,
-the Start menu and File Explorer. On the taskbar and in the Start menu it rests on a small tile of
-its own stone colours, graphite on a dark taskbar and ivory on a light one, never on Windows'
-accent colour. Next to the clock it appears without a tile, also in a version that suits a light
-or dark taskbar.
+the Start menu and File Explorer. It rests on a small tile in Windows' own greys, always the
+opposite of Windows so it stands out: a dark tile when Windows is light, a light tile when Windows
+is dark. The window's icon changes with Windows' theme too. Next to the clock it appears without a
+tile, in black on a light taskbar and in white on a dark one.
 
 ## Adding videos
 
@@ -285,8 +285,9 @@ tells you how things are going:
 - a ring filling up around the marble: a video is compressing, and the ring shows how far along
   it is;
 - two bars: the compression is paused;
-- an amber marble: something went wrong while the window was closed. Open Gracil to see what;
-  the marble turns back to normal.
+- a marble in the warning color (orange-brown on a light taskbar, yellow on a dark one): something
+  went wrong while the window was closed. Open Gracil to see
+  what; the marble turns back to normal.
 
 Pointing at the marble says the same in words. Right-click it for **Open Gracil** and **Exit**.
 

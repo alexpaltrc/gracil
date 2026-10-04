@@ -183,6 +183,7 @@ impl Gracil {
         let mode =
             gracil_windows::light_apps().map(|light| if light { Mode::Light } else { Mode::Dark });
         let accent = windows_accent();
+        gracil_windows::set_icon_theme(mode != Some(Mode::Dark));
         let state = Self {
             queue: Queue::default(),
             outcomes: HashMap::new(),
@@ -989,6 +990,7 @@ impl Gracil {
         }
         let first = self.mode.is_none();
         self.mode = Some(mode);
+        gracil_windows::set_icon_theme(mode == Mode::Light);
         if first {
             self.theme = style::theme(style::palette(mode, self.accent));
             self.shift = None;
