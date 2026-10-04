@@ -352,6 +352,7 @@ mod tests {
             x265_10bit: true,
             scale_cuda: true,
             vmaf: true,
+            vmaf_cuda: false,
         }
     }
 

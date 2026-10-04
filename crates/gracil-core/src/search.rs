@@ -431,13 +431,18 @@ impl<'a> Search<'a> {
     /// Encodes one sample at `level` and measures it against the same part of the source.
     fn sample_args(&self, start: Duration, level: u8) -> Vec<OsString> {
         let encoder = self.attempt.encoder;
+        // With VMAF on the GPU too, the frames never leave it; otherwise they are handed over in
+        // ordinary memory, where the reference is measured on the CPU (ADR 0030).
+        let on_gpu = self.attempt.hw_decode && self.capabilities.vmaf_cuda;
         let mut args: Vec<OsString> = Vec::with_capacity(64);
         let mut push = |values: &[&str]| args.extend(values.iter().map(OsString::from));
         push(&["-hide_banner", "-nostdin", "-nostats", "-v", "info"]);
         push(&["-noautorotate"]);
-        if self.attempt.hw_decode {
-            // Decoded on the GPU, then handed over in ordinary memory: both branches below need
-            // the same frames, and the reference is measured on the CPU.
+        if on_gpu {
+            push(&["-init_hw_device", "cuda=gpu", "-filter_hw_device", "gpu"]);
+            push(&["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]);
+            push(&["-hwaccel_device", "gpu"]);
+        } else if self.attempt.hw_decode {
             push(&["-hwaccel", "cuda"]);
         }
         let (start, length) = (start.as_secs_f64(), SAMPLE.as_secs_f64());
@@ -447,16 +452,25 @@ impl<'a> Search<'a> {
 
         // The source, changed in size and rate as the real encode will be, feeds both the
         // encoder and the reference.
-        let mut changes = plan::video_filters(self.shape, false, encoder, self.capabilities);
-        let format = changes.pop().unwrap_or_default();
+        let mut changes = plan::video_filters(self.shape, on_gpu, encoder, self.capabilities);
+        let format = if on_gpu {
+            String::new()
+        } else {
+            changes.pop().unwrap_or_default()
+        };
         let mut graph = format!("[0:{}]", self.stream);
         for change in &changes {
             graph.push_str(change);
             graph.push(',');
         }
         graph.push_str("split[source][reference];");
-        graph.push_str(&format!("[source]{format}[encode];"));
-        graph.push_str("[reference]format=yuv420p[ref]");
+        if on_gpu {
+            graph.push_str("[source]null[encode];");
+            graph.push_str("[reference]scale_cuda=format=yuv420p[ref]");
+        } else {
+            graph.push_str(&format!("[source]{format}[encode];"));
+            graph.push_str("[reference]format=yuv420p[ref]");
+        }
         args.extend(["-filter_complex", &graph, "-map", "[encode]"].map(OsString::from));
         args.extend(plan::video_codec_args(encoder, self.capabilities, level, 0));
         // Every encoded frame's number and size, on standard output.
@@ -471,11 +485,18 @@ impl<'a> Search<'a> {
         );
         args.extend(["-f", "null", "-"].map(OsString::from));
 
-        // The encoded sample, decoded again, against the reference.
-        let threads = thread::available_parallelism().map_or(4, |n| n.get());
-        let measure = format!(
-            "[dec:0]format=yuv420p[encoded];[encoded][ref]libvmaf=n_threads={threads}:pool=harmonic_mean[vmaf]"
-        );
+        // The encoded sample, decoded again, against the reference. Every other frame is enough:
+        // the score moves by a few tenths at most, and the measuring takes a third less (ADR 0030).
+        let measure = if on_gpu {
+            format!(
+                "[dec:0]format=yuv420p,hwupload_cuda[encoded];[encoded][ref]libvmaf_cuda={VMAF_OPTIONS}[vmaf]"
+            )
+        } else {
+            let threads = thread::available_parallelism().map_or(4, |n| n.get());
+            format!(
+                "[dec:0]format=yuv420p[encoded];[encoded][ref]libvmaf=n_threads={threads}:{VMAF_OPTIONS}[vmaf]"
+            )
+        };
         args.extend(
             ["-dec", "0:0", "-filter_complex", &measure, "-map", "[vmaf]"].map(OsString::from),
         );
@@ -483,6 +504,9 @@ impl<'a> Search<'a> {
         args
     }
 }
+
+/// How each sample's frames are pooled into one score, and how many are measured.
+const VMAF_OPTIONS: &str = "pool=harmonic_mean:n_subsample=2";
 
 /// Where the samples start: one per [`SAMPLE_EVERY`] of video, up to [`MAX_SAMPLES`], each
 /// centred in an equal share of the video.

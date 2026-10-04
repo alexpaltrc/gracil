@@ -69,7 +69,8 @@ not wait for a whole encode to learn that a video couldn't shrink.
 - No more long encodes that end in "couldn't make it smaller" when the samples can tell first.
 - An already-compressed video spends longer getting ready (up to about a minute and a half for a
   long Full HD video: each measured level costs about 2.5 s per sample, half encoding on the GPU,
-  half VMAF on the CPU). The FFmpeg build has no GPU VMAF (`libvmaf_cuda`).
+  half VMAF on the CPU). The FFmpeg build has no GPU VMAF (`libvmaf_cuda`). ADR 0030 makes the measuring
+  quicker.
 - Quality below "looks the same" is only ever the user's explicit choice, never automatic.
 - The prediction relies on the encoders' default key-frame spacing; changing `-g` means revisiting
   it.

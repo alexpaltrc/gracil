@@ -69,6 +69,9 @@ pub struct Capabilities {
     pub scale_cuda: bool,
     /// VMAF, to measure each video's quality level.
     pub vmaf: bool,
+    /// VMAF on the GPU (`libvmaf_cuda`), used instead of the CPU when this FFmpeg has it and the
+    /// video is decoded there. No public Windows build has it today (ADR 0030).
+    pub vmaf_cuda: bool,
 }
 
 impl Capabilities {
@@ -99,6 +102,10 @@ impl Capabilities {
             x265_10bit,
             scale_cuda: lists_filter(&filters, "scale_cuda"),
             vmaf: lists_filter(&filters, "libvmaf"),
+            vmaf_cuda: cuda_decode
+                && ["libvmaf_cuda", "scale_cuda", "hwupload_cuda"]
+                    .iter()
+                    .all(|name| lists_filter(&filters, name)),
         };
         info!(?capabilities, "detected encoding capabilities");
         capabilities

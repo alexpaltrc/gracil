@@ -47,7 +47,8 @@ Detected once per process (`Capabilities::detect`):
   8-bit p6 setting. No tier uses adaptive quantization or the temporal filter (ADR 0029).
 - **CUDA decoding**: NVENC works and `-hwaccels` lists `cuda`.
 - **Filters**: `-filters` lists `scale_cuda` (resizing frames left on the GPU) and `libvmaf` (the
-  quality search). The essentials build has both.
+  quality search). The essentials build has both. `libvmaf_cuda` with `hwupload_cuda` (VMAF on the
+  GPU, ADR 0030) is used when present; no public Windows build has it.
 - **x265 10-bit**: `-h encoder=libx265` lists `yuv420p10le`.
 - Without NVENC, `libx265` on the CPU does the encoding.
 
@@ -101,7 +102,7 @@ whole search. One FFmpeg process per sample does both jobs, writing nothing to d
 -ss START -t 4 -i file:SRC
 -filter_complex "[0:N]fps…,scale…,split[source][reference];[source]format=…[encode];[reference]format=yuv420p[ref]"
 -map [encode] <encoder options at level> -stats_enc_post:0 pipe:1 -stats_enc_post_fmt:0 "{n} {size}" -f null -
--dec 0:0 -filter_complex "[dec:0]format=yuv420p[encoded];[encoded][ref]libvmaf=n_threads=…:pool=harmonic_mean[vmaf]"
+-dec 0:0 -filter_complex "[dec:0]format=yuv420p[encoded];[encoded][ref]libvmaf=n_threads=…:pool=harmonic_mean:n_subsample=2[vmaf]"
 -map [vmaf] -f null -
 ```
 
@@ -109,6 +110,12 @@ The loopback decoder (`-dec 0:0`) decodes what the encoder just produced. GPU de
 without `-hwaccel_output_format`, so both branches get ordinary frames; if it fails, the sample is
 retried on the CPU. The last `VMAF score:` line in the error output is the score; standard output
 lists every encoded frame's size.
+
+VMAF measures every other frame (`n_subsample=2`, ADR 0030). With `libvmaf_cuda`, the input is
+decoded with `-hwaccel_output_format cuda` on a named device (`-init_hw_device cuda=gpu
+-filter_hw_device gpu -hwaccel_device gpu`), the encoder takes the CUDA frames as they are, the
+reference is `scale_cuda=format=yuv420p`, and the encoded sample is decoded on the CPU and sent
+back with `format=yuv420p,hwupload_cuda` to `libvmaf_cuda` (`-dec` takes no `-hwaccel`).
 
 **Predicted size (ADR 0029).** The samples' average frame size without their first frame, times
 the video's frame count, plus their average first (key) frame once per 250 frames, plus every

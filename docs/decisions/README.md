@@ -34,3 +34,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0027](0027-version-scheme.md) | Versions stay small: 1.0 at the Store, then slowly |
 | [0028](0028-quality-standard.md) | Gracil's quality standard: each video finds its own level |
 | [0029](0029-lighter-never-heavier.md) | Lighter, never heavier: predicted sizes and lighter choices for already-compressed videos |
+| [0030](0030-faster-quality-measurement.md) | Faster quality measurement: every other frame, and on the GPU when FFmpeg can |

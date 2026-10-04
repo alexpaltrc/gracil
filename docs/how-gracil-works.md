@@ -125,7 +125,9 @@ see a difference. So instead of squeezing every video the same amount, Gracil me
 
 - Before compressing, it tries a few short moments from different parts of the video at
   different strengths, and compares each attempt with the original using a well-known measure of
-  how people see picture quality.
+  how people see picture quality. It measures every other picture, which is just as
+  reliable and quicker. When the computer's graphics card and FFmpeg allow it, the measuring
+  happens on the graphics card too; otherwise on the processor.
 - It picks the strongest compression that still looks the same as the original when you watch
   it normally. Easy videos come out much smaller; demanding ones keep the detail they need.
 - This takes a few seconds to a minute, while Gracil shows that it's getting ready. Stop works

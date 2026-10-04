@@ -73,7 +73,8 @@ Gracil is still being built, but you can already compress videos with it.
 - Each video gets its own amount of compression. Gracil first tries a few short moments of the
   video and picks the strongest compression that still looks the same as the original, so easy
   videos come out much smaller and demanding ones keep their detail. This takes a few seconds
-  while Gracil is getting ready, and you can stop it at any time.
+  while Gracil is getting ready, and you can stop it at any time. It looks at every other picture,
+  which is just as reliable and quicker, and leaves the processor freer.
 - Gracil makes videos lighter, never heavier. Those same short moments tell it how big the video
   will come out, so it only compresses when the result will be clearly smaller, instead of working
   for minutes to find out it isn't.
