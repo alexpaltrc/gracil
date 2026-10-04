@@ -29,6 +29,7 @@ use tracing::{info, warn};
 use crate::compress::{Engine, Update, reserve_temp};
 use crate::encode::{EncodeOutcome, JobControl, run_ffmpeg, run_program};
 use crate::leftovers;
+use crate::share;
 use crate::standard::WORTH_IT;
 use crate::toolchain::hidden_command;
 use jpeg::Carried;
@@ -519,8 +520,7 @@ impl Job<'_> {
         // Palettes are made side by side, as many at once as the processor and memory allow:
         // each needs a few copies of the picture.
         let pixels = reference.pixels.len().max(1);
-        let at_once = thread::available_parallelism()
-            .map_or(1, usize::from)
+        let at_once = share::threads_for_one()
             .min(PALETTE_MEMORY / (pixels * 32))
             .clamp(1, tries.len());
         let mut palettes = Vec::new();

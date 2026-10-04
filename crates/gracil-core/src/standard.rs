@@ -91,9 +91,13 @@ impl NvencLevel {
     }
 }
 
-/// x265 options, without the quality level.
-pub const X265_OPTIONS: [(&str, &str); 2] =
-    [("preset", "medium"), ("x265-params", "log-level=error")];
+/// x265 options, without the quality level. It may use `threads` of the processor (ADR 0040).
+pub fn x265_options(threads: usize) -> [(&'static str, String); 2] {
+    [
+        ("preset", "medium".to_owned()),
+        ("x265-params", format!("log-level=error:pools={threads}")),
+    ]
+}
 
 /// The pixel format frames are converted to before a software-fed encoder.
 pub fn pixel_format(ten_bit: bool, encoder: VideoEncoder) -> &'static str {

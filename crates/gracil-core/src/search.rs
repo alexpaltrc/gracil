@@ -18,7 +18,6 @@ use std::ffi::OsString;
 use std::fs;
 use std::ops::RangeInclusive;
 use std::path::Path;
-use std::thread;
 use std::time::Duration;
 
 use tracing::{info, warn};
@@ -27,6 +26,7 @@ use crate::capabilities::{Capabilities, VideoEncoder};
 use crate::encode::{self, EncodeOutcome, JobControl};
 use crate::plan::{self, Attempt, EncodePlan, StreamAction};
 use crate::probe::{MediaInfo, file_url};
+use crate::share;
 use crate::standard::{self, Shape};
 use crate::toolchain::Toolchain;
 
@@ -434,7 +434,7 @@ impl<'a> Search<'a> {
                 "[dec:0]format=yuv420p,hwupload_cuda[encoded];[encoded][ref]libvmaf_cuda={VMAF_OPTIONS}[vmaf]"
             )
         } else {
-            let threads = thread::available_parallelism().map_or(4, |n| n.get());
+            let threads = share::threads_for_one();
             format!(
                 "[dec:0]format=yuv420p[encoded];[encoded][ref]libvmaf=n_threads={threads}:{VMAF_OPTIONS}[vmaf]"
             )

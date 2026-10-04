@@ -10,6 +10,7 @@ mod instance;
 mod lifetime;
 mod numbers;
 mod process;
+mod quiet;
 mod theme;
 mod tray;
 
@@ -20,6 +21,7 @@ pub use instance::{claim, forward, is_running, serve};
 pub use lifetime::end_children_with_this_process;
 pub use numbers::{NumberSettings, number_settings};
 pub use process::set_suspended;
+pub use quiet::{free_memory, idle_for, work_quietly};
 pub use theme::{Accent, accent, light_apps};
 pub use tray::{Tray, TrayEvent, TrayMenu, TrayState};
 

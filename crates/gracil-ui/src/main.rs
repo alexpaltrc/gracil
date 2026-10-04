@@ -50,6 +50,8 @@ fn main() -> iced::Result {
     if let Err(error) = gracil_windows::end_children_with_this_process() {
         warn!(%error, "FFmpeg may outlive a sudden close");
     }
+    // Compressing runs below other programs; the window, drawn on this thread, does not (ADR 0040).
+    gracil_windows::work_quietly();
     outside::send(Outside::Request(request));
 
     // Iced reads Windows' list of fonts the first time it draws text, which after a fresh start

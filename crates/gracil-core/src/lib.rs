@@ -14,6 +14,7 @@ pub mod probe;
 pub mod progress;
 pub mod queue;
 pub mod search;
+pub mod share;
 pub mod standard;
 pub mod toolchain;
 

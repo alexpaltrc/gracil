@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 
 use crate::capabilities::{Capabilities, VideoEncoder};
 use crate::probe::{MediaInfo, Stream, StreamKind, file_url};
+use crate::share;
 use crate::standard::{self, Shape};
 
 /// Every compressed video is an MP4, whatever it was before (ADR 0012).
@@ -239,17 +240,23 @@ pub(crate) fn video_codec_args(
     level: u8,
     out: usize,
 ) -> Vec<OsString> {
-    let (codec, options, level_name): (_, &[(&str, &str)], _) = match encoder {
-        VideoEncoder::Nvenc => ("hevc_nvenc", capabilities.nvenc.options(), "cq"),
-        VideoEncoder::X265 => ("libx265", &standard::X265_OPTIONS, "crf"),
+    let (codec, options, level_name): (_, Vec<(&str, String)>, _) = match encoder {
+        VideoEncoder::Nvenc => {
+            let options = capabilities.nvenc.options();
+            let options = options.iter().map(|&(n, v)| (n, v.to_owned())).collect();
+            ("hevc_nvenc", options, "cq")
+        }
+        VideoEncoder::X265 => {
+            let options = standard::x265_options(share::threads_for_one()).into();
+            ("libx265", options, "crf")
+        }
     };
-    let level = level.to_string();
     // `hvc1` is the HEVC tag Apple devices and Windows players expect.
-    [("c", codec)]
-        .iter()
+    [("c", codec.to_owned())]
+        .into_iter()
         .chain(options)
-        .chain(&[(level_name, level.as_str()), ("tag", "hvc1")])
-        .flat_map(|(name, value)| [format!("-{name}:{out}").into(), (*value).into()])
+        .chain([(level_name, level.to_string()), ("tag", "hvc1".to_owned())])
+        .flat_map(|(name, value)| [format!("-{name}:{out}").into(), value.into()])
         .collect()
 }
 
