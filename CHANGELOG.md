@@ -9,7 +9,8 @@ Gracil is still being built, but you can already compress videos and images with
 ### New
 
 - Gracil is in English and Spanish. It uses the language Windows is shown in, so there is nothing
-  to set.
+  to set. Numbers are written the way Windows writes them for your region, for example
+  **15,031 files** and **1.2 GB**.
 - Gracil wears Windows 11's own colors, in light and dark, so it looks like part of Windows. Its
   buttons and progress take the accent color you picked in Windows. It follows Windows' light or
   dark mode and your accent color, and when you change either, Gracil fades gently to match.

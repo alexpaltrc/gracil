@@ -5,6 +5,7 @@
 
 use gracil_windows::TrayState;
 
+use crate::numbers::Numbers;
 use crate::work::{Failure, Sizes};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,18 +70,17 @@ pub struct Text {
     /// The pill's two ends: always replace, always save a copy. Its middle, "ask each time", is a
     /// small circle rather than a word.
     pub always_choices: [&'static str; 2],
-    /// The decimal mark: a point in English, a comma in Spanish.
-    decimal: char,
     smaller: fn(u32) -> String,
     in_all: fn(&str, u32) -> String,
     less: fn(&str) -> String,
-    files: fn(usize) -> String,
-    ready: fn(usize) -> String,
-    in_line: fn(usize) -> String,
+    /// The count, and the count written in the user's number format.
+    files: fn(usize, &str) -> String,
+    ready: fn(usize, &str) -> String,
+    in_line: fn(usize, &str) -> String,
     saved_as: fn(&str) -> String,
     replaced_by: fn(&str) -> String,
     tray_tip: fn(TrayState) -> String,
-    exit_explanation: fn(bool, usize) -> String,
+    exit_explanation: fn(bool, usize, &str) -> String,
     failures: Failures,
 }
 
@@ -121,9 +121,9 @@ impl Text {
             unit += 1;
         }
         let number = if value < 9.95 && unit > 0 {
-            format!("{value:.1}").replace('.', &self.decimal.to_string())
+            Numbers::system().one_decimal(value)
         } else {
-            format!("{value:.0}")
+            Numbers::system().whole(value.round() as u64)
         };
         format!("{number} {}", UNITS[unit])
     }
@@ -153,16 +153,16 @@ impl Text {
     }
 
     pub fn files(&self, count: usize) -> String {
-        (self.files)(count)
+        (self.files)(count, &number(count))
     }
 
     pub fn ready(&self, count: usize) -> String {
-        (self.ready)(count)
+        (self.ready)(count, &number(count))
     }
 
     /// How many files are waiting their turn.
     pub fn in_line(&self, count: usize) -> String {
-        (self.in_line)(count)
+        (self.in_line)(count, &number(count))
     }
 
     pub fn saved_as(&self, name: &str) -> String {
@@ -181,7 +181,7 @@ impl Text {
     /// What Exit will do to the work in progress (spec §54.1): whether a compression stops, and
     /// how many files waiting won't be compressed.
     pub fn exit_explanation(&self, stops_one: bool, waiting: usize) -> String {
-        (self.exit_explanation)(stops_one, waiting)
+        (self.exit_explanation)(stops_one, waiting, &number(waiting))
     }
 
     /// Why something went wrong, as the "!" explains it.
@@ -233,15 +233,14 @@ static ENGLISH: Text = Text {
     choose_files: "Choose files",
     media_filter: "Videos and images",
     all_files_filter: "All files",
-    decimal: '.',
     smaller: |percent| format!("{percent}% smaller"),
     in_all: |change, percent| format!("In all: {change}, {percent}% smaller"),
     less: |amount| format!("{amount} smaller"),
-    files: |count| match count {
+    files: |count, written| match count {
         1 => "1 file".to_owned(),
-        n => format!("{n} files"),
+        _ => format!("{written} files"),
     },
-    ready: |count| format!("{count} ready"),
+    ready: |_, written| format!("{written} ready"),
     saved_as: |name| format!("Saved as {name}"),
     replaced_by: |name| format!("Replaced by {name}"),
     open_gracil: "Open Gracil",
@@ -251,14 +250,14 @@ static ENGLISH: Text = Text {
     explorer_mini_window: "Show mini-window when compressing from File Explorer",
     always: "Always",
     always_choices: ["Replace", "Save a copy"],
-    in_line: |count| format!("{count} waiting"),
+    in_line: |_, written| format!("{written} waiting"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
         TrayState::Processing(done) => format!("Gracil · compressing {}%", percent(done)),
         TrayState::Paused => "Gracil · paused".to_owned(),
         TrayState::Error => "Gracil · something needs your attention".to_owned(),
     },
-    exit_explanation: |stops_one, waiting| {
+    exit_explanation: |stops_one, waiting, written| {
         let mut parts = Vec::new();
         if stops_one {
             parts.push(
@@ -269,7 +268,7 @@ static ENGLISH: Text = Text {
         match waiting {
             0 => {}
             1 => parts.push("1 file waiting won't be compressed.".to_owned()),
-            n => parts.push(format!("{n} files waiting won't be compressed.")),
+            _ => parts.push(format!("{written} files waiting won't be compressed.")),
         }
         parts.join(" ")
     },
@@ -318,17 +317,16 @@ static SPANISH: Text = Text {
     choose_files: "Elegir archivos",
     media_filter: "Videos e imágenes",
     all_files_filter: "Todos los archivos",
-    decimal: ',',
     smaller: |percent| format!("{percent}% más pequeño"),
     in_all: |change, percent| format!("En total: {change}, {percent}% más pequeño"),
     less: |amount| format!("{amount} menos"),
-    files: |count| match count {
+    files: |count, written| match count {
         1 => "1 archivo".to_owned(),
-        n => format!("{n} archivos"),
+        _ => format!("{written} archivos"),
     },
-    ready: |count| match count {
+    ready: |count, written| match count {
         1 => "1 listo".to_owned(),
-        n => format!("{n} listos"),
+        _ => format!("{written} listos"),
     },
     saved_as: |name| format!("Guardado como {name}"),
     replaced_by: |name| format!("Reemplazado por {name}"),
@@ -339,14 +337,14 @@ static SPANISH: Text = Text {
     explorer_mini_window: "Mostrar miniventana al comprimir desde el Explorador de archivos",
     always: "Siempre",
     always_choices: ["Reemplazar", "Guardar como copia"],
-    in_line: |count| format!("{count} en espera"),
+    in_line: |_, written| format!("{written} en espera"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
         TrayState::Processing(done) => format!("Gracil · comprimiendo {}%", percent(done)),
         TrayState::Paused => "Gracil · en pausa".to_owned(),
         TrayState::Error => "Gracil · algo necesita tu atención".to_owned(),
     },
-    exit_explanation: |stops_one, waiting| {
+    exit_explanation: |stops_one, waiting, written| {
         let mut parts = Vec::new();
         if stops_one {
             parts.push(
@@ -358,7 +356,7 @@ static SPANISH: Text = Text {
         match waiting {
             0 => {}
             1 => parts.push("1 archivo en espera no se comprimirá.".to_owned()),
-            n => parts.push(format!("{n} archivos en espera no se comprimirán.")),
+            _ => parts.push(format!("{written} archivos en espera no se comprimirán.")),
         }
         parts.join(" ")
     },
@@ -376,6 +374,11 @@ static SPANISH: Text = Text {
         no_encoder: "Falta el compresor de fotos de Gracil. Reinstalar Gracil lo arregla",
     },
 };
+
+/// A count in the user's number format: `15,031`.
+fn number(count: usize) -> String {
+    Numbers::system().whole(count as u64)
+}
 
 /// A share from 0 to 1 rounded to a whole percentage, for how much smaller a file became.
 fn rounded_percent(share: f64) -> u32 {
@@ -427,6 +430,11 @@ mod tests {
         assert_eq!(en.files(3), "3 files");
         assert_eq!(es.ready(1), "1 listo");
         assert_eq!(es.ready(2), "2 listos");
+        assert_eq!(
+            es.files(15_031),
+            "15,031 archivos",
+            "in the number format of Windows"
+        );
     }
 
     #[test]
@@ -442,7 +450,7 @@ mod tests {
         assert_eq!(en.size(300), "1 KB");
         assert_eq!(en.size(78 * 1024 * 1024), "78 MB");
         assert_eq!(en.size(1_288_490_189), "1.2 GB");
-        assert_eq!(es.size(1_288_490_189), "1,2 GB");
+        assert_eq!(en.size(5_000 * 1024 * 1024 * 1024), "4.9 TB");
         assert_eq!(en.size(1023 * 1024), "1.0 MB", "never 1023 KB");
         let sizes = Sizes {
             original: 100 * 1024 * 1024,

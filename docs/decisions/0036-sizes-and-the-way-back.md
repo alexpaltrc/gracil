@@ -19,7 +19,8 @@ the only way back was to take the picked file off the list.
    choice count too; files that failed or were stopped don't. Only what is on the list counts, so
    taking files off it or **Clear** starts the count again. Nothing is stored between sessions.
 3. **Sizes read like File Explorer:** KB, MB, GB counted in 1024s, one decimal under 10, the
-   language's decimal mark (*1.2 GB*, *1,2 GB*).
+   decimal mark of the user's region as Windows has it (*1.2 GB*, *1,2 GB*; amended from the
+   language's decimal mark, spec §77.3).
 4. **Picking is a look, not a trap.** The picked row stays lightly marked. Clicking it again,
    closing **View files**, or clicking the quiet *‹ name · 42%* line under the picked file goes
    back to the work. That line shows only while a file is being compressed or a result waits for

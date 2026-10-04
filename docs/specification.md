@@ -441,8 +441,9 @@ A result shows its size before and after under its choices ("120 MB → 78 MB").
 of a placed file says how much smaller and where it went ("−35% · Replaced"). With two or more
 results on the list, the drawer opens with their sum ("In all: 3.4 GB → 2.2 GB, 35% smaller")
 and the footer adds the room freed ("1.2 GB smaller"). Only files still on the list count. Sizes
-are counted the way File Explorer counts them (1 KB = 1024 bytes), with the language's decimal
-mark.
+are counted the way File Explorer counts them (1 KB = 1024 bytes). Every number, sizes and counts alike, is written the way Windows writes
+numbers for the user's region: its decimal mark and its digit grouping (*15,031 files*,
+*1.2 GB* in Mexico; *15.031 archivos*, *1,2 GB* in Spain).
 
 # 33. Active item behavior
 
@@ -963,7 +964,7 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   few seconds. It must respond at once, however long the list is.
 - **Numbers in the system's format.** Large counts must use the separators Windows is set to,
   for example *15,031 files* rather than *15031 files*. The same goes for every number Gracil
-  shows.
+  shows. *Built 2026-10-04 (§32.2).*
 - **A clear "done".** When the work is finished, the main window shows it instead of leaving the
   last state of the ring: for example the middle of the ring filled with a green check mark, and
   the amount saved ("130 MB smaller") brought to the center, larger, with a subtle animation, just

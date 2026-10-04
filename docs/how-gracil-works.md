@@ -18,6 +18,10 @@ anywhere.
 Gracil speaks English and Spanish. It uses the language Windows is shown in, so there's nothing
 to set: if Windows is in Spanish, Gracil is too; otherwise it's in English.
 
+Numbers are written the way Windows writes them for your region, which you set in Windows'
+**Settings → Time & language → Language & region**. In Mexico, for example, that is *15,031
+files* and *1.2 GB*; in Spain, *15.031 archivos* and *1,2 GB*.
+
 ## Light and dark
 
 Gracil follows Windows' light or dark mode, with nothing to set. It uses Windows 11's own colors,
