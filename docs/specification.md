@@ -955,6 +955,22 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   compressed") replaces the ring in the main window, and the only way back to the ring is to take
   that file off the list. Going back to the work in progress must be easy and natural.
 
+*Recorded 2026-10-04 by the product owner, after compressing a cloud-drive folder of more than
+15,000 files. Not built; to be evaluated before building.*
+
+- **A list that opens instantly.** With a very long list (15,031 files and growing while Gracil
+  still looks through the folder), opening and closing **View files** in the main window takes a
+  few seconds. It must respond at once, however long the list is.
+- **Numbers in the system's format.** Large counts must use the separators Windows is set to,
+  for example *15,031 files* rather than *15031 files*. The same goes for every number Gracil
+  shows.
+- **A clear "done".** When the work is finished, the main window shows it instead of leaving the
+  last state of the ring: for example the middle of the ring filled with a green check mark, and
+  the amount saved ("130 MB smaller") brought to the center, larger, with a subtle animation, just
+  below the ring. It could add a short summary of the whole batch, such as *22 files compressed*
+  and *4 files were already compressed*. The aim is quick feedback that Gracil has finished,
+  above all after a long list. The exact form is still open.
+
 # 78. Temporary UI decisions
 
 Intentionally unfinished: final icon, colors, typography, animation language, detailed styling,
