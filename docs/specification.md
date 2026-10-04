@@ -977,20 +977,31 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   in ADR 0014, so an ADR amends it when it is built.
 - **Several images at once.** Gracil compresses one file at a time, so a long list of images
   (14,916 still waiting in the owner's folder) takes far longer than it needs to. Images should
-  be compressed several at a time. Proposed: as many at once as the processor has cores, less
-  one so the computer stays responsive, and fewer when the images are very large, so memory never
-  runs short. On a network or cloud drive this also overlaps the waiting for downloads and
-  uploads. Pause and stop act on all of them together, and the ring shows the progress of the
-  whole list (ADR 0034).
-- **Videos: proposed, to be evaluated.** Don't compress two videos at once by default: the
-  encoder on the graphics card, or the processor, is already fully used by one video, so two at
-  once would each go about half as fast and gain nothing. Instead, get the next video ready (its
-  short test samples, which mostly use the processor) while the current one is compressed on the
-  graphics card. Also compress images on the processor while a video is compressed on the
-  graphics card. Two videos at once only on graphics cards with two or more video encoders (some
-  high-end NVIDIA cards), and only if measuring shows a real gain.
-- Both change the rule that only one file is worked on at a time (§33, the queue), so an ADR
-  records them when they are built.
+  be compressed several at a time, and fewer when the images are very large, so memory never runs
+  short. On a network or cloud drive this also overlaps the waiting for downloads and uploads.
+  Pause and stop act on all of them together, and the ring shows the progress of the whole list
+  (ADR 0034).
+- **Fast, but never alarming.** *Decided by the product owner.* Gracil must never make the
+  computer feel slow, and never run it flat out: the fans would roar, and that would not inspire
+  trust. How much Gracil uses adapts to what the user is doing: more while the computer is
+  otherwise idle, less as soon as the user is working in other applications. This holds even for
+  a list of 15,000 files. High performance, yes; scaring the user, never. It applies to all the
+  work, not just images.
+- **One video at a time.** *Decided by the product owner.* Two videos are never compressed at
+  once: one video already uses all of the graphics card's encoder (or the processor), so two
+  would each go at half speed and gain nothing.
+- **Get the next file ready during the current one.** *Decided by the product owner, as the base
+  of how Gracil works.* Every file's work has two stages: getting ready (for a video, the short
+  test samples that choose its compression, mostly on the processor) and compressing (for a
+  video, mostly on the graphics card). While one file compresses, the next one gets ready, instead
+  of the two stages always following each other. This is built once, for every kind of file:
+  videos, images, and any kind added later.
+- **Images on the processor while a video is on the graphics card.** *Decided by the product
+  owner.* While a video compresses on the graphics card, images compress on the processor, so
+  neither sits idle. Still within "fast, but never alarming".
+- Together these change the rule that only one file is worked on at a time (§33, the queue) and
+  the order of ADR 0034 (images before waiting videos), so an ADR records them when they are
+  built. *Not built: the owner will say when to start.*
 
 # 78. Temporary UI decisions
 
