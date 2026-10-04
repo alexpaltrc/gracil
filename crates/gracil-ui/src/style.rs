@@ -37,7 +37,7 @@ pub fn palette(mode: Mode) -> Palette {
     const MARBLE: Color = Color::from_rgb8(0x8C, 0x88, 0x7E);
     match mode {
         Mode::Dark => Palette {
-            background: Color::from_rgb8(0x25, 0x25, 0x22),
+            background: DARK_BACKGROUND,
             text: Color::from_rgb8(0xDA, 0xD8, 0xCF),
             primary: MARBLE,
             success: Color::from_rgb8(0x5C, 0xC9, 0x8A),
@@ -45,7 +45,7 @@ pub fn palette(mode: Mode) -> Palette {
             danger: Color::from_rgb8(0xF2, 0x6D, 0x6D),
         },
         _ => Palette {
-            background: Color::from_rgb8(0xF3, 0xF1, 0xEB),
+            background: LIGHT_BACKGROUND,
             text: Color::from_rgb8(0x4D, 0x4B, 0x46),
             primary: MARBLE,
             success: Color::from_rgb8(0x2E, 0x9E, 0x62),
@@ -57,6 +57,67 @@ pub fn palette(mode: Mode) -> Palette {
 
 pub fn theme(palette: Palette) -> Theme {
     Theme::custom("Gracil", palette)
+}
+
+/// The Piedra roles beyond Iced's palette, checked against WCAG (ADR 0015): text at least 4.5:1
+/// on its background, controls at least 3:1.
+#[derive(Debug, Clone, Copy)]
+pub struct Tokens {
+    /// Secondary text: counts, states, hints, quiet actions.
+    pub secondary: Color,
+    /// Filled controls and what has been done (the dial's trail).
+    pub accent: Color,
+    /// Text on the accent.
+    pub on_accent: Color,
+    /// Edges of controls and areas.
+    pub border: Color,
+    /// Text on the marble's stone grey, for anything filled with it.
+    pub on_marble: Color,
+}
+
+const LIGHT_BACKGROUND: Color = Color::from_rgb8(0xF3, 0xF1, 0xEB);
+const DARK_BACKGROUND: Color = Color::from_rgb8(0x25, 0x25, 0x22);
+
+const LIGHT: Tokens = Tokens {
+    secondary: Color::from_rgb8(0x67, 0x65, 0x61),
+    accent: Color::from_rgb8(0x68, 0x65, 0x5E),
+    on_accent: LIGHT_BACKGROUND,
+    border: Color::from_rgb8(0x88, 0x84, 0x7B),
+    on_marble: Color::from_rgb8(0x15, 0x14, 0x13),
+};
+
+const DARK: Tokens = Tokens {
+    secondary: Color::from_rgb8(0xAA, 0xA8, 0xA1),
+    accent: Color::from_rgb8(0xAB, 0xA8, 0xA0),
+    on_accent: DARK_BACKGROUND,
+    border: Color::from_rgb8(0x8C, 0x88, 0x7E),
+    on_marble: Color::from_rgb8(0x15, 0x14, 0x13),
+};
+
+/// The roles for what `theme` shows, including partway through a change between light and dark:
+/// how far its background has gone from ivory to graphite says how far to mix them.
+pub fn tokens(theme: &Theme) -> Tokens {
+    let background = theme.palette().background;
+    let t = ((background.r - LIGHT_BACKGROUND.r) / (DARK_BACKGROUND.r - LIGHT_BACKGROUND.r))
+        .clamp(0.0, 1.0);
+    let mix = |a, b| mix(a, b, t);
+    Tokens {
+        secondary: mix(LIGHT.secondary, DARK.secondary),
+        accent: mix(LIGHT.accent, DARK.accent),
+        on_accent: mix(LIGHT.on_accent, DARK.on_accent),
+        border: mix(LIGHT.border, DARK.border),
+        on_marble: mix(LIGHT.on_marble, DARK.on_marble),
+    }
+}
+
+/// A color part of the way from `from` to `to`.
+fn mix(from: Color, to: Color, t: f32) -> Color {
+    Color {
+        r: from.r + (to.r - from.r) * t,
+        g: from.g + (to.g - from.g) * t,
+        b: from.b + (to.b - from.b) * t,
+        a: from.a + (to.a - from.a) * t,
+    }
 }
 
 /// A palette part of the way from one theme to the other, for the shift between them.
@@ -80,7 +141,7 @@ pub fn blend(from: Palette, to: Palette, t: f32) -> Palette {
 /// Secondary text: file counts, states, hints.
 pub fn muted(theme: &Theme) -> text::Style {
     text::Style {
-        color: Some(theme.palette().text.scale_alpha(0.75)),
+        color: Some(tokens(theme).secondary),
     }
 }
 
@@ -94,10 +155,11 @@ pub fn notice(theme: &Theme) -> text::Style {
 /// A text-only button that comes forward on hover. Used for every quiet action.
 pub fn quiet_button(theme: &Theme, status: button::Status) -> button::Style {
     let palette = theme.palette();
+    let secondary = tokens(theme).secondary;
     let text_color = match status {
         button::Status::Hovered | button::Status::Pressed => palette.text,
-        button::Status::Disabled => palette.text.scale_alpha(0.3),
-        button::Status::Active => palette.text.scale_alpha(0.65),
+        button::Status::Disabled => secondary.scale_alpha(0.45),
+        button::Status::Active => secondary,
     };
     button::Style {
         background: None,
@@ -107,19 +169,20 @@ pub fn quiet_button(theme: &Theme, status: button::Status) -> button::Style {
     }
 }
 
-/// The one kind of button with a surface: what to do with a finished result. Still soft, so it
-/// reads as an offer rather than a demand.
+/// The one kind of button with a surface: what to do with a finished result. Filled with the
+/// accent, so it reads clearly in both themes.
 pub fn action_button(theme: &Theme, status: button::Status) -> button::Style {
     let palette = theme.palette();
+    let tokens = tokens(theme);
     let (fill, text_color) = match status {
         button::Status::Hovered | button::Status::Pressed => {
-            (palette.text.scale_alpha(0.13), palette.text)
+            (mix(tokens.accent, palette.text, 0.25), tokens.on_accent)
         }
         button::Status::Disabled => (
-            palette.text.scale_alpha(0.04),
-            palette.text.scale_alpha(0.3),
+            palette.text.scale_alpha(0.06),
+            tokens.secondary.scale_alpha(0.6),
         ),
-        button::Status::Active => (palette.text.scale_alpha(0.07), palette.text),
+        button::Status::Active => (tokens.accent, tokens.on_accent),
     };
     button::Style {
         background: Some(Background::Color(fill)),
@@ -135,7 +198,7 @@ pub fn drop_zone(theme: &Theme, hovered: bool) -> container::Style {
     let (fill, edge) = if hovered {
         (palette.primary.scale_alpha(0.12), palette.primary)
     } else {
-        (Color::TRANSPARENT, palette.text.scale_alpha(0.12))
+        (Color::TRANSPARENT, tokens(theme).border)
     };
     container::Style {
         background: Some(Background::Color(fill)),
@@ -161,7 +224,7 @@ pub fn tooltip(theme: &Theme) -> container::Style {
         border: Border::default()
             .rounded(RADIUS / 2.0)
             .width(1.0)
-            .color(palette.text.scale_alpha(0.12)),
+            .color(tokens(theme).border),
         ..container::Style::default()
     }
 }

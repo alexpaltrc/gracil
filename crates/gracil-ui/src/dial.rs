@@ -13,6 +13,7 @@ use iced::widget::canvas::{self, Action, Event, Frame, Geometry, LineCap, Path, 
 use iced::{Color, Point, Rectangle, Renderer, Size, Theme, Vector, window};
 
 use crate::app::Message;
+use crate::style;
 
 /// Width and height of the dial, in logical pixels. Drawn smaller, everything shrinks with it.
 pub const SIZE: f32 = 148.0;
@@ -175,6 +176,7 @@ impl canvas::Program<Message> for Dial {
         _cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
         let palette = theme.palette();
+        let tokens = style::tokens(theme);
         let mut frame = Frame::new(renderer, bounds.size());
         let center = frame.center();
         let scale = scale(bounds.size());
@@ -196,11 +198,12 @@ impl canvas::Program<Message> for Dial {
                 .with_width(pipe_width)
                 .with_color(palette.text.scale_alpha(0.04)),
         );
-        frame.stroke(&Path::circle(center, outer), wall(0.22));
-        frame.stroke(&Path::circle(center, inner), wall(0.22));
+        let edge = Stroke::default().with_width(1.0).with_color(tokens.border);
+        frame.stroke(&Path::circle(center, outer), edge);
+        frame.stroke(&Path::circle(center, inner), edge);
 
-        // What has gone through the pipe, from twelve o'clock clockwise, behind the marble. Like the
-        // logo, it is the support color, and the stone-grey marble rests on it.
+        // What has gone through the pipe, from twelve o'clock clockwise, behind the marble. It is the
+        // accent, a shade of the support color like the logo's, and the stone-grey marble rests on it.
         let head = -FRAC_PI_2 + TAU * state.fill;
         if state.fill > 0.001 {
             let trail = Path::new(|path| {
@@ -216,7 +219,7 @@ impl canvas::Program<Message> for Dial {
                 Stroke::default()
                     .with_width(pipe_width - 5.0 * scale)
                     .with_line_cap(LineCap::Butt)
-                    .with_color(palette.text.scale_alpha(0.85 - 0.3 * state.play)),
+                    .with_color(tokens.accent.scale_alpha(1.0 - 0.35 * state.play)),
             );
         }
 
@@ -271,9 +274,9 @@ impl canvas::Program<Message> for Dial {
 
         let symbol = |hover: f32, enabled: bool| {
             if enabled {
-                mix(palette.text.scale_alpha(0.65), palette.text, hover)
+                mix(tokens.secondary, palette.text, hover)
             } else {
-                palette.text.scale_alpha(0.25)
+                tokens.secondary.scale_alpha(0.45)
             }
         };
 

@@ -23,6 +23,8 @@ to set: if Windows is in Spanish, Gracil is too; otherwise it's in English.
 Gracil follows Windows' light or dark mode, with nothing to set. Its colors are soft mineral greys
 and ivory. If you switch Windows between light and dark while Gracil is open, Gracil follows right
 away, fading gently from one to the other instead of flashing.
+Every word and every button is chosen to stay easy to read in both, by the usual accessibility
+measure: the buttons for what to do with a finished video are filled, so they stand out clearly.
 
 Gracil's symbol is a marble resting on a support: the marble is your video, and the support is
 Gracil, which takes care of the technical work. It is Gracil's icon in the window, the taskbar,

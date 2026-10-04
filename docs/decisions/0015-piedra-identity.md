@@ -22,7 +22,21 @@ those names so they match the delivery's checksums.
    | Marble | `#8C887E` | `#8C887E` |
 
    Text and hover states use the support color; the marble color is kept for the marble itself
-   and the drop area. The warm "!" and the success and danger colors stay as they were, since they
+   and the drop area.
+
+   *Update (2026-10-03):* the product owner checked every role against WCAG (text at least
+   4.5:1, controls at least 3:1) and set these, in `style::tokens`:
+
+   | Role | Light | Dark | On the marble `#8C887E` |
+   |---|---|---|---|
+   | Text | `#4D4B46` (5.01:1) | `#DAD8CF` (5.02:1) | `#151413` (4.66:1) |
+   | Secondary text, quiet actions | `#676561` | `#AAA8A1` | `#201F1D` |
+   | Accent: filled buttons, the dial's trail | `#68655E` | `#ABA8A0` | `#191816` |
+   | Border: edges of controls and areas | `#88847B` | `#8C887E` | `#3C3A36` |
+
+   Secondary text is a color of its own rather than the text made transparent. Filled buttons use
+   the accent with the background color as their text. A picked end of the "Always" pill is
+   marble grey with the "on the marble" text. The warm "!" and the success and danger colors stay as they were, since they
    carry meaning. The previous violet palette is kept in
    [`../design/previous-palette.md`](../design/previous-palette.md).
 2. The dial borrows the logo: its trail is the support color and the stone-grey marble rests on

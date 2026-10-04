@@ -14,7 +14,7 @@ use iced::{
     Background, Border, Element, Event, Length, Rectangle, Renderer, Size, Theme, mouse, window,
 };
 
-use crate::style::{size, space};
+use crate::style::{self, size, space};
 
 /// How quickly the stone catches up, in seconds (the time to cover about two thirds).
 const EASE: f32 = 0.07;
@@ -38,12 +38,13 @@ pub fn pill<'a, Message: 'a>(
     let label = move |index: usize, label: &'a str| -> Element<'a, Message> {
         let picked = index == selected;
         container(text(label).size(size::CAPTION).style(move |theme: &Theme| {
-            let color = theme.palette().text;
+            // A picked end sits on the marble-grey stone.
+            let tokens = style::tokens(theme);
             text::Style {
                 color: Some(if picked {
-                    color
+                    tokens.on_marble
                 } else {
-                    color.scale_alpha(0.5)
+                    tokens.secondary
                 }),
             }
         }))
@@ -174,6 +175,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
         use iced::advanced::Renderer as _;
 
         let palette = theme.palette();
+        let tokens = style::tokens(theme);
         let Some(content) = layout.children().next() else {
             return;
         };
@@ -185,7 +187,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
                 border: Border::default()
                     .rounded(radius)
                     .width(1.0)
-                    .color(palette.text.scale_alpha(0.12)),
+                    .color(tokens.border),
                 ..renderer::Quad::default()
             },
             Background::Color(palette.text.scale_alpha(0.03)),
@@ -226,10 +228,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
             };
             // Off in the middle, filled at either end.
             let lit = (at - 1.0).abs();
-            let fill = palette
-                .text
-                .scale_alpha(0.06)
-                .mix(palette.primary.scale_alpha(0.55), lit);
+            let fill = palette.text.scale_alpha(0.06).mix(palette.primary, lit);
             renderer.fill_quad(
                 renderer::Quad {
                     bounds: stone,
@@ -257,7 +256,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
                     border: Border::default()
                         .rounded(RING / 2.0)
                         .width(1.2)
-                        .color(palette.text.scale_alpha(0.5 + 0.15 * (1.0 - lit))),
+                        .color(tokens.secondary.scale_alpha(0.7 + 0.3 * (1.0 - lit))),
                     ..renderer::Quad::default()
                 },
                 Background::Color(iced::Color::TRANSPARENT),
