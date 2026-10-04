@@ -830,9 +830,8 @@ Do not attempt to build every milestone in one giant pass.
 
 # 77.1 Next: image compression (planned)
 
-*Added 2026-10-03. Only a plan: nothing of it is built, and no code is written for it until the
-open decisions below are settled in an ADR. It waits until video compression has been refined
-into Gracil's own quality standard, whose philosophy images will then follow.*
+*Added 2026-10-03. Only a plan: nothing of it is built yet. Decisions 2, 3 and 4 below are settled
+by [ADR 0034](decisions/0034-image-standard.md), Gracil's image standard; decision 5 is still open.*
 
 Gracil will compress images with the same philosophy as video:
 
@@ -864,7 +863,9 @@ Open decisions, to settle before any work starts:
    rules as video. Every image keeps its resolution (ADR 0033); a JPEG is made at jpegli's
    "looks the same" distance and kept only when clearly smaller; an image already compressed is
    compressed again at a looser distance, without asking, or keeps the quiet "!"; never heavier.
-   The numbers, and how much smaller a PNG must get, come from measuring the test set.
+   *Decided in ADR 0034:* JPEG at jpegli distance 1.0, fixed; compressing again searches distances
+   1.5–3.0 for SSIMULACRA2 80 or more; PNG lossless plus a palette at SSIMULACRA2 90 or more, and
+   80 or more when compressing again; at most 80% of the original, as for video.
 3. **Which images are accepted** *(partly decided 2026-10-03 by the product owner)*:
    - An image with transparency that is not a PNG (a WebP or TIFF, for example) becomes a PNG,
      so its transparency is kept; JPEG has none.
@@ -874,12 +875,14 @@ Open decisions, to settle before any work starts:
      into a JPEG is developing it, not compressing it.
    - **JPEG XL** files are not accepted either: the format never became common, and whoever made
      one already has a well-compressed image.
-   - Still open: HDR photos and very large images.
+   - HDR and very large images: decided in ADR 0034 (a gain-map photo becomes its normal picture;
+     true HDR is left as it is for now; no size limit).
 4. **The engine**: FFmpeg, which Gracil already relies on, or a dedicated image library.
    *Proposed (2026-10-03):* Windows itself (WIC) reads images, with FFmpeg as a fallback; jpegli
    makes the JPEGs (FFmpeg has no jpegli and a weak JPEG encoder); oxipng optimizes PNGs.
    *Decided:* the JPEG encoder is jpegli only (Google's, the newest and the best at high
-   quality), taken from the official libjxl release; JPEG XL itself is not used.
+   quality), built by Gracil from Google's official repository (github.com/google/jpegli) at a
+   pinned commit and shipped inside the package; nothing from libjxl or JPEG XL is used (ADR 0034).
 5. **How images and videos share the list**, the dial and the tray without adding complexity.
 
 # 78. Temporary UI decisions

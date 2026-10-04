@@ -6,6 +6,8 @@
 - Rust stable (MSVC toolchain), at least the `rust-version` in `Cargo.toml`
 - Windows 11 SDK (provides `makeappx.exe` and `signtool.exe` for packaging)
 - Git
+- Visual Studio Build Tools with the C++ workload, CMake and Ninja: only to build jpegli
+  (`scripts/build-jpegli.ps1`, ADR 0034), the JPEG encoder images will use
 
 ## Everyday commands
 
