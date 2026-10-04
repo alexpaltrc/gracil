@@ -146,6 +146,19 @@ impl EncodePlan {
         })
     }
 
+    /// The same plan with the main video leaving in `shape` instead, for a lighter choice
+    /// (ADR 0029).
+    pub fn with_shape(mut self, shape: Shape) -> Self {
+        if let Some(stream) = self
+            .streams
+            .iter_mut()
+            .find(|s| matches!(s.action, StreamAction::EncodeVideo(_)))
+        {
+            stream.action = StreamAction::EncodeVideo(shape);
+        }
+        self
+    }
+
     /// The complete FFmpeg argument list. The output file must already exist (Gracil reserves it),
     /// which is why `-y` is safe here.
     pub fn args(&self) -> Vec<OsString> {

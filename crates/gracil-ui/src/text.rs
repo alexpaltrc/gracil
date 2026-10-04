@@ -5,6 +5,8 @@
 
 use gracil_windows::TrayState;
 
+use gracil_core::search::Lighter;
+
 use crate::work::Failure;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +48,10 @@ pub struct Text {
     pub saving: &'static str,
     pub not_smaller: &'static str,
     pub not_compressed: &'static str,
+    /// An already-compressed video, waiting for the user to pick a lighter version (ADR 0029).
+    pub already_compressed: &'static str,
+    /// Why the lighter versions are offered, behind the "!".
+    pub why_lighter: &'static str,
     pub cancelled: &'static str,
     pub replaced: &'static str,
     pub copy_saved: &'static str,
@@ -71,6 +77,7 @@ pub struct Text {
     replaced_by: fn(&str) -> String,
     tray_tip: fn(TrayState) -> String,
     exit_explanation: fn(bool, usize) -> String,
+    lighter: fn(LighterLabel, &str) -> String,
     failures: Failures,
 }
 
@@ -79,6 +86,7 @@ struct Failures {
     unreadable: &'static str,
     could_not_compress: &'static str,
     not_smaller: &'static str,
+    as_small_as_it_gets: &'static str,
     could_not_save: &'static str,
     name_taken: &'static str,
 }
@@ -128,6 +136,17 @@ impl Text {
         (self.exit_explanation)(stops_one, waiting)
     }
 
+    /// A lighter version as its button says it, with its predicted size: "Keep 1080p, compress
+    /// more · ~120 MB", or for the mini-window just "1080p · ~120 MB".
+    pub fn lighter(&self, choice: &Lighter, short: bool) -> String {
+        let label = LighterLabel {
+            smaller: choice.smaller,
+            short_side: choice.short_side,
+            short,
+        };
+        (self.lighter)(label, &file_size(choice.predicted))
+    }
+
     /// Why something went wrong, as the "!" explains it.
     pub fn failure(&self, failure: Failure) -> &'static str {
         let failures = &self.failures;
@@ -136,6 +155,7 @@ impl Text {
             Failure::Unreadable => failures.unreadable,
             Failure::CouldNotCompress => failures.could_not_compress,
             Failure::NotSmaller => failures.not_smaller,
+            Failure::AsSmallAsItGets => failures.as_small_as_it_gets,
             Failure::CouldNotSave => failures.could_not_save,
             Failure::NameTaken => failures.name_taken,
         }
@@ -162,6 +182,8 @@ static ENGLISH: Text = Text {
     saving: "Saving",
     not_smaller: "Not smaller",
     not_compressed: "Not compressed",
+    already_compressed: "Already compressed",
+    why_lighter: "Compressing it again without any visible change would barely make it smaller. \n                  A lighter version makes it much smaller, though it may look a little less sharp.",
     cancelled: "Cancelled",
     replaced: "Replaced",
     copy_saved: "Copy saved",
@@ -206,11 +228,24 @@ static ENGLISH: Text = Text {
         }
         parts.join(" ")
     },
+    lighter: |label, size| {
+        let p = |side: u32| format!("{side}p");
+        match (label.smaller, label.short_side, label.short) {
+            (false, Some(side), false) => format!("Keep {}, compress more · {size}", p(side)),
+            (false, None, false) => format!("Keep the size, compress more · {size}"),
+            (true, Some(side), false) => format!("Make it {} · {size}", p(side)),
+            (true, None, false) => format!("Make it smaller · {size}"),
+            (_, Some(side), true) => format!("{} · {size}", p(side)),
+            (false, None, true) => format!("Compress more · {size}"),
+            (true, None, true) => format!("Smaller · {size}"),
+        }
+    },
     failures: Failures {
         no_video: "This file has no video",
         unreadable: "This file can't be opened as a video",
         could_not_compress: "This video couldn't be compressed",
         not_smaller: "This video couldn't be made smaller than the original, so it isn't saved",
+        as_small_as_it_gets: "This video is already compressed about as much as it can be, so it was left as it is",
         could_not_save: "The compressed video couldn't be saved in this folder",
         name_taken: "Another file already has this video's new name, so the original was kept",
     },
@@ -236,6 +271,8 @@ static SPANISH: Text = Text {
     saving: "Guardando",
     not_smaller: "No se redujo",
     not_compressed: "Sin comprimir",
+    already_compressed: "Ya está comprimido",
+    why_lighter: "Volver a comprimirlo sin ningún cambio visible apenas lo haría más pequeño. \n                  Una versión más ligera lo reduce mucho más, aunque puede verse un poco menos \n                  nítido.",
     cancelled: "Cancelado",
     replaced: "Reemplazado",
     copy_saved: "Copia guardada",
@@ -284,15 +321,49 @@ static SPANISH: Text = Text {
         }
         parts.join(" ")
     },
+    lighter: |label, size| {
+        let p = |side: u32| format!("{side}p");
+        match (label.smaller, label.short_side, label.short) {
+            (false, Some(side), false) => format!("Mantener {}, comprimir más · {size}", p(side)),
+            (false, None, false) => format!("Mantener el tamaño, comprimir más · {size}"),
+            (true, Some(side), false) => format!("Reducir a {} · {size}", p(side)),
+            (true, None, false) => format!("Reducir el tamaño · {size}"),
+            (_, Some(side), true) => format!("{} · {size}", p(side)),
+            (false, None, true) => format!("Comprimir más · {size}"),
+            (true, None, true) => format!("Más pequeño · {size}"),
+        }
+    },
     failures: Failures {
         no_video: "Este archivo no tiene video",
         unreadable: "Este archivo no se puede abrir como video",
         could_not_compress: "Este video no se pudo comprimir",
         not_smaller: "Este video no se pudo hacer más pequeño que el original, así que no se guarda",
+        as_small_as_it_gets: "Este video ya está comprimido casi al máximo, así que se dejó como está",
         could_not_save: "El video comprimido no se pudo guardar en esta carpeta",
         name_taken: "Ya hay otro archivo con el nuevo nombre de este video, así que se conservó el original",
     },
 };
+
+/// What a lighter version's button needs to say.
+#[derive(Debug, Clone, Copy)]
+struct LighterLabel {
+    /// The picture becomes smaller, rather than keeping its size.
+    smaller: bool,
+    /// The picture's short side afterwards (720 for 720p), when known.
+    short_side: Option<u32>,
+    /// Few words, for the mini-window.
+    short: bool,
+}
+
+/// A predicted file size, roughly: "~85 MB", "~1.4 GB".
+fn file_size(bytes: u64) -> String {
+    let megabytes = bytes as f64 / 1_000_000.0;
+    if megabytes >= 999.5 {
+        format!("~{:.1} GB", megabytes / 1000.0)
+    } else {
+        format!("~{:.0} MB", megabytes.max(1.0))
+    }
+}
 
 /// A share from 0 to 1 as a whole percentage, never above 100.
 fn percent(share: f32) -> u32 {
@@ -346,5 +417,33 @@ mod tests {
         let es = Text::get(Language::Spanish);
         assert_eq!(es.smaller(0.756), "76% más pequeño");
         assert_eq!(Text::get(Language::English).smaller(0.004), "0% smaller");
+    }
+
+    #[test]
+    fn lighter_versions_say_their_size() {
+        let es = Text::get(Language::Spanish);
+        let keep = LighterLabel {
+            smaller: false,
+            short_side: Some(1080),
+            short: false,
+        };
+        let down = LighterLabel {
+            smaller: true,
+            short_side: Some(720),
+            ..keep
+        };
+        let size = file_size(119_600_000);
+        assert_eq!(
+            (es.lighter)(keep, &size),
+            "Mantener 1080p, comprimir más · ~120 MB"
+        );
+        assert_eq!((es.lighter)(down, "~80 MB"), "Reducir a 720p · ~80 MB");
+        let short = LighterLabel {
+            short: true,
+            ..down
+        };
+        assert_eq!((es.lighter)(short, "~80 MB"), "720p · ~80 MB");
+        assert_eq!(file_size(1_436_000_000), "~1.4 GB");
+        assert_eq!(file_size(200_000), "~1 MB");
     }
 }

@@ -9,6 +9,7 @@ use gracil_core::compress::Engine;
 use gracil_core::encode::JobControl;
 use gracil_core::job::{JobEvent, JobState};
 use gracil_core::queue::{Job, JobId, Queue};
+use gracil_core::search::Lighter;
 use gracil_windows::{Tray, TrayEvent, TrayMenu, TrayState};
 use iced::theme::{Mode, Palette};
 use iced::window::settings::PlatformSpecific;
@@ -56,6 +57,9 @@ pub struct Gracil {
     /// Choices made before compressing, by File Explorer's commands: the result is placed as soon
     /// as it is ready.
     intents: HashMap<JobId, Choice>,
+    /// Lighter versions picked for already-compressed videos, used when they compress again
+    /// (ADR 0029).
+    lighter: HashMap<JobId, Lighter>,
     /// Leaving was asked for; Gracil leaves as soon as nothing is half done.
     exiting: bool,
     /// The icon next to the clock, unless Windows refused it.
@@ -113,6 +117,8 @@ pub enum Message {
     Pause,
     Resume,
     Choose(JobId, Choice),
+    /// A lighter version was picked for an already-compressed video: it compresses again.
+    Lighten(JobId, Lighter),
     ChooseAll(Choice),
     /// The "Always" pill: replace, ask (`None`) or save a copy for every video that finishes.
     Always(Option<Choice>),
@@ -188,6 +194,7 @@ impl Gracil {
             requested: false,
             resident: false,
             intents: HashMap::new(),
+            lighter: HashMap::new(),
             exiting: false,
             tray,
             tray_shown: None,
@@ -341,6 +348,7 @@ impl Gracil {
                 Task::none()
             }
             Message::Choose(id, choice) => self.choose(id, choice),
+            Message::Lighten(id, choice) => self.lighten(id, choice),
             Message::Always(always) => {
                 self.settings.always = always;
                 if let Err(error) = self.settings.save() {
@@ -706,7 +714,7 @@ impl Gracil {
             && !self
                 .outcomes
                 .values()
-                .any(|outcome| matches!(outcome, Outcome::Ready { .. }))
+                .any(|outcome| matches!(outcome, Outcome::Ready { .. } | Outcome::Lighter(_)))
     }
 
     /// The video shown large: the one the user picked; otherwise the running one; otherwise a
@@ -718,8 +726,11 @@ impl Gracil {
             .and_then(|id| self.queue.get(id))
             .or_else(|| self.queue.active())
             .or_else(|| {
-                jobs.iter()
-                    .find(|job| self.outcomes.get(&job.id).is_some_and(Outcome::is_waiting))
+                jobs.iter().find(|job| {
+                    self.outcomes
+                        .get(&job.id)
+                        .is_some_and(Outcome::needs_choice)
+                })
             })
             .or_else(|| jobs.iter().find(|job| job.state == JobState::Pending))
             .or_else(|| self.last_placed.and_then(|id| self.queue.get(id)))
@@ -733,10 +744,11 @@ impl Gracil {
         self.queue
             .active()
             .or_else(|| {
-                self.queue
-                    .jobs()
-                    .iter()
-                    .find(|job| self.outcomes.get(&job.id).is_some_and(Outcome::is_waiting))
+                self.queue.jobs().iter().find(|job| {
+                    self.outcomes
+                        .get(&job.id)
+                        .is_some_and(Outcome::needs_choice)
+                })
             })
             .or_else(|| self.focused())
     }
@@ -827,6 +839,7 @@ impl Gracil {
         if !removable || !self.queue.remove(id) {
             return;
         }
+        self.lighter.remove(&id);
         self.intents.remove(&id);
         if let Some(Outcome::Ready { temp, .. }) = self.outcomes.remove(&id) {
             work::discard(&temp);
@@ -837,6 +850,41 @@ impl Gracil {
         if self.last_placed == Some(id) {
             self.last_placed = None;
         }
+    }
+
+    /// Puts the lighter versions of an already-compressed video in front of the user: in the
+    /// window that is open, else in the mini-window (when File Explorer's mini-window is on), else
+    /// the tray icon asks for attention.
+    fn offer(&mut self) -> Task<Message> {
+        if self.main.is_some() || self.mini.is_some() {
+            return Task::none();
+        }
+        if self.settings.explorer_mini_window {
+            self.open_mini()
+        } else {
+            self.unseen_problem = true;
+            Task::none()
+        }
+    }
+
+    /// Compresses an already-compressed video again, as the lighter version the user picked.
+    fn lighten(&mut self, id: JobId, choice: Lighter) -> Task<Message> {
+        let offered = matches!(
+            self.outcomes.get(&id),
+            Some(Outcome::Lighter(choices)) if choices.contains(&choice)
+        );
+        if !offered || self.queue.apply(id, JobEvent::Retry).is_err() {
+            return Task::none();
+        }
+        info!(
+            level = choice.level,
+            smaller = choice.smaller,
+            "lighter version picked"
+        );
+        self.outcomes.remove(&id);
+        self.lighter.insert(id, choice);
+        self.selected = None;
+        self.schedule()
     }
 
     /// Marks a problem the user hasn't seen, when no window is open.
@@ -861,7 +909,8 @@ impl Gracil {
         let (id, path) = (job.id, job.path.clone());
         let control = JobControl::default();
         self.running = Some((id, control.clone()));
-        work::compress_video(engine.clone(), path, control)
+        let choice = self.lighter.get(&id).copied();
+        work::compress_video(engine.clone(), path, choice, control)
             .map(move |report| Message::Job(id, report))
     }
 
@@ -884,7 +933,7 @@ impl Gracil {
                         JobEvent::BeginFinalizing,
                         JobEvent::Complete,
                     ],
-                    Outcome::Failed(_) => &[JobEvent::Fail],
+                    Outcome::Failed(_) | Outcome::Lighter(_) => &[JobEvent::Fail],
                     Outcome::Cancelled => &[JobEvent::Cancel],
                 };
                 for &event in events {
@@ -892,11 +941,23 @@ impl Gracil {
                     let _ = self.queue.apply(id, event);
                 }
                 // A result that isn't smaller is no fault; the original simply stays.
-                if matches!(outcome, Outcome::Failed(failure) if failure != Failure::NotSmaller) {
+                let fault = matches!(
+                    outcome,
+                    Outcome::Failed(failure)
+                        if !matches!(failure, Failure::NotSmaller | Failure::AsSmallAsItGets)
+                );
+                if fault {
                     self.note_problem();
                 }
+                let offered = matches!(outcome, Outcome::Lighter(_));
                 self.outcomes.insert(id, outcome);
+                self.lighter.remove(&id);
                 self.running = None;
+                if offered {
+                    // Nothing was compressed yet: the user picks a lighter version first, and File
+                    // Explorer's choice still applies once it is compressed.
+                    return Task::batch([self.offer(), self.schedule()]);
+                }
                 // File Explorer's choice first; otherwise the "Always" setting (ADR 0025).
                 let intent = self.intents.remove(&id).or(self.settings.always);
                 let place = match intent {

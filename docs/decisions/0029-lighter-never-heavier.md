@@ -34,7 +34,9 @@ not wait for a whole encode to learn that a video couldn't shrink.
    give at most **80%** of the original's size. The search stops as soon as a level that misses
    95 is already predicted above 80%: every level that would reach 95 is bigger still.
 4. **An already-compressed video** is one where that fails. Nothing is encoded. Gracil measures up
-   to two lighter choices and offers them, each with its predicted size:
+   to two lighter choices and offers them, each with its predicted size (the search reuses every
+   level already measured, and steps past a level that reaches its target by the score it has
+   to spare):
    - **Keep the size, compress more:** the highest level whose VMAF is at least **90** at the
      video's own size, searching NVENC CQ 24–42 and x265 CRF 20–38.
    - **One size down:** the short side goes to the next step of 1080 → 720 → 480 strictly below
@@ -47,8 +49,10 @@ not wait for a whole encode to learn that a video couldn't shrink.
 5. **Asking.** The choices appear inline where the video is shown, in the main window and in the
    mini-window. "Always" (ADR 0025) and File Explorer's replace/copy choice don't answer them;
    they still decide what happens once the chosen compression finishes. When the choice is
-   needed and no Gracil window is open, the mini-window opens so the decision is quick. Picking
-   one compresses with that size and level, without searching again.
+   needed and no Gracil window is open, the mini-window opens so the decision is quick (unless
+   the user turned File Explorer's mini-window off: then the tray icon asks for attention).
+   Picking one puts the video back in line, and it compresses with that size and level, without
+   searching again.
 6. **The final check stays.** A result that is not smaller than the original is still discarded
    (spec §40.1); it should now be rare.
 

@@ -90,26 +90,44 @@ missing.
 ### Quality search (`search.rs`)
 
 Before the first attempt, Gracil looks for the highest level (smallest file) whose VMAF reaches
-95: NVENC CQ 24–38, x265 CRF 20–34, by binary search (about four steps). Each step encodes 4 s
-samples, one per 15 s of video up to four, centred in equal shares of the video, and averages
-their scores. One FFmpeg process per sample does both jobs, writing nothing to disk:
+95: NVENC CQ 24–38, x265 CRF 20–34. Between a level that reaches the target and one that misses
+it, the next guess is on a straight line through their scores; with only a level that reaches it,
+the search steps past it by the score it has to spare (about a point per level); otherwise it
+halves what is left. Each step encodes 4 s samples, one per 15 s of video up to four, centred in
+equal shares of the video, and averages their scores. Every measured level is cached for the
+whole search. One FFmpeg process per sample does both jobs, writing nothing to disk:
 
 ```text
 -ss START -t 4 -i file:SRC
 -filter_complex "[0:N]fps…,scale…,split[source][reference];[source]format=…[encode];[reference]format=yuv420p[ref]"
--map [encode] <encoder options at level> -f null -
+-map [encode] <encoder options at level> -stats_enc_post:0 pipe:1 -stats_enc_post_fmt:0 "{n} {size}" -f null -
 -dec 0:0 -filter_complex "[dec:0]format=yuv420p[encoded];[encoded][ref]libvmaf=n_threads=…:pool=harmonic_mean[vmaf]"
 -map [vmaf] -f null -
 ```
 
 The loopback decoder (`-dec 0:0`) decodes what the encoder just produced. GPU decoding is used
 without `-hwaccel_output_format`, so both branches get ordinary frames; if it fails, the sample is
-retried on the CPU. The last `VMAF score:` line in the error output is the score.
+retried on the CPU. The last `VMAF score:` line in the error output is the score; standard output
+lists every encoded frame's size.
+
+**Predicted size (ADR 0029).** The samples' average frame size without their first frame, times
+the video's frame count, plus their average first (key) frame once per 250 frames, plus every
+stream that is not re-encoded at its size in the source. A level that reaches 95 is used only if
+it is predicted to be at most 80% of the original; the search gives up early once a level that
+misses 95 is already predicted above 80%.
+
+**Already compressed.** Otherwise nothing is encoded and `find_level` returns `Found::Lighter`
+with up to two choices at VMAF ≥ 90 (NVENC CQ 24–42, x265 CRF 20–38): the video's own size, and
+one size down (short side 1080 → 720 → 480, never below 480, scored against the source scaled to
+that same size). Each is kept only if predicted at most 80% of the original, and the smaller size
+only if lighter than the first. `compress_with` then encodes the user's pick without searching
+again.
 
 The search is skipped (fixed level: CQ 27, CRF 26) for videos under 6 s, of unknown length, under
 60 s with x265, or without `libvmaf`, and whenever a measurement fails. If no level reaches 95, the
 best quality in the range is used. Attempts with a different encoder than the first use their
-fixed level. Cancelling stops the search. The chosen level and every score are logged.
+fixed level. Cancelling stops the search. Every measured level, its score and predicted video size
+are logged, as are the choice and the lighter choices.
 
 ### Keeping what matters (spec §41)
 

@@ -102,16 +102,31 @@ pub fn run(
     control: &JobControl,
     on_progress: &mut dyn FnMut(Progress),
 ) -> EncodeOutcome {
-    run_ffmpeg(toolchain, plan.args(), control, on_progress).0
+    let mut parser = ProgressParser::default();
+    let mut made_progress = false;
+    let (outcome, _) = run_ffmpeg(toolchain, plan.args(), control, &mut |line| {
+        if let Some(progress) = parser.feed(line) {
+            made_progress |= !progress.position.is_zero();
+            on_progress(progress);
+        }
+    });
+    match outcome {
+        EncodeOutcome::Failed { error, .. } => EncodeOutcome::Failed {
+            error,
+            made_progress,
+        },
+        other => other,
+    }
 }
 
-/// Runs FFmpeg with `args` under `control`, like [`run`]. Also returns the end of its error
-/// output, where FFmpeg writes measurements as well as errors.
+/// Runs FFmpeg with `args` under `control`, handing each line of its standard output to
+/// `on_line`. Also returns the end of its error output, where FFmpeg writes measurements as well
+/// as errors. A failure here never counts as having made progress; [`run`] knows better.
 pub(crate) fn run_ffmpeg(
     toolchain: &Toolchain,
     args: Vec<OsString>,
     control: &JobControl,
-    on_progress: &mut dyn FnMut(Progress),
+    on_line: &mut dyn FnMut(&str),
 ) -> (EncodeOutcome, String) {
     let failed = |error: String| {
         let outcome = EncodeOutcome::Failed {
@@ -157,14 +172,9 @@ pub(crate) fn run_ffmpeg(
     // Drained on its own thread so a chatty FFmpeg never blocks on a full pipe.
     let stderr_reader = thread::spawn(move || tail(stderr, ERROR_TAIL));
 
-    let mut parser = ProgressParser::default();
-    let mut made_progress = false;
     for line in BufReader::new(stdout).lines() {
         let Ok(line) = line else { break };
-        if let Some(progress) = parser.feed(&line) {
-            made_progress |= !progress.position.is_zero();
-            on_progress(progress);
-        }
+        on_line(&line);
     }
 
     // Stdout closes when FFmpeg exits or is killed; collect its status.
@@ -186,7 +196,7 @@ pub(crate) fn run_ffmpeg(
                 } else {
                     log.clone()
                 },
-                made_progress,
+                made_progress: false,
             }
         }
         Some(Err(error)) => return failed(format!("waiting for FFmpeg failed: {error}")),

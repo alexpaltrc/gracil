@@ -33,6 +33,8 @@ pub enum JobEvent {
     Complete,
     Fail,
     Cancel,
+    /// An already-compressed video goes back in line, with the lighter choice the user made.
+    Retry,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,6 +71,7 @@ impl JobState {
             // Finalizing cannot be cancelled: it may be in the middle of replacing the original,
             // and stopping halfway is exactly what safe replacement exists to prevent. It is short.
             (S::Pending | S::Preparing | S::Compressing | S::Paused, E::Cancel) => S::Cancelled,
+            (S::Failed, E::Retry) => S::Pending,
             (from, event) => return Err(InvalidTransition { from, event }),
         };
         Ok(next)
@@ -82,7 +85,7 @@ impl JobState {
         )
     }
 
-    /// The job will not change state again.
+    /// The job will not change state again, unless a failed one is retried.
     pub fn is_finished(self) -> bool {
         matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
     }
@@ -110,7 +113,7 @@ mod tests {
         S::Failed,
         S::Cancelled,
     ];
-    const ALL_EVENTS: [E; 8] = [
+    const ALL_EVENTS: [E; 9] = [
         E::Start,
         E::BeginCompressing,
         E::Pause,
@@ -119,6 +122,7 @@ mod tests {
         E::Complete,
         E::Fail,
         E::Cancel,
+        E::Retry,
     ];
 
     fn run(events: &[E]) -> Result<S, InvalidTransition> {
@@ -161,9 +165,13 @@ mod tests {
     }
 
     #[test]
-    fn finished_states_accept_no_events() {
+    fn finished_states_accept_no_events_but_retry() {
+        assert_eq!(S::Failed.apply(E::Retry), Ok(S::Pending));
         for state in [S::Completed, S::Failed, S::Cancelled] {
             for event in ALL_EVENTS {
+                if (state, event) == (S::Failed, E::Retry) {
+                    continue;
+                }
                 assert_eq!(
                     state.apply(event),
                     Err(InvalidTransition { from: state, event })
