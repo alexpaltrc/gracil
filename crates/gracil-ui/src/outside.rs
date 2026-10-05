@@ -11,15 +11,15 @@ use iced::Subscription;
 use iced::futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use iced::futures::stream::{self, BoxStream, StreamExt};
 
-use crate::pace::Warmth;
+use crate::pace::Breath;
 use crate::request::Request;
 
 #[derive(Debug, Clone)]
 pub enum Outside {
     Request(Request),
     Tray(TrayEvent),
-    /// How warm the computer is running changed (ADR 0043).
-    Warmth(Warmth),
+    /// Gracil rests or works on, as the computer runs warm or cools (ADR 0045).
+    Breath(Breath),
 }
 
 type Channel = (

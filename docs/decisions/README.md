@@ -49,3 +49,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0042](0042-carrying-on-after-closing.md) | Unfinished files are kept, and offered with **Continue** the next time Gracil opens |
 | [0043](0043-never-too-hot.md) | Never too hot: fewer images when warm, everything waits when too hot, reading NVIDIA cards and Windows' processor limit |
 | [0044](0044-stop-means-stop.md) | Stop stops the whole list at once and offers it with **Continue**; Exit never waits on a slow drive |
+| [0045](0045-breathing-instead-of-cooling-down.md) | Breathing instead of cooling down: short unseen rests that grow with the heat, never a stop |

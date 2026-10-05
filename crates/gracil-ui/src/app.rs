@@ -21,7 +21,7 @@ use tracing::{info, warn};
 
 use crate::logging;
 use crate::outside::{self, Outside};
-use crate::pace::{self, Warmth};
+use crate::pace::{self, Breath};
 use crate::request::Request;
 use crate::settings::Settings;
 use crate::style;
@@ -59,9 +59,10 @@ pub struct Gracil {
     prepared: HashMap<JobId, work::Prepared>,
     /// Pause holds every file being worked on, and nothing new starts until Resume.
     pub paused: bool,
-    /// How warm the computer is running (ADR 0043). Too hot holds everything, like Pause.
-    pub warmth: Warmth,
-    /// Every file being worked on is frozen: paused, or waiting for the computer to cool down.
+    /// Whether the computer runs warm, and whether Gracil is resting a moment (ADR 0045).
+    breath: Breath,
+    /// Every file being worked on is frozen: paused, or resting a moment while the computer is
+    /// warm.
     held: bool,
     /// The main window, while it is open.
     main: Option<window::Id>,
@@ -310,7 +311,10 @@ impl Gracil {
             running: HashMap::new(),
             prepared: HashMap::new(),
             paused: false,
-            warmth: Warmth::Cool,
+            breath: Breath {
+                warm: false,
+                resting: false,
+            },
             held: false,
             main: None,
             window_shown: false,
@@ -639,7 +643,7 @@ impl Gracil {
                 Task::none()
             }
             Message::Outside(Outside::Request(request)) => self.on_request(request),
-            Message::Outside(Outside::Warmth(warmth)) => self.warmth(warmth),
+            Message::Outside(Outside::Breath(breath)) => self.breathe(breath),
             Message::Outside(Outside::Tray(TrayEvent::Toggle)) => match self.mini {
                 Some(_) => self.close_mini(),
                 None => self.open_mini(),
@@ -1325,7 +1329,7 @@ impl Gracil {
     /// Starts whatever there is room for (ADR 0040), once the engine is ready. Videos: one
     /// compresses while the next one gets ready. Images: a few at once beside it, as many as
     /// [`pace::Room`] allows, each read ahead of its turn. Nothing new starts while paused,
-    /// while the computer cools down, or once Gracil is exiting.
+    /// while resting a moment because the computer runs warm, or once Gracil is exiting.
     fn schedule(&mut self) -> Task<Message> {
         if self.exiting || self.held {
             return Task::none();
@@ -1361,7 +1365,7 @@ impl Gracil {
             && plan::attempts(engine.capabilities)
                 .first()
                 .is_some_and(|attempt| attempt.encoder == VideoEncoder::X265);
-        let room = pace::Room::now(video_on_processor, self.warmth == Warmth::Warm);
+        let room = pace::Room::now(video_on_processor, self.breath.warm);
         let at_once = room.images_at_once();
         let mut memory = room.memory_for_images();
         let mut images = self.queue.count(Kind::Image, compressing);
@@ -1527,45 +1531,35 @@ impl Gracil {
         self.hold();
     }
 
-    /// Takes in how warm the computer is running (ADR 0043). Too hot holds everything until it
-    /// has cooled down; then work carries on by itself.
-    fn warmth(&mut self, warmth: Warmth) -> Task<Message> {
-        self.warmth = warmth;
+    /// Rests a moment or works on, as the computer runs warm (ADR 0045). Resting is never shown:
+    /// the work only goes a little slower.
+    fn breathe(&mut self, breath: Breath) -> Task<Message> {
+        self.breath = breath;
         self.hold();
         self.schedule()
     }
 
-    /// Whether everything waits for the computer to cool down (ADR 0043).
-    pub fn cooling(&self) -> bool {
-        self.warmth == Warmth::Hot
-    }
-
-    /// Freezes or thaws every file being worked on, all together, while paused or while the
-    /// computer cools down. Nothing new starts while frozen. A failure leaves a file as it was
-    /// and is only logged.
+    /// Freezes or thaws every file being worked on, all together, while paused or resting a
+    /// moment. Nothing new starts while frozen. Only the person's own pause shows. A failure
+    /// leaves a file as it was and is only logged.
     fn hold(&mut self) {
-        let held = self.paused || self.cooling();
-        if self.held == held {
-            return;
-        }
-        self.held = held;
-        let running: Vec<(JobId, JobControl)> = self
-            .running
-            .iter()
-            .map(|(id, control)| (*id, control.clone()))
-            .collect();
-        for (id, control) in running {
-            let result = if held {
-                control.pause(gracil_windows::set_suspended)
-            } else {
-                control.resume()
-            };
-            if let Err(error) = result {
-                warn!(%error, held, "could not pause or resume");
-                continue;
+        let held = self.paused || self.breath.resting;
+        if self.held != held {
+            self.held = held;
+            for control in self.running.values() {
+                let result = if held {
+                    control.pause(gracil_windows::set_suspended)
+                } else {
+                    control.resume()
+                };
+                if let Err(error) = result {
+                    warn!(%error, held, "could not pause or resume");
+                }
             }
-            let state = self.queue.get(id).map(|job| job.state);
-            match (held, state) {
+        }
+        let shown: Vec<JobId> = self.running.keys().copied().collect();
+        for id in shown {
+            match (self.paused, self.queue.get(id).map(|job| job.state)) {
                 (true, Some(JobState::Compressing)) => self.transition(id, JobEvent::Pause),
                 (false, Some(JobState::Paused)) => self.transition(id, JobEvent::Resume),
                 _ => {}

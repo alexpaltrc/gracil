@@ -178,13 +178,16 @@ straining.
   always respond at once.
 - Gracil keeps an eye on how hot the computer runs, so a long list never cooks it, even with
   poor cooling:
-  - With an NVIDIA graphics card, Gracil reads its temperature every few seconds. From about
-    75 °C it takes on fewer images at once. At 80 °C, or sooner if the card itself says it starts
-    slowing down earlier, everything waits and the window says **Letting the computer cool
-    down**. Once the card is back to about 70 °C, and after at least half a minute, work carries on
-    by itself, exactly where it was.
+  - Gracil never stops to let the computer cool down: it keeps it from getting hot in the first
+    place, without you noticing.
+  - With an NVIDIA graphics card, Gracil reads its temperature every few seconds. Up to about
+    70 °C it works at full speed. Above that it takes on fewer images at once, and it takes short
+    rests of a second or two, so short that nothing on screen seems to stop. The warmer the card,
+    the longer the rests, little by little, until at about 80 °C it works a quarter of the time.
+    Cards that start slowing themselves down earlier get these limits earlier too. As the card
+    cools, the rests get shorter again. The work only goes a little slower; it never stops.
   - If the card slows itself down because of heat, or Windows holds the processor back well
-    below its usual speed for a few seconds, Gracil waits the same way.
+    below its usual speed for a few seconds, Gracil rests the most in the same way.
   - The processor's own temperature can't be read without installing extra software that needs
     full control of the computer, which Gracil never asks for. So for the processor Gracil relies
     on Windows noticing it is held back, and on never using all of it in the first place.

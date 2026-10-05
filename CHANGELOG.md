@@ -34,9 +34,10 @@ Gracil is still being built, but you can already compress videos and images with
 - Stop stops the whole list at once, even on a slow network or cloud drive. Nothing is lost: the
   files not done yet wait on a quiet line with **Continue**, so you can carry on whenever you
   like. Exit no longer keeps you waiting either.
-- Gracil never lets the computer run too hot. With an NVIDIA graphics card it watches its
-  temperature: when it gets warm Gracil takes on less, and when it gets too hot everything waits,
-  with **Letting the computer cool down**, and carries on by itself once it has cooled.
+- Gracil never lets the computer run too hot, and it never has to stop to cool down. With an
+  NVIDIA graphics card it watches its temperature, and as the card gets warm Gracil takes on less
+  and takes short rests you won't notice, longer the warmer it gets. The work only goes a little
+  slower.
 - If Gracil closes before its list is done, because you chose **Exit**, it stopped suddenly or the
   computer was turned off, it remembers the files left. Next time, a quiet line offers
   **Continue** to carry on with them.

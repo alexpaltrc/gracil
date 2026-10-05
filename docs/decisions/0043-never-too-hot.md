@@ -50,3 +50,6 @@ What can be read without a driver or administrator rights:
 for hours. With an NVIDIA card, the main source of heat during video work is watched directly.
 Without one, Gracil relies on Windows holding the processor back and on never using the whole
 processor. Nothing is installed and no administrator rights are needed.
+
+*Amended by ADR 0045:* Gracil no longer stops to cool down; it takes short unseen rests that
+grow with the heat instead.
