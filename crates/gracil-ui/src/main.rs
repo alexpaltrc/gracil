@@ -56,6 +56,8 @@ fn main() -> iced::Result {
     }
     // Compressing runs below other programs; the window, drawn on this thread, does not (ADR 0040).
     gracil_windows::work_quietly();
+    // Too hot, and everything waits for the computer to cool down (ADR 0043).
+    pace::watch(|warmth| outside::send(Outside::Warmth(warmth)));
     outside::send(Outside::Request(request));
 
     // Iced reads Windows' list of fonts the first time it draws text, which after a fresh start

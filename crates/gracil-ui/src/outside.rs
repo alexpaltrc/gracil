@@ -1,4 +1,5 @@
-//! News from outside Iced (the command line, the pipe, the tray) reaching the app as messages.
+//! News from outside Iced (the command line, the pipe, the tray, the computer's warmth) reaching
+//! the app as messages.
 //!
 //! Those arrive on threads of their own. They drop what they have into one channel, and a single
 //! subscription hands it to the app in order.
@@ -10,12 +11,15 @@ use iced::Subscription;
 use iced::futures::channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 use iced::futures::stream::{self, BoxStream, StreamExt};
 
+use crate::pace::Warmth;
 use crate::request::Request;
 
 #[derive(Debug, Clone)]
 pub enum Outside {
     Request(Request),
     Tray(TrayEvent),
+    /// How warm the computer is running changed (ADR 0043).
+    Warmth(Warmth),
 }
 
 type Channel = (

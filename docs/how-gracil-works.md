@@ -173,6 +173,20 @@ straining.
 - The window stays quick to answer however long the list is and however long Gracil has been
   working, even with tens of thousands of files and hours of work: pause, stop and **View files**
   always respond at once.
+- Gracil keeps an eye on how hot the computer runs, so a long list never cooks it, even with
+  poor cooling:
+  - With an NVIDIA graphics card, Gracil reads its temperature every few seconds. From about
+    75 °C it takes on fewer images at once. At 80 °C, or sooner if the card itself says it starts
+    slowing down earlier, everything waits and the window says **Letting the computer cool
+    down**. Once the card is back to about 70 °C, and after at least half a minute, work carries on
+    by itself, exactly where it was.
+  - If the card slows itself down because of heat, or Windows holds the processor back well
+    below its usual speed for a few seconds, Gracil waits the same way.
+  - The processor's own temperature can't be read without installing extra software that needs
+    full control of the computer, which Gracil never asks for. So for the processor Gracil relies
+    on Windows noticing it is held back, and on never using all of it in the first place.
+  - Gracil can't read the temperature of other graphics cards yet, so with them it relies on
+    the rest of this list.
 
 ## Each video gets its own amount of compression
 

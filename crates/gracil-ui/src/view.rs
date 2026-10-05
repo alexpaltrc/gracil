@@ -455,6 +455,12 @@ impl Status {
 
 fn status(state: &Gracil, job: &Job) -> Status {
     match job.state {
+        // Too hot: everything waits, and says why (ADR 0043).
+        JobState::Pending | JobState::Preparing | JobState::Prepared | JobState::Paused
+            if state.cooling() && !state.paused =>
+        {
+            Status::plain(state.text.cooling)
+        }
         JobState::Pending | JobState::Preparing | JobState::Prepared if state.paused => {
             Status::plain(state.text.paused)
         }

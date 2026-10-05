@@ -1013,6 +1013,10 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
 - **Carry on after closing.** *Decided by the product owner.* If Gracil closes before its list is
   done (Exit, a sudden stop, the computer turned off), the next time it opens it offers to carry
   on with the files left, with a button. *Built 2026-10-04 (ADR 0042).*
+- **Never too hot.** *Decided by the product owner.* When the graphics card or the processor
+  Gracil uses gets too hot, Gracil does less by itself: fewer images at once when warm, and
+  everything waits when too hot, until the computer has cooled down. *Built 2026-10-04 (ADR
+  0043).*
 
 # 78. Temporary UI decisions
 

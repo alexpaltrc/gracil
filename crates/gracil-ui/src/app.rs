@@ -21,7 +21,7 @@ use tracing::{info, warn};
 
 use crate::logging;
 use crate::outside::{self, Outside};
-use crate::pace;
+use crate::pace::{self, Warmth};
 use crate::request::Request;
 use crate::settings::Settings;
 use crate::style;
@@ -59,6 +59,10 @@ pub struct Gracil {
     prepared: HashMap<JobId, work::Prepared>,
     /// Pause holds every file being worked on, and nothing new starts until Resume.
     pub paused: bool,
+    /// How warm the computer is running (ADR 0043). Too hot holds everything, like Pause.
+    pub warmth: Warmth,
+    /// Every file being worked on is frozen: paused, or waiting for the computer to cool down.
+    held: bool,
     /// The main window, while it is open.
     main: Option<window::Id>,
     /// Whether the main window was ever shown. A Gracil started only for background work leaves
@@ -297,6 +301,8 @@ impl Gracil {
             running: HashMap::new(),
             prepared: HashMap::new(),
             paused: false,
+            warmth: Warmth::Cool,
+            held: false,
             main: None,
             window_shown: false,
             requested: false,
@@ -625,6 +631,7 @@ impl Gracil {
                 Task::none()
             }
             Message::Outside(Outside::Request(request)) => self.on_request(request),
+            Message::Outside(Outside::Warmth(warmth)) => self.warmth(warmth),
             Message::Outside(Outside::Tray(TrayEvent::Toggle)) => match self.mini {
                 Some(_) => self.close_mini(),
                 None => self.open_mini(),
@@ -1244,10 +1251,10 @@ impl Gracil {
 
     /// Starts whatever there is room for (ADR 0040), once the engine is ready. Videos: one
     /// compresses while the next one gets ready. Images: a few at once beside it, as many as
-    /// [`pace::Room`] allows, each read ahead of its turn. Nothing new starts while paused or
-    /// once Gracil is exiting.
+    /// [`pace::Room`] allows, each read ahead of its turn. Nothing new starts while paused,
+    /// while the computer cools down, or once Gracil is exiting.
     fn schedule(&mut self) -> Task<Message> {
-        if self.exiting || self.paused {
+        if self.exiting || self.held {
             return Task::none();
         }
         let EngineState::Ready(engine) = &self.engine else {
@@ -1281,7 +1288,7 @@ impl Gracil {
             && plan::attempts(engine.capabilities)
                 .first()
                 .is_some_and(|attempt| attempt.encoder == VideoEncoder::X265);
-        let room = pace::Room::now(video_on_processor);
+        let room = pace::Room::now(video_on_processor, self.warmth == Warmth::Warm);
         let at_once = room.images_at_once();
         let mut memory = room.memory_for_images();
         let mut images = self.queue.count(Kind::Image, compressing);
@@ -1428,30 +1435,55 @@ impl Gracil {
         }
     }
 
-    /// Freezes or thaws every file being worked on, all together (spec §47, §77.3). Nothing new
-    /// starts while paused. A failure leaves a file as it was and is only logged.
+    /// Pauses or resumes at the person's request (spec §47, §77.3). Pausing with nothing being
+    /// worked on does nothing.
     fn pause(&mut self, paused: bool) {
         if self.paused == paused || (paused && self.running.is_empty()) {
             return;
         }
         self.paused = paused;
+        self.hold();
+    }
+
+    /// Takes in how warm the computer is running (ADR 0043). Too hot holds everything until it
+    /// has cooled down; then work carries on by itself.
+    fn warmth(&mut self, warmth: Warmth) -> Task<Message> {
+        self.warmth = warmth;
+        self.hold();
+        self.schedule()
+    }
+
+    /// Whether everything waits for the computer to cool down (ADR 0043).
+    pub fn cooling(&self) -> bool {
+        self.warmth == Warmth::Hot
+    }
+
+    /// Freezes or thaws every file being worked on, all together, while paused or while the
+    /// computer cools down. Nothing new starts while frozen. A failure leaves a file as it was
+    /// and is only logged.
+    fn hold(&mut self) {
+        let held = self.paused || self.cooling();
+        if self.held == held {
+            return;
+        }
+        self.held = held;
         let running: Vec<(JobId, JobControl)> = self
             .running
             .iter()
             .map(|(id, control)| (*id, control.clone()))
             .collect();
         for (id, control) in running {
-            let result = if paused {
+            let result = if held {
                 control.pause(gracil_windows::set_suspended)
             } else {
                 control.resume()
             };
             if let Err(error) = result {
-                warn!(%error, paused, "could not pause or resume");
+                warn!(%error, held, "could not pause or resume");
                 continue;
             }
             let state = self.queue.get(id).map(|job| job.state);
-            match (paused, state) {
+            match (held, state) {
                 (true, Some(JobState::Compressing)) => self.transition(id, JobEvent::Pause),
                 (false, Some(JobState::Paused)) => self.transition(id, JobEvent::Resume),
                 _ => {}
