@@ -43,6 +43,10 @@ pub enum Failure {
     Hdr,
     /// jpegli is missing from this copy of Gracil.
     NoEncoder,
+    /// The drive is too full to write the compressed file and still leave room (ADR 0049).
+    NoRoom,
+    /// An image too large for this computer's memory (ADR 0049).
+    TooLarge,
 }
 
 /// What the user chooses to do with a finished result (spec §37.1).
@@ -231,7 +235,10 @@ pub fn compress_file(
             // Progress is best effort: when the window is busy, a skipped update costs nothing.
             let _ = progress.try_send(Report::Progress(update.fraction));
         };
-        let outcome = match prepared.take() {
+        let stage = prepared.take();
+        let outcome = match stage {
+            _ if !room_on_drive(&source) => Outcome::Failed(Failure::NoRoom),
+            Some(Stage::Image(image)) if too_large(&image) => Outcome::Failed(Failure::TooLarge),
             Some(Stage::Video(video)) => video_outcome(
                 compress::compress_prepared(&engine, &source, video, &control, &mut on_update),
                 &source,
@@ -244,6 +251,35 @@ pub fn compress_file(
         };
         let _ = block_on(sender.send(Report::Done(outcome)));
     })
+}
+
+/// Room left free on a drive after the compressed file is written, so Windows and other programs
+/// never find it full (ADR 0049).
+const ROOM_TO_SPARE: u64 = 2 << 30;
+
+/// Whether the drive holding `source` has room for its compressed version, which is never larger
+/// than the original, and [`ROOM_TO_SPARE`] besides. A drive that doesn't say has room.
+fn room_on_drive(source: &Path) -> bool {
+    let (Some(folder), Ok(metadata)) = (source.parent(), fs::metadata(source)) else {
+        return true;
+    };
+    let room = gracil_windows::free_space(folder)
+        .is_none_or(|free| free >= metadata.len().saturating_add(ROOM_TO_SPARE));
+    if !room {
+        warn!("the drive is too full to compress onto");
+    }
+    room
+}
+
+/// Whether `image` needs more than half of all the computer's memory to compress, which would
+/// leave too little for everything else (ADR 0049).
+fn too_large(image: &PreparedImage) -> bool {
+    let need = crate::pace::image_memory(image.pixels());
+    let large = gracil_windows::total_memory().is_some_and(|total| need > total / 2);
+    if large {
+        warn!(need, "the image is too large for this computer's memory");
+    }
+    large
 }
 
 fn video_outcome(result: Result<Compressed, CompressError>, source: &Path) -> Outcome {

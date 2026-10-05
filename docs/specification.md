@@ -1039,6 +1039,10 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   2026-10-05 (ADR 0048).*
 - **Opening Gracil again shows it.** Opening Gracil from Start or the taskbar while it runs next
   to the clock must open its window. *Fixed 2026-10-05.*
+- **Never harm the computer.** *Asked by the product owner,* with simple laptops in mind: no
+  overheating, no roaring fans, no memory or disk filled. Windows itself holds Gracil to part of
+  the processor (less while the person works and on battery), to part of the memory, and to a
+  drive with room to spare. *Built 2026-10-05 (ADR 0049).*
 
 # 78. Temporary UI decisions
 

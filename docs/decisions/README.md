@@ -53,3 +53,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0046](0046-holding-a-steady-temperature.md) | Holding a steady temperature: about 70 °C at most, one-second breaths, the work share eased up and down gradually |
 | [0047](0047-sound-ffmpeg-cannot-read.md) | Sound FFmpeg can't read, such as iPhones' spatial audio, is left out while other sound remains |
 | [0048](0048-see-through-heif-and-avif.md) | See-through HEIF and AVIF keep their transparency; depth and mattes aren't transparency |
+| [0049](0049-limits-windows-enforces.md) | Limits Windows enforces: part of the processor (less while in use and on battery), memory per process, room on the drive |

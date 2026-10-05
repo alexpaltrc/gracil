@@ -169,12 +169,24 @@ straining.
 
 - Everything Gracil does runs below your other programs: whatever you are using comes first, and
   Gracil works with what is left free. Gracil's own window still answers at once.
-- No single piece of work uses the whole processor: the video encoder and the quality measure
-  each use at most half of it.
+- Gracil never uses the whole processor. Windows itself keeps Gracil, and every tool it uses, to
+  part of it: half while you are using the computer, three quarters when you have left it alone,
+  and a quarter on a laptop running on its battery or when Windows is saving energy. The rest is
+  always free for you, which also keeps the computer cooler and its fans quieter, even on a
+  simple laptop. On top of that, the video encoder and the quality measure each use at most half
+  of what Gracil may use.
+- On battery, Gracil also takes on fewer images at once. The work goes slower, and the battery
+  lasts longer.
 - While you are using the computer, Gracil takes on fewer images at once. When you have left it
   alone for a minute, it takes on more, and fewer again as soon as you come back.
 - Large images need more memory, so Gracil starts fewer of them at once and always leaves at least
   half of the free memory for your programs.
+- No part of Gracil may ever take more than three quarters of the computer's memory: Windows
+  refuses it more, so the computer never slows to a crawl. An image so large it would need more
+  than half of all the memory is left as it is, with a small "!".
+- Gracil only compresses a file when its drive has room for the result and 2 GB to spare, so the
+  drive never fills up. Otherwise the file is left as it is, and a small "!" says the drive is
+  almost full.
 - The window stays quick to answer however long the list is and however long Gracil has been
   working, even with tens of thousands of files and hours of work: pause, stop and **View files**
   always respond at once.

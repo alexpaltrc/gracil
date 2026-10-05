@@ -1,9 +1,17 @@
 //! Working without getting in the way (spec §77.3, ADR 0040): Gracil asks Windows for less than
 //! other programs get, and looks at whether the person is using the computer and how much memory
-//! is free before taking on more at once.
+//! is free before taking on more at once, whether it runs on a battery, and how much room is left
+//! on a drive.
 
 use std::mem;
+use std::os::windows::ffi::OsStrExt;
+use std::path::Path;
+use std::ptr;
 use std::time::Duration;
+
+use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+use windows_sys::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX};
 
 use windows_sys::Win32::System::SystemInformation::{
     GetTickCount, GlobalMemoryStatusEx, MEMORYSTATUSEX,
@@ -50,6 +58,15 @@ pub fn idle_for() -> Option<Duration> {
 
 /// Memory free for programs to use right now, in bytes, if Windows says.
 pub fn free_memory() -> Option<u64> {
+    memory_status().map(|status| status.ullAvailPhys)
+}
+
+/// All the memory in the computer, in bytes, if Windows says.
+pub fn total_memory() -> Option<u64> {
+    memory_status().map(|status| status.ullTotalPhys)
+}
+
+fn memory_status() -> Option<MEMORYSTATUSEX> {
     // SAFETY: a plain structure of integers, valid when zeroed.
     #[allow(unsafe_code)]
     let mut status: MEMORYSTATUSEX = unsafe { mem::zeroed() };
@@ -57,7 +74,46 @@ pub fn free_memory() -> Option<u64> {
     // SAFETY: `status` is a valid structure with its length filled in, as the call requires.
     #[allow(unsafe_code)]
     let read = unsafe { GlobalMemoryStatusEx(&mut status) };
-    (read != 0).then_some(status.ullAvailPhys)
+    (read != 0).then_some(status)
+}
+
+/// Memory Gracil itself holds right now (its private bytes), in bytes, if Windows says.
+pub fn own_memory() -> Option<u64> {
+    // SAFETY: a plain structure of integers, valid when zeroed.
+    #[allow(unsafe_code)]
+    let mut counters: PROCESS_MEMORY_COUNTERS_EX = unsafe { mem::zeroed() };
+    let size = mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32;
+    counters.cb = size;
+    // SAFETY: the pseudo-handle stands for this process; the pointer and size describe
+    // `counters`, which outlives the call.
+    #[allow(unsafe_code)]
+    let read =
+        unsafe { GetProcessMemoryInfo(GetCurrentProcess(), (&raw mut counters).cast(), size) };
+    (read != 0).then_some(counters.PrivateUsage as u64)
+}
+
+/// The computer is running on its battery, or Windows is saving energy, if Windows says.
+pub fn saving_energy() -> bool {
+    // SAFETY: a plain structure of integers, valid when zeroed.
+    #[allow(unsafe_code)]
+    let mut status: SYSTEM_POWER_STATUS = unsafe { mem::zeroed() };
+    // SAFETY: `status` is a valid structure for the answer.
+    #[allow(unsafe_code)]
+    let read = unsafe { GetSystemPowerStatus(&mut status) };
+    // 0 means unplugged; 1 in the flag means energy saver (battery saver) is on.
+    read != 0 && (status.ACLineStatus == 0 || status.SystemStatusFlag == 1)
+}
+
+/// Space free on the drive that holds `folder`, in bytes, if Windows says.
+pub fn free_space(folder: &Path) -> Option<u64> {
+    let wide: Vec<u16> = folder.as_os_str().encode_wide().chain([0]).collect();
+    let mut free = 0_u64;
+    // SAFETY: the path is a NUL-terminated UTF-16 buffer that outlives the call; the answer goes
+    // in `free`, and the other two answers aren't wanted.
+    #[allow(unsafe_code)]
+    let read =
+        unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut free, ptr::null_mut(), ptr::null_mut()) };
+    (read != 0).then_some(free)
 }
 
 #[cfg(test)]
@@ -68,5 +124,9 @@ mod tests {
     fn windows_answers() {
         assert!(idle_for().is_some());
         assert!(free_memory().is_some_and(|free| free > 0));
+        assert!(total_memory() >= free_memory());
+        assert!(own_memory().is_some_and(|own| own > 0));
+        assert!(free_space(&std::env::temp_dir()).is_some_and(|free| free > 0));
+        assert!(free_space(Path::new(r"Q:\no\such\folder")).is_none() || cfg!(any()));
     }
 }

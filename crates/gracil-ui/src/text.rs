@@ -107,6 +107,8 @@ struct Failures {
     not_accepted: &'static str,
     hdr: &'static str,
     no_encoder: &'static str,
+    no_room: &'static str,
+    too_large: &'static str,
 }
 
 impl Text {
@@ -245,6 +247,8 @@ impl Text {
             Failure::NotAccepted => failures.not_accepted,
             Failure::Hdr => failures.hdr,
             Failure::NoEncoder => failures.no_encoder,
+            Failure::NoRoom => failures.no_room,
+            Failure::TooLarge => failures.too_large,
         }
     }
 }
@@ -356,6 +360,8 @@ static ENGLISH: Text = Text {
         not_accepted: "Gracil doesn't compress this kind of image, so it was left as it is",
         hdr: "This photo is stored in HDR, which Gracil doesn't compress, so it was left as it is",
         no_encoder: "Gracil's photo compressor is missing. Reinstalling Gracil fixes it",
+        no_room: "The drive is almost full, so this file was left as it is. Free up some space and add it again",
+        too_large: "This image is too large for this computer's memory, so it was left as it is",
     },
 };
 
@@ -475,6 +481,8 @@ static SPANISH: Text = Text {
         not_accepted: "Gracil no comprime este tipo de imagen, así que se dejó como está",
         hdr: "Esta foto está guardada en HDR, que Gracil no comprime, así que se dejó como está",
         no_encoder: "Falta el compresor de fotos de Gracil. Reinstalar Gracil lo arregla",
+        no_room: "El disco está casi lleno, así que este archivo se dejó como está. Libera espacio y vuelve a añadirlo",
+        too_large: "Esta imagen es demasiado grande para la memoria de esta computadora, así que se dejó como está",
     },
 };
 

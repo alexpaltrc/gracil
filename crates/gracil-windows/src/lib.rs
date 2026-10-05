@@ -22,10 +22,12 @@ pub use flyout::place_near_tray;
 pub use heat::{GraphicsHeat, Heat, Thermometer};
 pub use icon::{set_icon_theme, set_window_icon};
 pub use instance::{claim, forward, is_running, serve};
-pub use lifetime::end_children_with_this_process;
+pub use lifetime::{end_children_with_this_process, use_processors};
 pub use numbers::{NumberSettings, number_settings};
 pub use process::set_suspended;
-pub use quiet::{free_memory, idle_for, work_quietly};
+pub use quiet::{
+    free_memory, free_space, idle_for, own_memory, saving_energy, total_memory, work_quietly,
+};
 pub use theme::{Accent, accent, light_apps};
 pub use tray::{Tray, TrayEvent, TrayMenu, TrayState};
 

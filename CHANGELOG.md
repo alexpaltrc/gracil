@@ -24,8 +24,10 @@ Gracil is still being built, but you can already compress videos and images with
 - Gracil works on several files at once: while one video compresses, the next one gets ready, so
   there is no wait between them, and images compress a few at a time alongside it. Two videos are
   never compressed at the same time.
-- Gracil never gets in your way: it works below your other programs and never uses the whole
-  processor, so the computer stays responsive and quiet. It takes on more when you leave the
+- Gracil never gets in your way: it works below your other programs, and Windows itself keeps it
+  to part of the processor, half while you use the computer and a quarter on battery, so the
+  computer stays responsive, cool and quiet, even a simple laptop. It never fills your drive or
+  your memory. It takes on more when you leave the
   computer alone and less as soon as you come back, and fewer large images at once so memory
   never runs short. The window stays quick to answer even after hours of work on tens of
   thousands of files.

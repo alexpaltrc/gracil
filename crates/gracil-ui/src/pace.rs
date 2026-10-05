@@ -3,7 +3,8 @@
 //! computer is otherwise idle and fewer while the person is using it, and fewer when they are
 //! large, so memory never runs short. When the computer runs warm it does fewer images at once
 //! and takes short, unnoticed rests, eased up and down to hold the graphics card at a steady
-//! temperature, so it never gets hot (ADR 0045, 0046).
+//! temperature, so it never gets hot (ADR 0045, 0046). Windows itself holds Gracil to part of the
+//! processor, a smaller part while the person works and on battery (ADR 0049).
 
 use std::time::Duration;
 
@@ -39,6 +40,8 @@ pub struct Room {
     pub free_memory: Option<u64>,
     /// The computer is running warm (ADR 0043).
     pub warm: bool,
+    /// The computer runs on its battery, or Windows is saving energy (ADR 0049).
+    pub saving_energy: bool,
 }
 
 impl Room {
@@ -50,15 +53,16 @@ impl Room {
             video_on_processor,
             free_memory: gracil_windows::free_memory(),
             warm,
+            saving_energy: gracil_windows::saving_energy(),
         }
     }
 
     /// How many images may compress at once: an eighth of the processor while the person is
-    /// using the computer or it runs warm, a quarter while it is idle, one fewer while a video
+    /// using the computer, it runs warm or it saves energy, a quarter while it is idle, one fewer while a video
     /// takes the processor, and always at least one. Each image's tools use several threads of
     /// their own.
     pub fn images_at_once(self) -> usize {
-        let share = if self.idle && !self.warm {
+        let share = if self.idle && !self.warm && !self.saving_energy {
             self.threads / 4
         } else {
             self.threads / 8
@@ -79,6 +83,25 @@ impl Room {
 pub fn image_memory(pixels: Option<u64>) -> u64 {
     pixels.unwrap_or(UNKNOWN_PIXELS) * BYTES_PER_PIXEL
 }
+
+/// How many of the processor's `threads` Gracil and the tools it starts may run on at all
+/// (ADR 0049): three quarters while the computer is idle, half while the person is using it, and
+/// a quarter while it runs on its battery or saves energy. Windows holds Gracil to it, so however
+/// the work is split, the rest of the processor stays free and cool.
+pub fn processors(threads: usize, idle: bool, saving_energy: bool) -> usize {
+    let share = if saving_energy {
+        threads / 4
+    } else if idle {
+        threads * 3 / 4
+    } else {
+        threads / 2
+    };
+    share.max(1)
+}
+
+/// How often Gracil writes down how much memory it holds, so a long run can be checked for
+/// memory it never gives back.
+const MEMORY_LOG_EVERY: Duration = Duration::from_secs(10 * 60);
 
 /// How long one breath lasts: a rest, then work (ADR 0045, 0046). Short enough that the parts
 /// stay at an even temperature through it, the way a dimmer flickers too fast to see.
@@ -202,7 +225,30 @@ pub fn watch(changed: impl Fn(Breath) + Send + 'static) {
             };
             // Logged in steps of a twentieth, so a degree up and down isn't written each time.
             let mut logged = None;
+            let threads = share::processor_threads();
+            let mut allowed = None;
+            let mut memory_logged: Option<std::time::Instant> = None;
             loop {
+                let idle = gracil_windows::idle_for().is_some_and(|idle| idle >= IDLE_AFTER);
+                let saving_energy = gracil_windows::saving_energy();
+                let now = processors(threads, idle, saving_energy);
+                if allowed != Some(now) {
+                    match gracil_windows::use_processors(now) {
+                        Ok(()) => info!(
+                            threads = now,
+                            of = threads,
+                            idle,
+                            saving_energy,
+                            "processor share"
+                        ),
+                        Err(error) => warn!(%error, "the processor share can't be set"),
+                    }
+                    allowed = Some(now);
+                }
+                if memory_logged.is_none_or(|at| at.elapsed() >= MEMORY_LOG_EVERY) {
+                    info!(bytes = gracil_windows::own_memory(), "memory held");
+                    memory_logged = Some(std::time::Instant::now());
+                }
                 let heat = thermometer.read();
                 let work = warmer.read(&heat, BREATH);
                 let step = (work * 20.0).round() as u8;
@@ -247,6 +293,7 @@ mod tests {
             video_on_processor,
             free_memory: None,
             warm: false,
+            saving_energy: false,
         }
     }
 
@@ -402,6 +449,24 @@ mod tests {
     fn nothing_to_read_is_cool() {
         let mut warmer = Warmer::default();
         assert_eq!(warmer.read(&Heat::default(), SECOND), 1.0);
+    }
+
+    #[test]
+    fn less_of_the_processor_while_in_use_and_on_battery() {
+        assert_eq!(processors(12, true, false), 9);
+        assert_eq!(processors(12, false, false), 6);
+        assert_eq!(processors(12, true, true), 3);
+        assert_eq!(processors(4, false, true), 1);
+        assert_eq!(processors(1, true, false), 1);
+    }
+
+    #[test]
+    fn fewer_images_on_battery() {
+        let battery = Room {
+            saving_energy: true,
+            ..room(16, true, false)
+        };
+        assert_eq!(battery.images_at_once(), 2);
     }
 
     #[test]
