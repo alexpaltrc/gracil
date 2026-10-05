@@ -1010,6 +1010,9 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
 - Together these change the rule that only one file is worked on at a time (§33, the queue) and
   the order of ADR 0034 (images before waiting videos), so an ADR records them when they are
   built. *Built 2026-10-04 (ADR 0040).*
+- **Carry on after closing.** *Decided by the product owner.* If Gracil closes before its list is
+  done (Exit, a sudden stop, the computer turned off), the next time it opens it offers to carry
+  on with the files left, with a button. *Built 2026-10-04 (ADR 0042).*
 
 # 78. Temporary UI decisions
 

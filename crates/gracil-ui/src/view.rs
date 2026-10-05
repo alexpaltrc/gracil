@@ -71,6 +71,9 @@ pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
         .style(move |theme| style::drop_zone(theme, hovering));
 
     let mut content = column![focus].spacing(space::M);
+    if !state.offered.is_empty() {
+        content = content.push(offer(state));
+    }
     if !state.queue.is_empty() {
         content = content.push(footer(state));
     }
@@ -79,6 +82,28 @@ pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     }
     content = content.push(always(state));
     container(content).padding(space::M).into()
+}
+
+/// Files left unfinished the last time Gracil closed, and a way to carry on with them or let them
+/// go (ADR 0042). A quiet line, never a dialog (spec §2.3).
+fn offer(state: &Gracil) -> Element<'_, Message> {
+    container(
+        row![
+            text(state.text.unfinished(state.offered.len()))
+                .size(size::CAPTION)
+                .style(style::muted),
+            button(text(state.text.carry_on).size(size::CAPTION))
+                .style(style::quiet_button)
+                .on_press(Message::ContinueUnfinished),
+            button(text("×").size(size::CAPTION))
+                .style(style::quiet_button)
+                .on_press(Message::LetGoUnfinished),
+        ]
+        .spacing(space::S)
+        .align_y(Center),
+    )
+    .center_x(Fill)
+    .into()
 }
 
 /// "Always (Replace / ○ / Save a copy)": what to do with every finished video, or, in the

@@ -26,6 +26,7 @@ use crate::request::Request;
 use crate::settings::Settings;
 use crate::style;
 use crate::text::{Language, Text};
+use crate::unfinished::{self, Unfinished};
 use crate::view::DrawerScroll;
 use crate::work::{self, Choice, Failure, Outcome, Report, Sizes};
 
@@ -94,6 +95,13 @@ pub struct Gracil {
     summary: Summary,
     /// Where this round of work started, kept until everything in it is done.
     round_from: Option<JobId>,
+    /// The files left unfinished the last time Gracil closed, offered until they are taken up or
+    /// let go (ADR 0042).
+    pub offered: Vec<Unfinished>,
+    /// What the list of unfinished files looked like when it was last kept, and when.
+    kept: Option<(Kept, Instant)>,
+    /// The unfinished files as they were when Exit stopped the work, kept as they were.
+    leaving_with: Option<Vec<Unfinished>>,
 }
 
 /// Frames a new window starts before it comes into view: by the last, the first ones are drawn.
@@ -108,6 +116,14 @@ const SETTLE_AFTER_FIRST_FRAME: Duration = Duration::from_millis(50);
 /// very first frame after starting the computer can take a while, and a white window is worse
 /// than one that appears a moment later.
 const REVEAL_AT_THE_LATEST: Duration = Duration::from_secs(3);
+
+/// A quick likeness of the list of unfinished files: when it changes, the list is kept again.
+type Kept = (usize, usize, usize, usize);
+
+/// The list of unfinished files is kept at most this often while it keeps changing, so a long
+/// list isn't written out for every file done. A sudden close loses at most this much: those
+/// files are simply compressed again.
+const KEEP_EVERY: Duration = Duration::from_secs(30);
 
 /// The mini-window's size, in logical pixels.
 const MINI_SIZE: Size = Size::new(340.0, 108.0);
@@ -232,6 +248,10 @@ pub enum Message {
     /// The mini-window is on screen; it is put in place again in case the screen's scale
     /// changed its size.
     MiniShown(u64),
+    /// Carry on with the files left unfinished last time (ADR 0042).
+    ContinueUnfinished,
+    /// Let the files left unfinished last time go.
+    LetGoUnfinished,
     Outside(Outside),
 }
 
@@ -293,6 +313,9 @@ impl Gracil {
             settings,
             summary: Summary::default(),
             round_from: None,
+            offered: unfinished::load(),
+            kept: None,
+            leaving_with: None,
         };
         let tasks = Task::batch([
             system::theme().map(Message::ThemeChanged),
@@ -360,6 +383,7 @@ impl Gracil {
             self.summary = self.summarize();
             self.round_from = self.summary.round_from;
         }
+        self.keep_unfinished();
         // The work finished while Exit was being asked about: nothing is left to stop, so the
         // question goes away.
         if self.confirming_exit && self.running.is_empty() && self.waiting_to_compress() == 0 {
@@ -482,6 +506,11 @@ impl Gracil {
             }
             Message::Remove(id) => {
                 self.remove(id);
+                Task::none()
+            }
+            Message::ContinueUnfinished => self.continue_unfinished(),
+            Message::LetGoUnfinished => {
+                self.offered.clear();
                 Task::none()
             }
             Message::Clear => {
@@ -679,11 +708,58 @@ impl Gracil {
         self.show_main()
     }
 
+    /// The files not finished yet, to carry on with if Gracil closes now (ADR 0042): those still
+    /// offered from last time, every file waiting or being worked on, and every result nobody
+    /// chose for yet, which is deleted on leaving and so has to be made again.
+    fn unfinished(&self) -> Vec<Unfinished> {
+        let mut list = self.offered.clone();
+        list.extend(
+            self.queue
+                .jobs()
+                .iter()
+                .filter(|job| {
+                    !job.state.is_finished()
+                        || matches!(self.outcomes.get(&job.id), Some(Outcome::Ready { .. }))
+                })
+                .map(|job| Unfinished {
+                    path: job.path.clone(),
+                    choice: self.intents.get(&job.id).copied(),
+                }),
+        );
+        list
+    }
+
+    /// Keeps the list of unfinished files when it has changed, at most every [`KEEP_EVERY`],
+    /// and at once when nothing is left, so a finished list is never offered again.
+    fn keep_unfinished(&mut self) {
+        let likeness = (
+            self.summary.left,
+            self.summary.waiting_for_choice,
+            self.queue.len(),
+            self.offered.len(),
+        );
+        let nothing_left = likeness.0 == 0 && likeness.1 == 0 && likeness.3 == 0;
+        let due = match self.kept {
+            Some((kept, _)) if kept == likeness => false,
+            Some((_, at)) => nothing_left || at.elapsed() >= KEEP_EVERY,
+            // Nothing kept yet this time: a list from last time stays until it is let go.
+            None => !nothing_left,
+        };
+        if due {
+            unfinished::save(self.unfinished());
+            self.kept = Some((likeness, Instant::now()));
+        }
+    }
+
     /// Stops every file being worked on, leaving their originals as they were, and leaves once
     /// they have tidied up (see `update`). Files still waiting are not started.
     fn exit_now(&mut self) {
         self.exiting = true;
         self.confirming_exit = false;
+        // Stopping marks the files being worked on as stopped; they are still to be done.
+        let list = self.unfinished();
+        unfinished::save_now(&list);
+        self.leaving_with = Some(list);
         for control in self.running.values() {
             control.cancel();
         }
@@ -833,6 +909,27 @@ impl Gracil {
         Task::batch([show, gather])
     }
 
+    /// Adds the files left unfinished last time, each with the choice File Explorer made for it.
+    /// Whether they are still there is checked away from the window, as for File Explorer's
+    /// files, since there can be thousands of them.
+    fn continue_unfinished(&mut self) -> Task<Message> {
+        let offered = std::mem::take(&mut self.offered);
+        let mut tasks = Vec::new();
+        for choice in [None, Some(Choice::Replace), Some(Choice::SaveCopy)] {
+            let paths: Vec<PathBuf> = offered
+                .iter()
+                .filter(|file| file.choice == choice)
+                .map(|file| file.path.clone())
+                .collect();
+            if paths.is_empty() {
+                continue;
+            }
+            self.gathering += 1;
+            tasks.push(work::gather(paths, None).map(move |found| Message::Found(choice, found)));
+        }
+        Task::batch(tasks)
+    }
+
     fn on_found(&mut self, choice: Option<Choice>, found: work::Found) -> Task<Message> {
         let paths = match found {
             work::Found::Files(paths) => paths,
@@ -922,6 +1019,10 @@ impl Gracil {
     /// The process ends here rather than through `iced::exit`: Iced 0.14's daemon does not return
     /// from `run` once it has no window, so a Gracil working only in the background would stay.
     fn leave(&self) -> ! {
+        match &self.leaving_with {
+            Some(list) => unfinished::save_now(list),
+            None => unfinished::save_now(&self.unfinished()),
+        }
         for outcome in self.outcomes.values() {
             if let Outcome::Ready { temp, .. } = outcome {
                 work::discard(temp);

@@ -407,8 +407,8 @@ Closing the window doesn't stop Gracil. It keeps working next to the clock, wher
 tells you how things are going:
 
 - the whole marble: nothing is compressing;
-- a ring filling up around the marble: a video is compressing, and the ring shows how far along
-  it is;
+- a ring filling up around the marble: Gracil is working, and the ring shows how far along it
+  is, for the whole list when there is more than one file;
 - two bars: the compression is paused;
 - a marble in the warning color (orange-brown on a light taskbar, yellow on a dark one): something
   went wrong while the window was closed. Open Gracil to see
@@ -433,11 +433,24 @@ are compressed.
 
 **Exit** is how you quit Gracil. If nothing is compressing or waiting, Gracil quits straight away.
 Otherwise it first asks, and tells you exactly what will happen: the video being compressed stops
-and its original stays exactly as it was, and videos still waiting won't be compressed. Choose
-**Keep working** to carry on. If the work finishes while you decide, the question goes away.
+and its original stays exactly as it was, and videos still waiting are kept for next time (see
+below). Choose **Keep working** to carry on. If the work finishes while you decide, the question
+goes away.
 
 When Gracil quits, finished videos you didn't choose for are deleted; their originals stay as
 they were.
+
+## Carrying on after closing
+
+If Gracil closes before its list is done, because you chose **Exit** while it worked, because
+something made it stop suddenly or because the computer was turned off, it remembers which files
+were left. The next time you open its window, a quiet line says so, for example **12 files were
+left unfinished**, with **Continue** to put them back on the list and carry on, and **×** to let
+them go. Files that were being compressed start again from their beginning; files already done
+aren't done again, except perhaps the last few before a sudden stop. Finished videos you
+hadn't chosen for count as unfinished, since they are deleted when Gracil closes. If you used
+File Explorer's **Replace** or **Save copy**, that choice comes back with them. The list stays
+on your computer, in Gracil's own folder, and is gone once everything on it is done.
 
 ## What Gracil writes down
 

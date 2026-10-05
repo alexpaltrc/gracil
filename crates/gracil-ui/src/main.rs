@@ -16,6 +16,7 @@ mod request;
 mod settings;
 mod style;
 mod text;
+mod unfinished;
 mod view;
 mod work;
 

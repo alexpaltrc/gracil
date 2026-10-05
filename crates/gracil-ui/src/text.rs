@@ -39,6 +39,7 @@ pub struct Text {
     pub add_files: &'static str,
     pub view_files: &'static str,
     pub hide_files: &'static str,
+    pub carry_on: &'static str,
     pub replace: &'static str,
     pub save_copy: &'static str,
     pub replace_all: &'static str,
@@ -78,6 +79,7 @@ pub struct Text {
     less: fn(&str) -> String,
     /// The count, and the count written in the user's number format.
     files_left: fn(usize, &str) -> String,
+    unfinished: fn(usize, &str) -> String,
     ready: fn(usize, &str) -> String,
     in_line: fn(usize, &str) -> String,
     compressed: fn(usize, &str) -> String,
@@ -164,6 +166,11 @@ impl Text {
         (self.files_left)(count, &number(count))
     }
 
+    /// Files left unfinished the last time Gracil closed.
+    pub fn unfinished(&self, count: usize) -> String {
+        (self.unfinished)(count, &number(count))
+    }
+
     pub fn ready(&self, count: usize) -> String {
         (self.ready)(count, &number(count))
     }
@@ -244,6 +251,7 @@ static ENGLISH: Text = Text {
     add_files: "Add files",
     view_files: "View files",
     hide_files: "Hide files",
+    carry_on: "Continue",
     replace: "Replace",
     save_copy: "Save copy",
     replace_all: "Replace all",
@@ -272,6 +280,10 @@ static ENGLISH: Text = Text {
         0 => "No files left".to_owned(),
         1 => "1 file left".to_owned(),
         _ => format!("{written} files left"),
+    },
+    unfinished: |count, written| match count {
+        1 => "1 file was left unfinished".to_owned(),
+        _ => format!("{written} files were left unfinished"),
     },
     ready: |_, written| format!("{written} ready"),
     saved_as: |name| format!("Saved as {name}"),
@@ -315,8 +327,8 @@ static ENGLISH: Text = Text {
         }
         match waiting {
             0 => {}
-            1 => parts.push("1 file waiting won't be compressed.".to_owned()),
-            _ => parts.push(format!("{written} files waiting won't be compressed.")),
+            1 => parts.push("1 file waiting is kept for next time.".to_owned()),
+            _ => parts.push(format!("{written} files waiting are kept for next time.")),
         }
         parts.join(" ")
     },
@@ -344,6 +356,7 @@ static SPANISH: Text = Text {
     add_files: "Agregar archivos",
     view_files: "Ver archivos",
     hide_files: "Ocultar archivos",
+    carry_on: "Continuar",
     replace: "Reemplazar",
     save_copy: "Guardar copia",
     replace_all: "Reemplazar todos",
@@ -372,6 +385,10 @@ static SPANISH: Text = Text {
         0 => "No queda ninguno".to_owned(),
         1 => "Queda 1 archivo".to_owned(),
         _ => format!("Quedan {written} archivos"),
+    },
+    unfinished: |count, written| match count {
+        1 => "Quedó 1 archivo sin terminar".to_owned(),
+        _ => format!("Quedaron {written} archivos sin terminar"),
     },
     ready: |count, written| match count {
         1 => "1 listo".to_owned(),
@@ -422,8 +439,10 @@ static SPANISH: Text = Text {
         }
         match waiting {
             0 => {}
-            1 => parts.push("1 archivo en espera no se comprimirá.".to_owned()),
-            _ => parts.push(format!("{written} archivos en espera no se comprimirán.")),
+            1 => parts.push("1 archivo en espera se guarda para la próxima vez.".to_owned()),
+            _ => parts.push(format!(
+                "{written} archivos en espera se guardan para la próxima vez."
+            )),
         }
         parts.join(" ")
     },
@@ -471,12 +490,12 @@ mod tests {
         assert!(!en.exit_explanation(1, 0).contains("waiting"));
         assert_eq!(
             en.exit_explanation(0, 2),
-            "2 files waiting won't be compressed."
+            "2 files waiting are kept for next time."
         );
         let es = Text::get(Language::Spanish);
         assert!(
             es.exit_explanation(1, 1)
-                .ends_with("1 archivo en espera no se comprimirá.")
+                .ends_with("1 archivo en espera se guarda para la próxima vez.")
         );
         assert!(
             es.exit_explanation(4, 0)
@@ -500,6 +519,8 @@ mod tests {
         assert_eq!(en.files_left(0), "No files left");
         assert_eq!(en.files_left(1), "1 file left");
         assert_eq!(en.files_left(3), "3 files left");
+        assert_eq!(es.unfinished(1), "Quedó 1 archivo sin terminar");
+        assert_eq!(en.unfinished(2), "2 files were left unfinished");
         assert_eq!(es.ready(1), "1 listo");
         assert_eq!(es.ready(2), "2 listos");
         assert_eq!(

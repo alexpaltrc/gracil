@@ -29,6 +29,9 @@ Gracil is still being built, but you can already compress videos and images with
   computer alone and less as soon as you come back, and fewer large images at once so memory
   never runs short. The window stays quick to answer even after hours of work on tens of
   thousands of files.
+- If Gracil closes before its list is done, because you chose **Exit**, it stopped suddenly or the
+  computer was turned off, it remembers the files left. Next time, a quiet line offers
+  **Continue** to carry on with them.
 - Gracil runs only once. Opening it again, or opening videos with it while it is running, brings
   the open Gracil forward and adds the videos to the same list.
 - Closing the window no longer stops Gracil: it keeps working next to the clock. Its marble there
