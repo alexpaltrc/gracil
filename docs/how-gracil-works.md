@@ -43,8 +43,9 @@ tile, in black on a light taskbar and in white on a dark one.
 ## Adding videos and images
 
 Drop videos or images onto the window, or choose them with **or choose files**. You can add more
-at any time, even while Gracil is working. The kinds of files Gracil takes are listed under "One
-format: MP4" (videos) and "Images" (photos and pictures) below.
+at any time, even while Gracil is working: drop them, or click the **+** at the bottom right of
+the window. The kinds of files Gracil takes are listed under "One format: MP4" (videos) and
+"Images" (photos and pictures) below.
 
 - Gracil works on several files at once, each kind in the order you added them. Every file goes
   through two steps: first Gracil gets it ready, then it compresses it. While one video

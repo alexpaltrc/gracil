@@ -576,14 +576,23 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
     } else {
         state.text.view_files
     };
+    // The summary takes what room is left after "+", and wraps onto a second line rather than
+    // pushing "+" out of the window.
+    let add = tooltip(
+        button(text("+").size(size::TITLE).line_height(1.0))
+            .style(style::quiet_button)
+            .on_press(Message::ChooseFiles),
+        container(text(state.text.add_files).size(size::CAPTION)).padding(space::S),
+        tooltip::Position::Top,
+    )
+    .style(style::tooltip)
+    .gap(space::XS);
     row![
         button(text(format!("{summary}  ·  {toggle}")).size(size::CAPTION))
             .style(style::quiet_button)
+            .width(Fill)
             .on_press(Message::ToggleDrawer),
-        Space::new().width(Fill),
-        button(text(state.text.add_files).size(size::CAPTION))
-            .style(style::quiet_button)
-            .on_press(Message::ChooseFiles),
+        add,
     ]
     .spacing(space::S)
     .align_y(Center)
