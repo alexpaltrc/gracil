@@ -32,11 +32,24 @@ const FILL_EASE: f32 = 0.28;
 const SYMBOL_EASE: f32 = 0.05;
 const HOVER_EASE: f32 = 0.07;
 
+/// What the ring stands for. When it changes, the ring shows the new one as it is, without
+/// sweeping from the old one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shows {
+    /// One file.
+    File(JobId),
+    /// The whole list (ADR 0034, item 13), by the first file of its round of work.
+    List(JobId),
+}
+
 pub struct Dial {
-    pub job: JobId,
+    pub shows: Shows,
     /// How much is done, when known.
     pub fraction: Option<f64>,
     pub paused: bool,
+    /// With the whole list: how many equal parts the circle has, one per file, and how many are
+    /// done, each marked by a hollow marble where its part ends.
+    pub parts: Option<(usize, usize)>,
     /// Pause is offered only once FFmpeg is compressing.
     pub can_pause: bool,
 }
@@ -50,7 +63,7 @@ enum Part {
 /// What is on screen, which follows the app's values smoothly.
 #[derive(Default)]
 pub struct State {
-    job: Option<JobId>,
+    shows: Option<Shows>,
     fill: f32,
     /// 0 shows pause, 1 shows play.
     play: f32,
@@ -122,9 +135,9 @@ impl canvas::Program<Message> for Dial {
     ) -> Option<Action<Message>> {
         let hovered = self.part_at(bounds, cursor);
 
-        // Another video in focus: show it as it is, without sweeping from the previous one.
-        if state.job != Some(self.job) {
-            state.job = Some(self.job);
+        // Another file in focus: show it as it is, without sweeping from the previous one.
+        if state.shows != Some(self.shows) {
+            state.shows = Some(self.shows);
             state.fill = self.target_fill();
             state.play = self.target_play();
             state.pressed = None;
@@ -204,10 +217,33 @@ impl canvas::Program<Message> for Dial {
             );
         }
 
+        // Each file done leaves a hollow marble where its part ends, once the marble has passed
+        // it, so how many are done and how many are left shows at a glance. With parts too short
+        // to tell the marks apart, only the circle shows.
+        let marble_radius = pipe_width / 2.0 - 1.5 * scale;
+        if let Some((parts, done)) = self.parts
+            && parts >= 2
+            && TAU * pipe / parts as f32 >= 2.0 * marble_radius + 6.0 * scale
+        {
+            let part = 1.0 / parts as f32;
+            for at in (1..=done.min(parts - 1)).map(|index| index as f32 * part) {
+                if at > state.fill + 0.001 {
+                    break;
+                }
+                let angle = -FRAC_PI_2 + TAU * at;
+                let mark = Point::new(center.x + pipe * angle.cos(), center.y + pipe * angle.sin());
+                frame.stroke(
+                    &Path::circle(mark, marble_radius - 1.0 * scale),
+                    Stroke::default()
+                        .with_width(1.5 * scale)
+                        .with_color(tokens.thumb),
+                );
+            }
+        }
+
         // The marble, drawn like the thumb of Windows' own sliders: a solid face with a thin edge
         // and the accent in its middle, so it stands apart from the trail in both themes.
         let marble = Point::new(center.x + pipe * head.cos(), center.y + pipe * head.sin());
-        let marble_radius = pipe_width / 2.0 - 1.5 * scale;
         frame.fill(&Path::circle(marble, marble_radius), tokens.thumb);
         frame.stroke(
             &Path::circle(marble, marble_radius),
@@ -403,11 +439,12 @@ mod tests {
 
     fn dial(paused: bool, can_pause: bool) -> Dial {
         Dial {
-            job: {
+            shows: Shows::File({
                 let mut queue = gracil_core::queue::Queue::default();
                 queue.add([std::path::PathBuf::from("a.mp4")]);
                 queue.jobs()[0].id
-            },
+            }),
+            parts: None,
             fraction: Some(0.5),
             paused,
             can_pause,

@@ -41,7 +41,7 @@ performance, yes; scaring the user, never", even with 15,000 files.
    says how many files would stop.
 7. **What the window shows.** The file shown large is the video being compressed, or with only
    images, the first image being compressed. The circle for the whole list (ADR 0034, item 13)
-   is still to be built.
+   was built the same day; the tray follows it.
 
 **Consequences.**
 

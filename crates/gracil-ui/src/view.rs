@@ -10,7 +10,7 @@ use iced::widget::{Canvas, Space, button, column, container, row, scrollable, te
 use iced::{Center, Element, Fill, window};
 
 use crate::app::{EngineState, Finished, Gracil, Message};
-use crate::dial::{self, Dial};
+use crate::dial::{self, Dial, Shows};
 use crate::done::{self, Done};
 use crate::pill::pill;
 use crate::style::{self, size, space};
@@ -156,6 +156,24 @@ fn finished_view<'a>(state: &'a Gracil, finished: &Finished) -> Element<'a, Mess
     .into()
 }
 
+/// The ring for `job`. While Gracil works through more than one file it stands for the whole list
+/// (ADR 0034, item 13), unless the user picked another file in the list to look at.
+fn dial(state: &Gracil, job: &Job) -> Dial {
+    let picked_another = state
+        .selected
+        .is_some_and(|picked| state.current().is_some_and(|current| current.id != picked));
+    let list = state.list_progress().filter(|_| !picked_another);
+    Dial {
+        shows: list.map_or(Shows::File(job.id), |list| Shows::List(list.round)),
+        fraction: list.map_or(job.fraction, |list| Some(list.fraction)),
+        parts: list.map(|list| (list.parts, list.done)),
+        paused: state.paused,
+        // Pause and resume act on every file being worked on (ADR 0040); only putting a result
+        // in place can't be held.
+        can_pause: job.state != JobState::Finalizing,
+    }
+}
+
 fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
     let mut content = column![name(job, FOCUS_NAME_CHARS, size::TITLE)]
         .spacing(space::M)
@@ -163,15 +181,11 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         .max_width(320);
 
     if state.shows_dial(job) {
-        let dial = Dial {
-            job: job.id,
-            fraction: job.fraction,
-            paused: state.paused,
-            // Pause and resume act on every file being worked on (ADR 0040); only putting a
-            // result in place can't be held.
-            can_pause: job.state != JobState::Finalizing,
-        };
-        content = content.push(Canvas::new(dial).width(dial::SIZE).height(dial::SIZE));
+        content = content.push(
+            Canvas::new(dial(state, job))
+                .width(dial::SIZE)
+                .height(dial::SIZE),
+        );
     }
 
     let mut details = column![status_line(&status(state, job), size::BODY)]
@@ -286,13 +300,11 @@ fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
     }
     let mut line = row![].spacing(space::M).align_y(Center);
     if state.shows_dial(job) {
-        let dial = Dial {
-            job: job.id,
-            fraction: job.fraction,
-            paused: state.paused,
-            can_pause: job.state != JobState::Finalizing,
-        };
-        line = line.push(Canvas::new(dial).width(dial::SMALL).height(dial::SMALL));
+        line = line.push(
+            Canvas::new(dial(state, job))
+                .width(dial::SMALL)
+                .height(dial::SMALL),
+        );
     }
     line.push(details).into()
 }

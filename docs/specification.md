@@ -937,8 +937,8 @@ Open decisions, to settle before any work starts:
    images are compressed before waiting videos, since they take seconds; with more than one file
    the dial's whole circle is the whole list, and the marble leaves a hollow marble at the end of
    each file's part. A design pass to make the dial more refined comes later. *Built
-   (2026-10-04):* the one list and images first; the dial and the tray still show only the file
-   being compressed.
+   (2026-10-04):* the one list and images first (since superseded by ADR 0040), and the dial and
+   the tray for the whole list.
 
 # 77.2 Video formats
 
@@ -988,7 +988,7 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   be compressed several at a time, and fewer when the images are very large, so memory never runs
   short. On a network or cloud drive this also overlaps the waiting for downloads and uploads.
   Pause and stop act on all of them together, and the ring shows the progress of the whole list
-  (ADR 0034). *Built 2026-10-04 (ADR 0040); the ring for the whole list is still to be built.*
+  (ADR 0034). *Built 2026-10-04 (ADR 0040), the ring for the whole list included.*
 - **Fast, but never alarming.** *Decided by the product owner.* Gracil must never make the
   computer feel slow, and never run it flat out: the fans would roar, and that would not inspire
   trust. How much Gracil uses adapts to what the user is doing: more while the computer is

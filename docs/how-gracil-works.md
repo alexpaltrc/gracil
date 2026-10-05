@@ -315,10 +315,15 @@ makes them smaller, and you choose **Replace** or **Save copy**.
 - **How long:** a phone photo takes under a second; a large PNG a few seconds.
 - **With videos.** Images and videos share one list. Images compress a few at a time on the
   processor while a video compresses on the graphics card.
-- **The circle for the whole list (in progress).** With more than one file, the whole circle will
-  stand for the whole list: the marble crosses one part per file and leaves a hollow marble behind
-  each one it finishes, so you can see how many are done and how many are left. For now the circle
-  shows the file being compressed, or the first of the images being compressed together.
+- **The circle for the whole list.** With more than one file, the whole circle stands for the
+  whole list: it is split into equal parts, one per file, and the marble crosses one part per
+  file, moving along as the files being compressed advance. It leaves a hollow marble behind each
+  file it finishes, so you can see how many are done and how many are left; with so many files
+  that the marks would run together, only the circle shows. Adding files while Gracil works makes the
+  parts smaller, so the marble moves back a little. The percentage below the circle is still that
+  of the file shown. The marble next to the clock follows the same circle. If you pick another
+  file in **View files** to look at while Gracil works, its circle shows just that file. When the
+  whole list is done, the next file you add starts a fresh circle.
 
 ## Your original is safe
 

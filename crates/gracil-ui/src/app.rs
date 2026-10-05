@@ -92,6 +92,8 @@ pub struct Gracil {
     settings: Settings,
     /// Counts over the whole list, as of the last change.
     summary: Summary,
+    /// Where this round of work started, kept until everything in it is done.
+    round_from: Option<JobId>,
 }
 
 /// Frames a new window starts before it comes into view: by the last, the first ones are drawn.
@@ -122,6 +124,18 @@ pub struct Finished {
     pub failed: usize,
 }
 
+/// How far along the whole list is (see [`Gracil::list_progress`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ListProgress {
+    /// The round of work it belongs to, by its first file.
+    pub round: JobId,
+    /// Files in the round, each an equal part of the circle, and how many are done.
+    pub parts: usize,
+    pub done: usize,
+    /// Share of the whole round done, `0.0..=1.0`.
+    pub fraction: f64,
+}
+
 /// Counts and picks over the whole list, worked out in one pass after each change rather than each
 /// time the window is drawn: with thousands of files on the list, going through it again for
 /// every frame and every bit of progress kept the window from keeping up.
@@ -145,6 +159,14 @@ pub struct Summary {
     next_to_compress: Option<JobId>,
     /// The last file finished.
     last_finished: Option<JobId>,
+    /// The first file of this round of work: the files done since Gracil last started working,
+    /// and those still to do (ADR 0034, item 13).
+    round_from: Option<JobId>,
+    /// Files in this round, and how many of them are done.
+    round: usize,
+    round_done: usize,
+    /// Files being compressed, whose progress moves the ring between whole files.
+    compressing: Vec<JobId>,
 }
 
 #[derive(Debug, Clone)]
@@ -270,6 +292,7 @@ impl Gracil {
             revealing: HashMap::new(),
             settings,
             summary: Summary::default(),
+            round_from: None,
         };
         let tasks = Task::batch([
             system::theme().map(Message::ThemeChanged),
@@ -335,6 +358,7 @@ impl Gracil {
         let task = self.handle(message);
         if recount {
             self.summary = self.summarize();
+            self.round_from = self.summary.round_from;
         }
         // The work finished while Exit was being asked about: nothing is left to stop, so the
         // question goes away.
@@ -357,22 +381,24 @@ impl Gracil {
         let Some(tray) = &self.tray else {
             return;
         };
-        let working = self.working();
-        let state = match working {
+        // Like the ring: the whole list when there is more than one file (ADR 0034, item 13).
+        let done = self.working().map(|job| {
+            self.list_progress()
+                .map_or(job.fraction.unwrap_or(0.0), |list| list.fraction)
+                .clamp(0.0, 1.0) as f32
+        });
+        let state = match done {
             Some(_) if self.paused => TrayState::Paused,
-            Some(job) => {
-                // Steps of 1/40 are plenty for a ring 16 pixels wide.
-                let done = job.fraction.unwrap_or(0.0).clamp(0.0, 1.0) as f32;
-                TrayState::Processing((done * 40.0).floor() / 40.0)
-            }
+            // Steps of 1/40 are plenty for a ring 16 pixels wide.
+            Some(done) => TrayState::Processing((done * 40.0).floor() / 40.0),
             None if self.unseen_problem => TrayState::Error,
             None => TrayState::Idle,
         };
         // The tip shows whole percentages, so it follows the work more finely than the picture.
-        let tip = match (state, working) {
-            (TrayState::Processing(_), Some(job)) => self
-                .text
-                .tray_tip(TrayState::Processing(job.fraction.unwrap_or(0.0) as f32)),
+        let tip = match (state, done) {
+            (TrayState::Processing(_), Some(done)) => {
+                self.text.tray_tip(TrayState::Processing(done))
+            }
             _ => self.text.tray_tip(state),
         };
         let look = (state, tip);
@@ -687,6 +713,15 @@ impl Gracil {
         let mut busy = !self.running.is_empty() || self.gathering > 0;
         let mut finished = Finished::default();
         let (mut video_compressing, mut compressing, mut active) = (None, None, None);
+        // A round starts when work begins with nothing left to do, so every file before the first
+        // one not done belongs to an earlier round.
+        let round_from = self.round_from.or_else(|| {
+            self.queue
+                .jobs()
+                .iter()
+                .find(|job| !job.state.is_finished())
+                .map(|job| job.id)
+        });
         for job in self.queue.jobs() {
             match job.state {
                 JobState::Pending | JobState::Prepared => {
@@ -694,6 +729,7 @@ impl Gracil {
                     summary.next_to_compress.get_or_insert(job.id);
                 }
                 JobState::Compressing | JobState::Paused | JobState::Finalizing => {
+                    summary.compressing.push(job.id);
                     if job.kind == Kind::Video {
                         video_compressing.get_or_insert(job.id);
                     }
@@ -703,6 +739,10 @@ impl Gracil {
             }
             if job.state.is_active() {
                 active.get_or_insert(job.id);
+            }
+            if round_from.is_some_and(|from| job.id >= from) {
+                summary.round += 1;
+                summary.round_done += usize::from(job.state.is_finished());
             }
             if job.state.is_finished() {
                 summary.last_finished = Some(job.id);
@@ -734,9 +774,32 @@ impl Gracil {
             }
         }
         summary.working = video_compressing.or(compressing).or(active);
+        // Everything done: the next file starts a fresh round.
+        summary.round_from = round_from.filter(|_| summary.left > 0);
         summary.finished = (!busy && finished.compressed + finished.already + finished.failed > 0)
             .then_some(finished);
         summary
+    }
+
+    /// How far along the whole list is, for the ring and the tray, when this round of work has
+    /// more than one file (ADR 0034, item 13): one equal part per file, and the files being
+    /// compressed partway through theirs. Adding files makes the parts smaller, so the marble
+    /// moves back a little.
+    pub fn list_progress(&self) -> Option<ListProgress> {
+        let summary = &self.summary;
+        let round = summary.round_from.filter(|_| summary.round >= 2)?;
+        let partway: f64 = summary
+            .compressing
+            .iter()
+            .filter_map(|&id| self.queue.get(id)?.fraction)
+            .map(|fraction| fraction.clamp(0.0, 1.0))
+            .sum();
+        Some(ListProgress {
+            round,
+            parts: summary.round,
+            done: summary.round_done,
+            fraction: ((summary.round_done as f64 + partway) / summary.round as f64).min(1.0),
+        })
     }
 
     /// How many files are being worked on, so Exit would stop them.
