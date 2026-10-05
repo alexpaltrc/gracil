@@ -47,9 +47,6 @@ pub struct Dial {
     /// How much is done, when known.
     pub fraction: Option<f64>,
     pub paused: bool,
-    /// With the whole list: how many equal parts the circle has, one per file, and how many are
-    /// done, each marked by a hollow marble where its part ends.
-    pub parts: Option<(usize, usize)>,
     /// Pause is offered only once FFmpeg is compressing.
     pub can_pause: bool,
 }
@@ -217,29 +214,7 @@ impl canvas::Program<Message> for Dial {
             );
         }
 
-        // Each file done leaves a hollow marble where its part ends, once the marble has passed
-        // it, so how many are done and how many are left shows at a glance. With parts too short
-        // to tell the marks apart, only the circle shows.
         let marble_radius = pipe_width / 2.0 - 1.5 * scale;
-        if let Some((parts, done)) = self.parts
-            && parts >= 2
-            && TAU * pipe / parts as f32 >= 2.0 * marble_radius + 6.0 * scale
-        {
-            let part = 1.0 / parts as f32;
-            for at in (1..=done.min(parts - 1)).map(|index| index as f32 * part) {
-                if at > state.fill + 0.001 {
-                    break;
-                }
-                let angle = -FRAC_PI_2 + TAU * at;
-                let mark = Point::new(center.x + pipe * angle.cos(), center.y + pipe * angle.sin());
-                frame.stroke(
-                    &Path::circle(mark, marble_radius - 1.0 * scale),
-                    Stroke::default()
-                        .with_width(1.5 * scale)
-                        .with_color(tokens.thumb),
-                );
-            }
-        }
 
         // The marble, drawn like the thumb of Windows' own sliders: a solid face with a thin edge
         // and the accent in its middle, so it stands apart from the trail in both themes.
@@ -444,7 +419,6 @@ mod tests {
                 queue.add([std::path::PathBuf::from("a.mp4")]);
                 queue.jobs()[0].id
             }),
-            parts: None,
             fraction: Some(0.5),
             paused,
             can_pause,

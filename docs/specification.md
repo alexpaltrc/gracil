@@ -938,7 +938,9 @@ Open decisions, to settle before any work starts:
    the dial's whole circle is the whole list, and the marble leaves a hollow marble at the end of
    each file's part. A design pass to make the dial more refined comes later. *Built
    (2026-10-04):* the one list and images first (since superseded by ADR 0040), and the dial and
-   the tray for the whole list.
+   the tray for the whole list. *Changed 2026-10-04 by the product owner:* no hollow marbles; the
+   ring is titled with how many files it holds (**Compressing 24 files**), shows the whole list's
+   percentage, and never closes before the real end of the list.
 
 # 77.2 Video formats
 

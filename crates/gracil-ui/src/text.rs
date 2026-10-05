@@ -78,6 +78,7 @@ pub struct Text {
     in_all: fn(&str, u32) -> String,
     less: fn(&str) -> String,
     /// The count, and the count written in the user's number format.
+    compressing_files: fn(usize, &str) -> String,
     files_left: fn(usize, &str) -> String,
     unfinished: fn(usize, &str) -> String,
     ready: fn(usize, &str) -> String,
@@ -162,6 +163,11 @@ impl Text {
     }
 
     /// Files on the list not finished yet.
+    /// What the ring stands for while it shows the whole list (ADR 0034, item 13).
+    pub fn compressing_files(&self, count: usize) -> String {
+        (self.compressing_files)(count, &number(count))
+    }
+
     pub fn files_left(&self, count: usize) -> String {
         (self.files_left)(count, &number(count))
     }
@@ -276,6 +282,10 @@ static ENGLISH: Text = Text {
     smaller: |percent| format!("{percent}% smaller"),
     in_all: |change, percent| format!("In all: {change}, {percent}% smaller"),
     less: |amount| format!("{amount} smaller"),
+    compressing_files: |count, written| match count {
+        1 => "Compressing 1 file".to_owned(),
+        _ => format!("Compressing {written} files"),
+    },
     files_left: |count, written| match count {
         0 => "No files left".to_owned(),
         1 => "1 file left".to_owned(),
@@ -417,6 +427,10 @@ static SPANISH: Text = Text {
         _ => format!("{written} no se pudieron comprimir"),
     },
     in_line: |_, written| format!("{written} en espera"),
+    compressing_files: |count, written| match count {
+        1 => "Comprimiendo 1 archivo".to_owned(),
+        _ => format!("Comprimiendo {written} archivos"),
+    },
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
         TrayState::Processing(done) => format!("Gracil · comprimiendo {}%", percent(done)),
@@ -519,6 +533,8 @@ mod tests {
         assert_eq!(en.files_left(0), "No files left");
         assert_eq!(en.files_left(1), "1 file left");
         assert_eq!(en.files_left(3), "3 files left");
+        assert_eq!(en.compressing_files(24), "Compressing 24 files");
+        assert_eq!(es.compressing_files(1), "Comprimiendo 1 archivo");
         assert_eq!(es.unfinished(1), "Quedó 1 archivo sin terminar");
         assert_eq!(en.unfinished(2), "2 files were left unfinished");
         assert_eq!(es.ready(1), "1 listo");

@@ -90,10 +90,11 @@ Gracil is still being built, but you can already compress videos and images with
   **View files**, or click the small line naming the file being compressed to go back to the
   ring. Take a file off the list with **×** or **Clear**. A video can always be compressed again,
   even right after replacing it, without clearing the list first.
-- With more than one file, the ring stands for the whole list: one equal part per file, and the
-  marble leaves a hollow marble behind each file it finishes, so you can see how many are done
-  and how many are left. Adding files while Gracil works moves the marble back a little, since
-  each file's part gets smaller. The marble next to the clock follows the same ring.
+- With more than one file, the ring stands for the whole list, with one equal part per file. Above
+  it Gracil says how many files it holds, for example **Compressing 24 files**, and the
+  percentage below is the whole list's. Adding files while Gracil works moves the marble back a
+  little, since each file's part gets smaller, and the ring only closes at the real end of the
+  list. The marble next to the clock follows the same ring.
 - When the whole list is done, the window says so clearly: the ring's middle fills with green and
   a check mark draws itself, and just below, in large letters, how much room the list saved, for
   example **130 MB smaller**, with a quiet line such as **22 files compressed · 4 were already

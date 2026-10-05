@@ -167,3 +167,8 @@ about 2 s).
 - The PNG and SSIMULACRA2 crates add to Gracil's own binary; jpegli stays a separate program.
 - These thresholds come from one person's test set, as ADR 0029's did; they are revisited when
   more images are measured.
+
+*Amended 2026-10-04 by the product owner:* the dial no longer leaves hollow marbles. Above it,
+in place of a file name, it says how many files it holds (**Compressing 24 files**); the
+percentage below is the whole list's, and while folders are still being looked through it never
+closes the circle.

@@ -158,9 +158,8 @@ pub struct Finished {
 pub struct ListProgress {
     /// The round of work it belongs to, by its first file.
     pub round: JobId,
-    /// Files in the round, each an equal part of the circle, and how many are done.
-    pub parts: usize,
-    pub done: usize,
+    /// Files in the round.
+    pub files: usize,
     /// Share of the whole round done, `0.0..=1.0`.
     pub fraction: f64,
 }
@@ -914,10 +913,12 @@ impl Gracil {
     /// How far along the whole list is, for the ring and the tray, when this round of work has
     /// more than one file (ADR 0034, item 13): one equal part per file, and the files being
     /// compressed partway through theirs. Adding files makes the parts smaller, so the marble
-    /// moves back a little.
+    /// moves back a little. While folders are still being looked through, more files may come,
+    /// so it counts one more file than it knows of and never fills before the real end.
     pub fn list_progress(&self) -> Option<ListProgress> {
         let summary = &self.summary;
         let round = summary.round_from.filter(|_| summary.round >= 2)?;
+        let parts = summary.round + usize::from(self.gathering > 0);
         let partway: f64 = summary
             .compressing
             .iter()
@@ -926,9 +927,8 @@ impl Gracil {
             .sum();
         Some(ListProgress {
             round,
-            parts: summary.round,
-            done: summary.round_done,
-            fraction: ((summary.round_done as f64 + partway) / summary.round as f64).min(1.0),
+            files: summary.round,
+            fraction: ((summary.round_done as f64 + partway) / parts as f64).min(1.0),
         })
     }
 

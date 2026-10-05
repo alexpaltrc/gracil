@@ -191,7 +191,6 @@ fn dial(state: &Gracil, job: &Job) -> Dial {
     Dial {
         shows: list.map_or(Shows::File(job.id), |list| Shows::List(list.round)),
         fraction: list.map_or(job.fraction, |list| Some(list.fraction)),
-        parts: list.map(|list| (list.parts, list.done)),
         paused: state.paused,
         // Pause and resume act on every file being worked on (ADR 0040); only putting a result
         // in place can't be held.
@@ -200,20 +199,37 @@ fn dial(state: &Gracil, job: &Job) -> Dial {
 }
 
 fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
-    let mut content = column![name(job, FOCUS_NAME_CHARS, size::TITLE)]
+    let ring = state.shows_dial(job).then(|| dial(state, job));
+    // A ring for the whole list is titled with how many files it holds, not with one of them,
+    // and its percentage is the whole list's.
+    let list = ring
+        .as_ref()
+        .filter(|ring| matches!(ring.shows, Shows::List(_)))
+        .and_then(|_| state.list_progress());
+    let (title, shown): (Element<'a, Message>, Status) = match list {
+        Some(list) => (
+            text(state.text.compressing_files(list.files))
+                .size(size::TITLE)
+                .into(),
+            match job.state {
+                JobState::Compressing | JobState::Preparing => {
+                    Status::plain(format!("{:.0}%", list.fraction * 100.0))
+                }
+                _ => status(state, job),
+            },
+        ),
+        None => (name(job, FOCUS_NAME_CHARS, size::TITLE), status(state, job)),
+    };
+    let mut content = column![title]
         .spacing(space::M)
         .align_x(Center)
         .max_width(320);
 
-    if state.shows_dial(job) {
-        content = content.push(
-            Canvas::new(dial(state, job))
-                .width(dial::SIZE)
-                .height(dial::SIZE),
-        );
+    if let Some(ring) = ring {
+        content = content.push(Canvas::new(ring).width(dial::SIZE).height(dial::SIZE));
     }
 
-    let mut details = column![status_line(&status(state, job), size::BODY)]
+    let mut details = column![status_line(&shown, size::BODY)]
         .spacing(space::S)
         .align_x(Center);
     match state.outcomes.get(&job.id) {
