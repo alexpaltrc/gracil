@@ -13,6 +13,10 @@ use tracing::{info, warn};
 /// Without a touch of the keyboard or mouse for this long, the computer counts as idle.
 const IDLE_AFTER: Duration = Duration::from_secs(60);
 
+/// Images read ahead beyond those compressing at once, so a slow drive doesn't leave the
+/// processor waiting.
+pub const READ_AHEAD: usize = 2;
+
 /// Memory an image needs while it is compressed, per pixel: the decoded picture, the copies the
 /// quality measure works on and the encoder's own.
 const BYTES_PER_PIXEL: u64 = 48;

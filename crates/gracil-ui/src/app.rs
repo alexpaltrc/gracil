@@ -1305,7 +1305,8 @@ impl Gracil {
             tasks.push(self.start_compressing(&engine, id));
             images += 1;
         }
-        while self.queue.count(Kind::Image, getting_ready) < at_once {
+        // Reading is mostly waiting on a network or cloud drive, so a few more are read ahead.
+        while self.queue.count(Kind::Image, getting_ready) < at_once + pace::READ_AHEAD {
             let Some(id) = self.queue.start_preparing(Kind::Image).map(|job| job.id) else {
                 break;
             };

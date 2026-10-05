@@ -223,7 +223,10 @@ pub fn compress_prepared(
                 .and_then(|reader| reader.into_dimensions().ok())
                 .ok_or_else(|| ImageError::Unreadable("not a whole JPEG".into()))?;
             let reference = || decode_with_image(&data, false).map(|d| d.reference);
-            let bytes = job.make_jpeg(source, &carried, expected, reference, &mut |f| {
+            // The tools read a copy on this computer: the original may be on a network or cloud
+            // drive, where every read is slow, and each attempt reads it again.
+            let input = job.scratch.copy_of(&data, source)?;
+            let bytes = job.make_jpeg(&input, &carried, expected, reference, &mut |f| {
                 report(on_update, f);
             })?;
             (bytes, Target::Jpeg)
@@ -249,7 +252,8 @@ pub fn compress_prepared(
         }
         Format::Heif | Format::WebP | Format::Other => {
             let decoded = if format == Format::Heif {
-                job.decode_with_ffmpeg(source, &data)?
+                let input = job.scratch.copy_of(&data, source)?;
+                job.decode_with_ffmpeg(&input, &data)?
             } else {
                 if format == Format::WebP && is_animated_webp(&data) {
                     return Err(ImageError::Animated);
@@ -728,6 +732,16 @@ impl Scratch {
         let path = dir.join(format!("image-{:x}-{id:x}-{name}", std::process::id()));
         leftovers::record_temp(&path);
         self.files.push(path.clone());
+        Ok(path)
+    }
+
+    /// A copy of the image `data` read from `source`, with the same extension, on this computer.
+    fn copy_of(&mut self, data: &[u8], source: &Path) -> io::Result<PathBuf> {
+        let extension = source.extension().map_or_else(String::new, |extension| {
+            extension.to_string_lossy().into_owned()
+        });
+        let path = self.file(&format!("source.{extension}"))?;
+        fs::write(&path, data)?;
         Ok(path)
     }
 }

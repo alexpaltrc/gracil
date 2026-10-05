@@ -29,6 +29,8 @@ Gracil is still being built, but you can already compress videos and images with
   computer alone and less as soon as you come back, and fewer large images at once so memory
   never runs short. The window stays quick to answer even after hours of work on tens of
   thousands of files.
+- Images on a network or cloud drive compress much faster: each one is read from the drive only
+  once, and the next few are read while others compress.
 - Gracil never lets the computer run too hot. With an NVIDIA graphics card it watches its
   temperature: when it gets warm Gracil takes on less, and when it gets too hot everything waits,
   with **Letting the computer cool down**, and carries on by itself once it has cooled.

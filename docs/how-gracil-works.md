@@ -402,6 +402,8 @@ looking; until it finds the first, the window says **Looking through the folderâ
 that the line with **View files** says **looking for more**. Looking only reads the names of the
 files. On a cloud drive, each file is still downloaded when its turn comes to be compressed, and
 the smaller version is uploaded when it is saved, so that part goes as fast as your connection.
+Each image is read from the drive only once, and a few are read ahead while others compress, so
+the waiting overlaps with the work.
 
 With **Replace** or **Save a copy**, the files are compressed without opening the big window. If
 Gracil is already running, the files join its list. If Gracil wasn't running, it starts for that,
