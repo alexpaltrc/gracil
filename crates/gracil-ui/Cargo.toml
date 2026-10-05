@@ -17,6 +17,7 @@ embed-resource.workspace = true
 gracil-core.workspace = true
 gracil-windows.workspace = true
 iced.workspace = true
+log.workspace = true
 rfd.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true

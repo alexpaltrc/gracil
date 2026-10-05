@@ -4,6 +4,7 @@
 //! Every call explains why it is sound.
 
 mod appear;
+mod drawing;
 mod flyout;
 mod icon;
 mod instance;
@@ -15,6 +16,7 @@ mod theme;
 mod tray;
 
 pub use appear::{park, unpark};
+pub use drawing::draw_with_direct3d;
 pub use flyout::place_near_tray;
 pub use icon::{set_icon_theme, set_window_icon};
 pub use instance::{claim, forward, is_running, serve};

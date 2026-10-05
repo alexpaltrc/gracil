@@ -77,7 +77,7 @@ pub struct Text {
     in_all: fn(&str, u32) -> String,
     less: fn(&str) -> String,
     /// The count, and the count written in the user's number format.
-    files: fn(usize, &str) -> String,
+    files_left: fn(usize, &str) -> String,
     ready: fn(usize, &str) -> String,
     in_line: fn(usize, &str) -> String,
     compressed: fn(usize, &str) -> String,
@@ -159,8 +159,9 @@ impl Text {
         format!("−{}%", rounded_percent(smaller_by))
     }
 
-    pub fn files(&self, count: usize) -> String {
-        (self.files)(count, &number(count))
+    /// Files on the list not finished yet.
+    pub fn files_left(&self, count: usize) -> String {
+        (self.files_left)(count, &number(count))
     }
 
     pub fn ready(&self, count: usize) -> String {
@@ -267,9 +268,10 @@ static ENGLISH: Text = Text {
     smaller: |percent| format!("{percent}% smaller"),
     in_all: |change, percent| format!("In all: {change}, {percent}% smaller"),
     less: |amount| format!("{amount} smaller"),
-    files: |count, written| match count {
-        1 => "1 file".to_owned(),
-        _ => format!("{written} files"),
+    files_left: |count, written| match count {
+        0 => "No files left".to_owned(),
+        1 => "1 file left".to_owned(),
+        _ => format!("{written} files left"),
     },
     ready: |_, written| format!("{written} ready"),
     saved_as: |name| format!("Saved as {name}"),
@@ -366,9 +368,10 @@ static SPANISH: Text = Text {
     smaller: |percent| format!("{percent}% más pequeño"),
     in_all: |change, percent| format!("En total: {change}, {percent}% más pequeño"),
     less: |amount| format!("{amount} menos"),
-    files: |count, written| match count {
-        1 => "1 archivo".to_owned(),
-        _ => format!("{written} archivos"),
+    files_left: |count, written| match count {
+        0 => "No queda ninguno".to_owned(),
+        1 => "Queda 1 archivo".to_owned(),
+        _ => format!("Quedan {written} archivos"),
     },
     ready: |count, written| match count {
         1 => "1 listo".to_owned(),
@@ -494,13 +497,14 @@ mod tests {
     #[test]
     fn counts_agree_with_their_number() {
         let (en, es) = (Text::get(Language::English), Text::get(Language::Spanish));
-        assert_eq!(en.files(1), "1 file");
-        assert_eq!(en.files(3), "3 files");
+        assert_eq!(en.files_left(0), "No files left");
+        assert_eq!(en.files_left(1), "1 file left");
+        assert_eq!(en.files_left(3), "3 files left");
         assert_eq!(es.ready(1), "1 listo");
         assert_eq!(es.ready(2), "2 listos");
         assert_eq!(
-            es.files(15_031),
-            "15,031 archivos",
+            es.files_left(15_031),
+            "Quedan 15,031 archivos",
             "in the number format of Windows"
         );
     }

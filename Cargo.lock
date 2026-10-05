@@ -980,6 +980,7 @@ dependencies = [
  "gracil-core",
  "gracil-windows",
  "iced",
+ "log",
  "rfd",
  "tracing",
  "tracing-appender",

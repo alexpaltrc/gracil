@@ -25,6 +25,8 @@ use request::Request;
 use tracing::{info, warn};
 
 fn main() -> iced::Result {
+    // First, while this is the only thread (see `draw_with_direct3d`).
+    gracil_windows::draw_with_direct3d();
     logging::init();
     let request = Request::parse(std::env::args_os().skip(1));
 

@@ -27,7 +27,8 @@ Gracil is still being built, but you can already compress videos and images with
 - Gracil never gets in your way: it works below your other programs and never uses the whole
   processor, so the computer stays responsive and quiet. It takes on more when you leave the
   computer alone and less as soon as you come back, and fewer large images at once so memory
-  never runs short.
+  never runs short. The window stays quick to answer even after hours of work on tens of
+  thousands of files.
 - Gracil runs only once. Opening it again, or opening videos with it while it is running, brings
   the open Gracil forward and adds the videos to the same list.
 - Closing the window no longer stops Gracil: it keeps working next to the clock. Its marble there
@@ -71,10 +72,11 @@ Gracil is still being built, but you can already compress videos and images with
   with thousands of files, shows every other video and image, how much smaller each one became
   and where it went, for example **−35% · Replaced**. With two or more done, it adds them all up, for example
   **In all: 3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says how much room
-  they freed. Click a file to show it large; click it again, close **View files**, or click the
-  small line naming the file being compressed to go back to the ring. Take a file off the list
-  with **×** or **Clear**. A video can always be compressed again, even right after replacing
-  it, without clearing the list first.
+  they freed. That line also says how many files are left, counting down to none as they finish,
+  for example **12 files left**. Click a file to show it large; click it again, close
+  **View files**, or click the small line naming the file being compressed to go back to the
+  ring. Take a file off the list with **×** or **Clear**. A video can always be compressed again,
+  even right after replacing it, without clearing the list first.
 - When the whole list is done, the window says so clearly: the ring's middle fills with green and
   a check mark draws itself, and just below, in large letters, how much room the list saved, for
   example **130 MB smaller**, with a quiet line such as **22 files compressed · 4 were already

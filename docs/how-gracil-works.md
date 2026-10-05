@@ -68,7 +68,8 @@ format: MP4" (videos) and "Images" (photos and pictures) below.
   smaller it became, where it went (for example **−35% · Replaced**), or why it couldn't be
   compressed. With two or more done, a line at its top adds them all up, for example **In all:
   3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says it in a few words, for
-  example **5 files · 1.2 GB smaller · View files**. Only what is still on the list counts:
+  example **12 files left · 1.2 GB smaller · View files**. The count goes down as each file
+  finishes, until none are left. Only what is still on the list counts:
   taking files off it, or **Clear**, takes them out of the total.
   The list opens and closes at once, even with tens of thousands of files: Gracil only draws the
   rows you can see.
@@ -169,6 +170,9 @@ straining.
   alone for a minute, it takes on more, and fewer again as soon as you come back.
 - Large images need more memory, so Gracil starts fewer of them at once and always leaves at least
   half of the free memory for your programs.
+- The window stays quick to answer however long the list is and however long Gracil has been
+  working, even with tens of thousands of files and hours of work: pause, stop and **View files**
+  always respond at once.
 
 ## Each video gets its own amount of compression
 

@@ -505,7 +505,7 @@ fn name(job: &Job, max_chars: usize, text_size: f32) -> Element<'static, Message
 }
 
 fn footer(state: &Gracil) -> Element<'_, Message> {
-    let mut summary = state.text.files(state.queue.len());
+    let mut summary = state.text.files_left(state.left());
     match state.waiting_count() {
         0 => {}
         n => summary.push_str(&format!("  ·  {}", state.text.ready(n))),

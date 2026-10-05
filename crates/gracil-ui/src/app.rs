@@ -90,6 +90,8 @@ pub struct Gracil {
     /// they belong.
     revealing: HashMap<window::Id, (u64, u8, (i32, i32))>,
     settings: Settings,
+    /// Counts over the whole list, as of the last change.
+    summary: Summary,
 }
 
 /// Frames a new window starts before it comes into view: by the last, the first ones are drawn.
@@ -118,6 +120,31 @@ pub struct Finished {
     pub already: usize,
     /// Files that couldn't be compressed for another reason.
     pub failed: usize,
+}
+
+/// Counts and picks over the whole list, worked out in one pass after each change rather than each
+/// time the window is drawn: with thousands of files on the list, going through it again for
+/// every frame and every bit of progress kept the window from keeping up.
+#[derive(Debug, Clone, Default)]
+pub struct Summary {
+    /// Files not finished yet: waiting, getting ready or compressing.
+    pub left: usize,
+    /// Files that haven't started compressing yet, including those already got ready.
+    pub waiting_to_compress: usize,
+    /// Results waiting for a choice.
+    pub waiting_for_choice: usize,
+    /// Every file that came out smaller, added together, and how many there are.
+    pub total: (Sizes, usize),
+    /// How the whole list went, once it is done (see [`Gracil::finished`]).
+    pub finished: Option<Finished>,
+    /// The file shown as being worked on (see [`Gracil::working`]).
+    working: Option<JobId>,
+    /// The first result waiting for a choice.
+    first_waiting_for_choice: Option<JobId>,
+    /// The next file to compress.
+    next_to_compress: Option<JobId>,
+    /// The last file finished.
+    last_finished: Option<JobId>,
 }
 
 #[derive(Debug, Clone)]
@@ -242,6 +269,7 @@ impl Gracil {
             mini: None,
             revealing: HashMap::new(),
             settings,
+            summary: Summary::default(),
         };
         let tasks = Task::batch([
             system::theme().map(Message::ThemeChanged),
@@ -295,7 +323,19 @@ impl Gracil {
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        // Progress, frames and scrolling change nothing the counts depend on, and they are by far
+        // the most frequent messages.
+        let recount = !matches!(
+            message,
+            Message::Job(_, Report::Progress(_))
+                | Message::ThemeFrame(_)
+                | Message::Frame(_)
+                | Message::DrawerScrolled(_)
+        );
         let task = self.handle(message);
+        if recount {
+            self.summary = self.summarize();
+        }
         // The work finished while Exit was being asked about: nothing is left to stop, so the
         // question goes away.
         if self.confirming_exit && self.running.is_empty() && self.waiting_to_compress() == 0 {
@@ -632,11 +672,71 @@ impl Gracil {
 
     /// Files on the list that haven't started compressing yet, including those already got ready.
     pub fn waiting_to_compress(&self) -> usize {
-        self.queue
-            .jobs()
-            .iter()
-            .filter(|job| matches!(job.state, JobState::Pending | JobState::Prepared))
-            .count()
+        self.summary.waiting_to_compress
+    }
+
+    /// Files on the list not finished yet; it counts down to nothing as the work goes on.
+    pub fn left(&self) -> usize {
+        self.summary.left
+    }
+
+    /// Goes through the whole list once and works out everything the window and the tray show
+    /// about it (see [`Summary`]).
+    fn summarize(&self) -> Summary {
+        let mut summary = Summary::default();
+        let mut busy = !self.running.is_empty() || self.gathering > 0;
+        let mut finished = Finished::default();
+        let (mut video_compressing, mut compressing, mut active) = (None, None, None);
+        for job in self.queue.jobs() {
+            match job.state {
+                JobState::Pending | JobState::Prepared => {
+                    summary.waiting_to_compress += 1;
+                    summary.next_to_compress.get_or_insert(job.id);
+                }
+                JobState::Compressing | JobState::Paused | JobState::Finalizing => {
+                    if job.kind == Kind::Video {
+                        video_compressing.get_or_insert(job.id);
+                    }
+                    compressing.get_or_insert(job.id);
+                }
+                _ => {}
+            }
+            if job.state.is_active() {
+                active.get_or_insert(job.id);
+            }
+            if job.state.is_finished() {
+                summary.last_finished = Some(job.id);
+            } else {
+                summary.left += 1;
+                busy = true;
+            }
+            let outcome = self.outcomes.get(&job.id);
+            if let Some(sizes) = outcome.and_then(Outcome::sizes) {
+                summary.total = (summary.total.0 + sizes, summary.total.1 + 1);
+            }
+            match outcome {
+                Some(Outcome::Ready { placing, .. }) => {
+                    busy = true;
+                    if !placing {
+                        summary.waiting_for_choice += 1;
+                        summary.first_waiting_for_choice.get_or_insert(job.id);
+                    }
+                }
+                Some(Outcome::Placed { sizes, .. }) => {
+                    finished.saved = finished.saved + *sizes;
+                    finished.compressed += 1;
+                }
+                Some(Outcome::Failed(Failure::AsSmallAsItGets | Failure::NotSmaller)) => {
+                    finished.already += 1;
+                }
+                Some(Outcome::Failed(_)) => finished.failed += 1,
+                Some(Outcome::Cancelled) | None => {}
+            }
+        }
+        summary.working = video_compressing.or(compressing).or(active);
+        summary.finished = (!busy && finished.compressed + finished.already + finished.failed > 0)
+            .then_some(finished);
+        summary
     }
 
     /// How many files are being worked on, so Exit would stop them.
@@ -802,34 +902,22 @@ impl Gracil {
     /// worked on (see [`Self::working`]); otherwise a result waiting for a choice; otherwise the
     /// next one waiting; otherwise the one just put in place; otherwise the last one done.
     pub fn current(&self) -> Option<&Job> {
-        let jobs = self.queue.jobs();
+        let summary = &self.summary;
         self.working()
-            .or_else(|| {
-                jobs.iter()
-                    .find(|job| self.outcomes.get(&job.id).is_some_and(Outcome::is_waiting))
-            })
-            .or_else(|| {
-                jobs.iter()
-                    .find(|job| matches!(job.state, JobState::Pending | JobState::Prepared))
-            })
-            .or_else(|| self.last_placed.and_then(|id| self.queue.get(id)))
-            .or_else(|| jobs.iter().rev().find(|job| job.state.is_finished()))
+            .or_else(|| self.job(summary.first_waiting_for_choice))
+            .or_else(|| self.job(summary.next_to_compress))
+            .or_else(|| self.job(self.last_placed))
+            .or_else(|| self.job(summary.last_finished))
     }
 
     /// Of the files being worked on, the one shown: the video being compressed, which takes
     /// longest; otherwise the first file being compressed; otherwise the first getting ready.
     pub fn working(&self) -> Option<&Job> {
-        let jobs = self.queue.jobs();
-        let compressing = |job: &&Job| {
-            matches!(
-                job.state,
-                JobState::Compressing | JobState::Paused | JobState::Finalizing
-            )
-        };
-        jobs.iter()
-            .find(|job| job.kind == Kind::Video && compressing(job))
-            .or_else(|| jobs.iter().find(compressing))
-            .or_else(|| self.queue.active())
+        self.job(self.summary.working)
+    }
+
+    fn job(&self, id: Option<JobId>) -> Option<&Job> {
+        id.and_then(|id| self.queue.get(id))
     }
 
     /// The file to offer a way back to while the user looks at another one: only when Gracil is
@@ -845,56 +933,21 @@ impl Gracil {
 
     /// Every file in the list that came out smaller, added together, and how many there are.
     pub fn total(&self) -> (Sizes, usize) {
-        self.queue
-            .jobs()
-            .iter()
-            .filter_map(|job| self.outcomes.get(&job.id)?.sizes())
-            .fold((Sizes::default(), 0), |(sum, count), sizes| {
-                (sum + sizes, count + 1)
-            })
+        self.summary.total
     }
 
     /// The whole list is done, when it is (spec §77.3, ADR 0039): nothing is waiting, being worked
     /// on, waiting for a choice or still being looked for, and at least one file finished rather
     /// than being stopped.
     pub fn finished(&self) -> Option<Finished> {
-        let busy = !self.running.is_empty()
-            || self.gathering > 0
-            || self.queue.jobs().iter().any(|job| !job.state.is_finished())
-            || self
-                .outcomes
-                .values()
-                .any(|outcome| matches!(outcome, Outcome::Ready { .. }));
-        if busy {
-            return None;
-        }
-        let mut finished = Finished::default();
-        for job in self.queue.jobs() {
-            match self.outcomes.get(&job.id) {
-                Some(Outcome::Placed { sizes, .. }) => {
-                    finished.saved = finished.saved + *sizes;
-                    finished.compressed += 1;
-                }
-                Some(Outcome::Failed(Failure::AsSmallAsItGets | Failure::NotSmaller)) => {
-                    finished.already += 1;
-                }
-                Some(Outcome::Failed(_)) => finished.failed += 1,
-                Some(Outcome::Ready { .. } | Outcome::Cancelled) | None => {}
-            }
-        }
-        (finished.compressed + finished.already + finished.failed > 0).then_some(finished)
+        self.summary.finished
     }
 
     /// What the mini-window shows: the video being compressed, else the first result waiting for
     /// a choice, else what the big window shows.
     pub fn mini_job(&self) -> Option<&Job> {
         self.working()
-            .or_else(|| {
-                self.queue
-                    .jobs()
-                    .iter()
-                    .find(|job| self.outcomes.get(&job.id).is_some_and(Outcome::is_waiting))
-            })
+            .or_else(|| self.job(self.summary.first_waiting_for_choice))
             .or_else(|| self.focused())
     }
 
@@ -904,7 +957,7 @@ impl Gracil {
     }
 
     pub fn waiting_count(&self) -> usize {
-        self.outcomes.values().filter(|o| o.is_waiting()).count()
+        self.summary.waiting_for_choice
     }
 
     /// Whether a video can leave the list now: it is not running and not being put in place.

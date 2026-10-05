@@ -76,7 +76,13 @@ impl Queue {
     }
 
     pub fn get(&self, id: JobId) -> Option<&Job> {
-        self.jobs.iter().find(|job| job.id == id)
+        self.index(id).map(|at| &self.jobs[at])
+    }
+
+    /// Where `id` is in the list. Jobs are numbered as they are added and never reordered, so
+    /// the list is always sorted by number and found by halving it, however long it grows.
+    fn index(&self, id: JobId) -> Option<usize> {
+        self.jobs.binary_search_by_key(&id, |job| job.id).ok()
     }
 
     /// The job for `path`, matched the way adding matches duplicates.
@@ -124,7 +130,7 @@ impl Queue {
     }
 
     pub fn apply(&mut self, id: JobId, event: JobEvent) -> Result<JobState, InvalidTransition> {
-        let Some(job) = self.jobs.iter_mut().find(|job| job.id == id) else {
+        let Some(job) = self.index(id).map(|at| &mut self.jobs[at]) else {
             // A job removed from the list has nothing left to update.
             return Ok(JobState::Cancelled);
         };
@@ -136,7 +142,7 @@ impl Queue {
     }
 
     pub fn set_fraction(&mut self, id: JobId, fraction: Option<f64>) {
-        if let Some(job) = self.jobs.iter_mut().find(|job| job.id == id) {
+        if let Some(job) = self.index(id).map(|at| &mut self.jobs[at]) {
             job.fraction = fraction;
         }
     }
@@ -145,9 +151,8 @@ impl Queue {
     /// separate, explicit action (§33).
     pub fn remove(&mut self, id: JobId) -> bool {
         let Some(index) = self
-            .jobs
-            .iter()
-            .position(|job| job.id == id && job.state.is_removable())
+            .index(id)
+            .filter(|&at| self.jobs[at].state.is_removable())
         else {
             return false;
         };

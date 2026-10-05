@@ -2,6 +2,7 @@
 //! day, the last week kept. They never leave the computer.
 
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use tracing::Level;
 use tracing_appender::non_blocking::WorkerGuard;
@@ -36,6 +37,7 @@ pub fn init() {
     if started.is_err() {
         return;
     }
+    listen_to_libraries();
     *WRITER
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(guard);
@@ -52,4 +54,66 @@ pub fn finish() {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .take();
     drop(guard);
+}
+
+/// The same warning from the drawing library is written at most this often; the times in
+/// between are counted instead.
+const REPEAT_EVERY: Duration = Duration::from_secs(60);
+
+/// Passes the warnings and errors of the libraries that draw the window, which report through
+/// `log` rather than `tracing`, into Gracil's log. Without it, a window that stops drawing leaves
+/// no trace of why.
+struct Libraries {
+    /// The last message written, when, and how many times it came again since.
+    last: Mutex<Option<(String, Instant, u64)>>,
+}
+
+impl log::Log for Libraries {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::Level::Warn
+    }
+
+    fn log(&self, record: &log::Record) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+        let message = record.args().to_string();
+        let mut last = self
+            .last
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let repeated = match last.as_mut() {
+            Some((previous, since, times)) if *previous == message => {
+                if since.elapsed() < REPEAT_EVERY {
+                    *times += 1;
+                    return;
+                }
+                *since = Instant::now();
+                std::mem::take(times)
+            }
+            _ => {
+                *last = Some((message.clone(), Instant::now(), 0));
+                0
+            }
+        };
+        let from = record.target();
+        if record.level() == log::Level::Error {
+            tracing::error!(from, repeated, "{message}");
+        } else {
+            tracing::warn!(from, repeated, "{message}");
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+static LIBRARIES: Libraries = Libraries {
+    last: Mutex::new(None),
+};
+
+/// Starts passing the drawing libraries' warnings into the log.
+fn listen_to_libraries() {
+    if log::set_logger(&LIBRARIES).is_ok() {
+        log::set_max_level(log::LevelFilter::Warn);
+    }
 }
