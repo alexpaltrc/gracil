@@ -78,6 +78,11 @@ pub struct Gracil {
     intents: HashMap<JobId, Choice>,
     /// How many requests from File Explorer are still being looked through (ADR 0037).
     pub gathering: usize,
+    /// How many times Stop was pressed. Files found by a look started before the last press go
+    /// straight to the files offered to carry on with (ADR 0044).
+    stops: u64,
+    /// Looks through folders still going on from before the last Stop.
+    abandoned: usize,
     /// Leaving was asked for; Gracil leaves as soon as nothing is half done.
     exiting: bool,
     /// The icon next to the clock, unless Windows refused it.
@@ -120,6 +125,9 @@ const SETTLE_AFTER_FIRST_FRAME: Duration = Duration::from_millis(50);
 /// very first frame after starting the computer can take a while, and a white window is worse
 /// than one that appears a moment later.
 const REVEAL_AT_THE_LATEST: Duration = Duration::from_secs(3);
+
+/// The longest Gracil waits, on leaving, to tidy up the files it no longer needs.
+const TIDY_BEFORE_LEAVING: Duration = Duration::from_secs(3);
 
 /// A quick likeness of the list of unfinished files: when it changes, the list is kept again.
 type Kept = (usize, usize, usize, usize);
@@ -215,8 +223,9 @@ pub enum Message {
     /// The "Always" pill: replace, ask (`None`) or save a copy for every video that finishes.
     Always(Option<Choice>),
     Placed(JobId, Choice, Result<PathBuf, Failure>),
-    /// Files found in what File Explorer sent, with the choice it came with.
-    Found(Option<Choice>, work::Found),
+    /// Files found in what File Explorer sent, with the choice it came with, by a look started
+    /// after that many presses of Stop.
+    Found(u64, Option<Choice>, work::Found),
     /// A file picked in the list is shown large; picking it again goes back to the work.
     Select(JobId),
     /// Back from a file picked in the list to what Gracil is working on.
@@ -309,6 +318,8 @@ impl Gracil {
             resident: false,
             intents: HashMap::new(),
             gathering: 0,
+            stops: 0,
+            abandoned: 0,
             exiting: false,
             tray,
             tray_shown: None,
@@ -465,10 +476,7 @@ impl Gracil {
             Message::FilesChosen(paths) => self.add(paths),
             Message::Job(id, report) => self.on_report(id, report),
             Message::Cancel => {
-                // Stop acts on every file being worked on; the files still waiting go on.
-                for control in self.running.values() {
-                    control.cancel();
-                }
+                self.stop();
                 Task::none()
             }
             Message::Pause => {
@@ -505,7 +513,7 @@ impl Gracil {
                 self.selected = (self.selected != Some(id)).then_some(id);
                 Task::none()
             }
-            Message::Found(choice, found) => self.on_found(choice, found),
+            Message::Found(stops, choice, found) => self.on_found(stops, choice, found),
             Message::ShowCurrent => {
                 self.selected = None;
                 Task::none()
@@ -767,9 +775,44 @@ impl Gracil {
         let list = self.unfinished();
         unfinished::save_now(&list);
         self.leaving_with = Some(list);
+        // Nothing is waited for but a result being put in place (ADR 0044): work stuck reading a
+        // slow drive ends with Gracil, and what it leaves behind is removed at the next start.
         for control in self.running.values() {
             control.cancel();
         }
+        self.running.clear();
+    }
+
+    /// Stop (ADR 0044): the whole list stops at once. Every file not finished leaves the list
+    /// and is offered to carry on with later, with the choice made for it. Work under way is told
+    /// to stop, and whatever it still reports is let go. A result being put in place finishes.
+    fn stop(&mut self) {
+        self.stops += 1;
+        self.abandoned += std::mem::take(&mut self.gathering);
+        for control in self.running.values() {
+            control.cancel();
+        }
+        self.running.clear();
+        self.prepared.clear();
+        let stopped: Vec<(JobId, PathBuf)> = self
+            .queue
+            .jobs()
+            .iter()
+            .filter(|job| !job.state.is_finished())
+            .map(|job| (job.id, job.path.clone()))
+            .collect();
+        for (id, path) in stopped {
+            let _ = self.queue.apply(id, JobEvent::Cancel);
+            if self.queue.remove(id) {
+                let choice = self.intents.remove(&id);
+                self.offered.push(Unfinished { path, choice });
+            }
+        }
+        if self.selected.is_some_and(|id| self.queue.get(id).is_none()) {
+            self.selected = None;
+        }
+        self.paused = false;
+        self.hold();
     }
 
     /// Whether `job` is shown with the ring: while it is worked on, and, while paused, while it
@@ -910,9 +953,9 @@ impl Gracil {
         // Folders from File Explorer are looked through away from the window, which a slow
         // drive would otherwise freeze; files join the list folder by folder (ADR 0035, 0037).
         self.gathering += 1;
-        let choice = request.choice;
+        let (choice, stops) = (request.choice, self.stops);
         let gather = work::gather(request.paths, request.only)
-            .map(move |found| Message::Found(choice, found));
+            .map(move |found| Message::Found(stops, choice, found));
         Task::batch([show, gather])
     }
 
@@ -921,6 +964,7 @@ impl Gracil {
     /// files, since there can be thousands of them.
     fn continue_unfinished(&mut self) -> Task<Message> {
         let offered = std::mem::take(&mut self.offered);
+        let stops = self.stops;
         let mut tasks = Vec::new();
         for choice in [None, Some(Choice::Replace), Some(Choice::SaveCopy)] {
             let paths: Vec<PathBuf> = offered
@@ -932,12 +976,29 @@ impl Gracil {
                 continue;
             }
             self.gathering += 1;
-            tasks.push(work::gather(paths, None).map(move |found| Message::Found(choice, found)));
+            tasks.push(
+                work::gather(paths, None).map(move |found| Message::Found(stops, choice, found)),
+            );
         }
         Task::batch(tasks)
     }
 
-    fn on_found(&mut self, choice: Option<Choice>, found: work::Found) -> Task<Message> {
+    fn on_found(
+        &mut self,
+        stops: u64,
+        choice: Option<Choice>,
+        found: work::Found,
+    ) -> Task<Message> {
+        if stops != self.stops {
+            // Started before Stop: what it finds is kept to carry on with later, not compressed.
+            match found {
+                work::Found::Files(paths) => self
+                    .offered
+                    .extend(paths.into_iter().map(|path| Unfinished { path, choice })),
+                work::Found::Done => self.abandoned = self.abandoned.saturating_sub(1),
+            }
+            return Task::none();
+        }
         let paths = match found {
             work::Found::Files(paths) => paths,
             work::Found::Done => {
@@ -1030,17 +1091,29 @@ impl Gracil {
             Some(list) => unfinished::save_now(list),
             None => unfinished::save_now(&self.unfinished()),
         }
-        for outcome in self.outcomes.values() {
-            if let Outcome::Ready { temp, .. } = outcome {
-                work::discard(temp);
-            }
-        }
         if let Some(tray) = &self.tray {
             tray.remove();
         }
-        // A replaced video's parked original may still be in another program's hands for a
-        // moment; anything left after this is removed at the next start.
-        gracil_core::output::finish_tidying(Duration::from_secs(5));
+        let unchosen: Vec<PathBuf> = self
+            .outcomes
+            .values()
+            .filter_map(|outcome| match outcome {
+                Outcome::Ready { temp, .. } => Some(temp.clone()),
+                _ => None,
+            })
+            .collect();
+        // Deleting on a slow drive, and a replaced video's parked original still in another
+        // program's hands, are waited for only so long (ADR 0044); anything left after this is
+        // removed at the next start.
+        let (done, tidied) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for temp in &unchosen {
+                work::discard(temp);
+            }
+            gracil_core::output::finish_tidying(TIDY_BEFORE_LEAVING);
+            let _ = done.send(());
+        });
+        let _ = tidied.recv_timeout(TIDY_BEFORE_LEAVING);
         info!("Gracil exited");
         logging::finish();
         std::process::exit(0)
@@ -1340,6 +1413,14 @@ impl Gracil {
     }
 
     fn on_report(&mut self, id: JobId, report: Report) -> Task<Message> {
+        if !self.running.contains_key(&id) {
+            // Stopped already (ADR 0044): a result made meanwhile is deleted, away from the
+            // window, since it may be on a slow drive.
+            if let Report::Done(Outcome::Ready { temp, .. }) = report {
+                std::thread::spawn(move || work::discard(&temp));
+            }
+            return Task::none();
+        }
         match report {
             Report::Progress(fraction) => {
                 self.queue.set_fraction(id, fraction);

@@ -51,3 +51,6 @@ performance, yes; scaring the user, never", even with 15,000 files.
   without anything to set.
 - With many small images the file shown large can change quickly, until the whole-list circle is
   built.
+
+*Amended by ADR 0044:* Stop now stops the whole list; the files waiting are offered with
+**Continue** instead of carrying on.

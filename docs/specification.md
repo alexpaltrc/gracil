@@ -1017,6 +1017,9 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   Gracil uses gets too hot, Gracil does less by itself: fewer images at once when warm, and
   everything waits when too hot, until the computer has cooled down. *Built 2026-10-04 (ADR
   0043).*
+- **Stop means stop.** *Decided by the product owner.* Stop stops the whole list at once, and
+  the files not done are offered with **Continue**; Exit never waits on a slow drive. *Built
+  2026-10-04 (ADR 0044).*
 
 # 78. Temporary UI decisions
 

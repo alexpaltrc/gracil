@@ -31,6 +31,9 @@ Gracil is still being built, but you can already compress videos and images with
   thousands of files.
 - Images on a network or cloud drive compress much faster: each one is read from the drive only
   once, and the next few are read while others compress.
+- Stop stops the whole list at once, even on a slow network or cloud drive. Nothing is lost: the
+  files not done yet wait on a quiet line with **Continue**, so you can carry on whenever you
+  like. Exit no longer keeps you waiting either.
 - Gracil never lets the computer run too hot. With an NVIDIA graphics card it watches its
   temperature: when it gets warm Gracil takes on less, and when it gets too hot everything waits,
   with **Letting the computer cool down**, and carries on by itself once it has cooled.
@@ -75,7 +78,8 @@ Gracil is still being built, but you can already compress videos and images with
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
   advances, filling an invisible circle with color behind it. The middle of the ring holds the
   controls, as symbols instead of words: the top part pauses (II) and turns into play (▶) to
-  resume, and the bottom part stops (■). Both act on everything being worked on at once. Pausing frees up your computer while keeping the work
+  resume, and the bottom part stops (■). Pause acts on everything being worked on at once. Pausing
+  frees up your computer while keeping the work
   done so far; resuming carries on from the same point. **View files**, which opens at once even
   with thousands of files, shows every other video and image, how much smaller each one became
   and where it went, for example **−35% · Replaced**. With two or more done, it adds them all up, for example

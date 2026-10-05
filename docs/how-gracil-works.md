@@ -58,9 +58,12 @@ format: MP4" (videos) and "Images" (photos and pictures) below.
   filling an invisible circle with color behind it, and when it gets back to the top the file is
   done. The percentage is written just below.
 - The middle of the ring holds the controls. Its top part is **pause** (II); click it and it turns
-  into **play** (▶), which resumes. Its bottom part is **stop** (■), which cancels. Both act on
-  every file being worked on at that moment, all together; after a stop, the files still waiting
-  carry on. While paused, nothing new starts.
+  into **play** (▶), which resumes. Its bottom part is **stop** (■). Pause acts on every file
+  being worked on, all together; while paused, nothing new starts. Stop stops the whole list at
+  once: files being compressed stop and their originals stay as they were, and every file not
+  done yet leaves the list and is kept on a quiet line with **Continue**, so you can carry on
+  whenever you like (see "Carrying on after closing"). Stop answers straight away, even on a slow
+  network or cloud drive.
 - Pausing freezes the work exactly where it is, and Gracil stops using the processor and
   graphics card. Resuming carries on from the same point; nothing is lost or started over. You
   can also stop while paused.
@@ -451,7 +454,8 @@ are compressed.
 Otherwise it first asks, and tells you exactly what will happen: the video being compressed stops
 and its original stays exactly as it was, and videos still waiting are kept for next time (see
 below). Choose **Keep working** to carry on. If the work finishes while you decide, the question
-goes away.
+goes away. Gracil quits within a few seconds, even if a file it was working on is on a slow network
+or cloud drive; only a video being put in its place is always finished first.
 
 When Gracil quits, finished videos you didn't choose for are deleted; their originals stay as
 they were.
