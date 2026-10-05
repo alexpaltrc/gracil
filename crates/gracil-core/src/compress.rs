@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use tracing::{info, warn};
 
-use crate::capabilities::Capabilities;
+use crate::capabilities::{Capabilities, Decoders};
 use crate::encode::{self, EncodeOutcome, JobControl};
 use crate::leftovers;
 use crate::plan::{self, Attempt, EncodePlan};
@@ -26,6 +26,8 @@ use crate::toolchain::{self, Resolved, Toolchain, ToolchainError};
 pub struct Engine {
     pub toolchain: Toolchain,
     pub capabilities: Capabilities,
+    /// What FFmpeg can decode, to leave out what it can't instead of failing.
+    pub decoders: Decoders,
     /// `cjpegli.exe`, shipped with Gracil (ADR 0034). Without it, photos cannot be compressed.
     pub jpegli: Option<PathBuf>,
 }
@@ -39,9 +41,14 @@ impl Engine {
     /// An engine for an FFmpeg that has already been found.
     pub fn with(resolved: Resolved) -> Self {
         let capabilities = Capabilities::detect(&resolved.toolchain, &resolved.encoders);
+        let decoders = Decoders::list(&resolved.toolchain).unwrap_or_else(|error| {
+            warn!(%error, "could not list what FFmpeg decodes");
+            Decoders::default()
+        });
         Self {
             toolchain: resolved.toolchain,
             capabilities,
+            decoders,
             jpegli: toolchain::find_jpegli(),
         }
     }
@@ -108,7 +115,8 @@ pub fn prepare(
     control: &JobControl,
     on_update: &mut dyn FnMut(Update),
 ) -> Result<PreparedVideo, CompressError> {
-    let info = probe::probe(&engine.toolchain, source)?;
+    let mut info = probe::probe(&engine.toolchain, source)?;
+    engine.decoders.mark(&mut info);
     if !info.has_video() {
         return Err(CompressError::NoVideo);
     }

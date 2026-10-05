@@ -86,8 +86,9 @@ the window. The kinds of files Gracil takes are listed under "One format: MP4" (
   draws itself, and just below, in large letters, how much room the list saved, for example
   **130 MB smaller** (or **All done** if nothing came out smaller). Under it, a quiet line says how
   the list went, for example **22 files compressed · 4 were already compressed**, and how many
-  couldn't be compressed, if any. Pick a file in **View files** to look at it; add more files and
-  Gracil gets back to work.
+  couldn't be compressed, if any. Below that, **Clear the list** takes you back to the empty
+  window, ready for your next files. Pick a file in **View files** to look at it; add more files
+  and Gracil gets back to work.
 - The **×** beside a file takes it off the list, and **Clear** empties the list. Neither touches
   your original.
 - You can always compress a video again, even one already on the list: if the list is done with
@@ -181,14 +182,18 @@ straining.
   poor cooling:
   - Gracil never stops to let the computer cool down: it keeps it from getting hot in the first
     place, without you noticing.
-  - With an NVIDIA graphics card, Gracil reads its temperature every few seconds. Up to about
-    70 °C it works at full speed. Above that it takes on fewer images at once, and it takes short
-    rests of a second or two, so short that nothing on screen seems to stop. The warmer the card,
-    the longer the rests, little by little, until at about 80 °C it works a quarter of the time.
-    Cards that start slowing themselves down earlier get these limits earlier too. As the card
-    cools, the rests get shorter again. The work only goes a little slower; it never stops.
-  - If the card slows itself down because of heat, or Windows holds the processor back well
-    below its usual speed for a few seconds, Gracil rests the most in the same way.
+  - With an NVIDIA graphics card, Gracil reads its temperature every second and keeps it at
+    about 70 °C at most. Below that it works at full speed. Above it, it takes on fewer images at
+    once and works a little less of each second, resting the rest of it, in pauses so short that
+    nothing on screen seems to stop and the card's temperature stays even rather than going up
+    and down. If the card is still above 70 °C a second later, it eases off a little more, and as
+    soon as it is below, it takes on a little more again. So instead of slowing down sharply and
+    speeding back up, it settles at the pace that holds the card at 70 °C, never less than a
+    quarter of the time. Cards that start slowing themselves down early are kept 20 degrees below
+    that point instead. The work only goes a little slower; it never stops.
+  - If the card is well above 70 °C, slows itself down because of heat, or Windows holds the
+    processor back well below its usual speed for a few seconds, Gracil goes straight to the
+    least work, a quarter of the time, and then comes back up step by step.
   - The processor's own temperature can't be read without installing extra software that needs
     full control of the computer, which Gracil never asks for. So for the processor Gracil relies
     on Windows noticing it is held back, and on never using all of it in the first place.
@@ -246,6 +251,10 @@ Full HD video.
 - Sound that takes much more room than it needs to (for example uncompressed sound from
   cameras) is converted to a compact format that sounds the same for normal listening. Other
   sound is kept as it is.
+- iPhones (from the iPhone 16) record two kinds of sound in each video: the usual one, and
+  Apple's spatial sound, which FFmpeg can't read yet. Gracil keeps the usual one, which every
+  player uses, and leaves the spatial one out. A video whose only sound can't be read isn't
+  compressed, so it never loses its sound.
 
 ## Never giving up on a video
 
@@ -315,6 +324,9 @@ makes them smaller, and you choose **Replace** or **Save copy**.
 - **Two formats, chosen by Gracil.** A PNG stays a PNG, so screenshots and graphics stay sharp.
   Every other image becomes a JPEG, which opens everywhere. An image with see-through parts
   becomes a PNG, since JPEG can't hold them.
+  HEIC and AVIF keep their see-through parts too. The extra layers iPhones save with their photos
+  (the depth used for portrait mode, for example) aren't see-through parts: those photos become a
+  JPEG. A see-through HEIC or AVIF made of tiles, which is rare, is left as it is.
 - **One photo compressor: jpegli.** Every JPEG Gracil makes is made by jpegli, Google's modern
   JPEG compressor, which gives smaller photos at the same look than the usual one. It comes
   inside Gracil; nothing is downloaded for it.
@@ -381,8 +393,9 @@ existing file.
 
 ## Only one Gracil
 
-Gracil runs once. If you open it again, or open videos with it while it is already running, the
-Gracil you have comes forward and the videos join the same list.
+Gracil runs once. If you open it again while it is already running, from Start, the taskbar or
+anywhere else, the Gracil you have opens its window and comes forward, even when it was working
+quietly next to the clock. If you open videos with it, they join the same list.
 
 Right-click videos, images or a folder in File Explorer and you'll find **Gracil** in the menu,
 with the number of files in brackets when you picked more than one, for example **Gracil (3)**.

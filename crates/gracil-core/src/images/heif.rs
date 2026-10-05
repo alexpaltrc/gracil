@@ -15,8 +15,16 @@ pub struct HeifInfo {
     pub icc: Option<Vec<u8>>,
     /// The primary picture is stored as PQ or HLG (true HDR).
     pub hdr: bool,
-    /// The photo has a transparency (alpha) picture.
-    pub alpha: bool,
+    /// The primary picture's transparency (alpha), kept as a picture of its own.
+    pub alpha: Option<Alpha>,
+}
+
+/// The item holding the primary picture's transparency.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Alpha {
+    pub item: u32,
+    /// Laid out as a grid of tiles, which FFmpeg reads only one tile at a time.
+    pub grid: bool,
 }
 
 pub fn read(data: &[u8]) -> HeifInfo {
@@ -36,7 +44,7 @@ pub fn read(data: &[u8]) -> HeifInfo {
         .unwrap_or_default();
     let references = children()
         .find(|b| &b.kind == b"iref")
-        .map(|b| read_cdsc(b.body))
+        .map(|b| read_references(b.body, b"cdsc"))
         .unwrap_or_default();
     let locations = children()
         .find(|b| &b.kind == b"iloc")
@@ -48,13 +56,35 @@ pub fn read(data: &[u8]) -> HeifInfo {
         .map(|b| read_iprp(b.body))
         .unwrap_or_default();
 
-    let mut info = HeifInfo {
-        alpha: properties.iter().any(|p| {
-            &p.kind == b"auxC" && {
+    // Transparency is an auxiliary item (`auxl`) of the primary one, described as alpha. Other
+    // auxiliary items, such as an iPhone's depth and portrait mattes, are not transparency.
+    let auxiliary = children()
+        .find(|b| &b.kind == b"iref")
+        .map(|b| read_references(b.body, b"auxl"))
+        .unwrap_or_default();
+    let is_alpha = |item: u32| {
+        associations
+            .iter()
+            .filter(|(id, _)| *id == item)
+            .flat_map(|(_, indices)| indices)
+            .filter_map(|&index| index.checked_sub(1).and_then(|i| properties.get(i)))
+            .any(|p| {
                 let urn = p.body.get(4..).unwrap_or_default();
-                contains(urn, b"alpha") || contains(urn, b"hevc:2015:auxid:1")
-            }
-        }),
+                &p.kind == b"auxC"
+                    && (urn.starts_with(b"urn:mpeg:mpegB:cicp:systems:auxiliary:alpha")
+                        || urn.starts_with(b"urn:mpeg:hevc:2015:auxid:1\0"))
+            })
+    };
+    let mut info = HeifInfo {
+        alpha: auxiliary
+            .iter()
+            .find(|(from, to)| Some(*to) == primary && is_alpha(*from))
+            .map(|&(item, _)| Alpha {
+                item,
+                grid: items
+                    .iter()
+                    .any(|(id, kind)| *id == item && kind == b"grid"),
+            }),
         ..HeifInfo::default()
     };
 
@@ -159,8 +189,9 @@ fn read_iinf(body: &[u8]) -> Vec<(u32, [u8; 4])> {
         .collect()
 }
 
-/// `(from, to)` pairs of "content describes" references: metadata items and what they describe.
-fn read_cdsc(body: &[u8]) -> Vec<(u32, u32)> {
+/// `(from, to)` pairs of the item references of type `kind`: `cdsc` for metadata items and what
+/// they describe, `auxl` for auxiliary pictures and the picture they belong to.
+fn read_references(body: &[u8], kind: &[u8; 4]) -> Vec<(u32, u32)> {
     let wide = body.first().is_some_and(|&version| version != 0);
     let id = |data: &[u8], at: usize| {
         if wide {
@@ -172,7 +203,7 @@ fn read_cdsc(body: &[u8]) -> Vec<(u32, u32)> {
     let width = if wide { 4 } else { 2 };
     let mut pairs = Vec::new();
     for reference in boxes(body.get(4..).unwrap_or_default()) {
-        if &reference.kind != b"cdsc" {
+        if &reference.kind != kind {
             continue;
         }
         let data = reference.body;
@@ -352,10 +383,6 @@ fn be64(data: &[u8], at: usize) -> Option<u64> {
     Some(u64::from_be_bytes(data.get(at..at + 8)?.try_into().ok()?))
 }
 
-fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack.windows(needle.len()).any(|w| w == needle)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -375,6 +402,11 @@ mod tests {
 
     /// A minimal HEIF file: item 1 is the picture, item 2 its EXIF data, kept in `idat`.
     fn sample(transfer: u16) -> Vec<u8> {
+        sample_with(transfer, None)
+    }
+
+    /// [`sample`], and with `aux`, item 3: an auxiliary picture of item 1 of that type.
+    fn sample_with(transfer: u16, aux: Option<&[u8]>) -> Vec<u8> {
         let tiff = b"MM\0\x2a\0\0\0\x08\0\0";
         let mut exif = 6u32.to_be_bytes().to_vec();
         exif.extend_from_slice(b"Exif\0\0");
@@ -388,15 +420,26 @@ mod tests {
             body.push(0);
             full(b"infe", 2, &body)
         };
-        let mut iinf_body = 2u16.to_be_bytes().to_vec();
+        let count: u16 = if aux.is_some() { 3 } else { 2 };
+        let mut iinf_body = count.to_be_bytes().to_vec();
         iinf_body.extend(infe(1, b"hvc1"));
         iinf_body.extend(infe(2, b"Exif"));
+        if aux.is_some() {
+            iinf_body.extend(infe(3, b"hvc1"));
+        }
         let iinf = full(b"iinf", 0, &iinf_body);
 
         let mut cdsc = 2u16.to_be_bytes().to_vec();
         cdsc.extend_from_slice(&1u16.to_be_bytes());
         cdsc.extend_from_slice(&1u16.to_be_bytes());
-        let iref = full(b"iref", 0, &boxed(b"cdsc", &cdsc));
+        let mut references = boxed(b"cdsc", &cdsc);
+        if aux.is_some() {
+            let mut auxl = 3u16.to_be_bytes().to_vec();
+            auxl.extend_from_slice(&1u16.to_be_bytes());
+            auxl.extend_from_slice(&1u16.to_be_bytes());
+            references.extend(boxed(b"auxl", &auxl));
+        }
+        let iref = full(b"iref", 0, &references);
 
         // version 1, offset 4 bytes, length 4 bytes, base 0, index 0; one item in idat.
         let mut iloc_body = vec![0x44, 0x00];
@@ -418,9 +461,17 @@ mod tests {
         nclx.extend_from_slice(&[0, 1, 0x80]);
         let mut ipco = boxed(b"colr", &prof);
         ipco.extend(boxed(b"colr", &nclx));
-        let mut ipma_body = 1u32.to_be_bytes().to_vec();
+        let entries: u32 = if aux.is_some() { 2 } else { 1 };
+        let mut ipma_body = entries.to_be_bytes().to_vec();
         ipma_body.extend_from_slice(&1u16.to_be_bytes());
         ipma_body.extend_from_slice(&[2, 0x81, 0x02]);
+        if let Some(urn) = aux {
+            let mut auxc = urn.to_vec();
+            auxc.push(0);
+            ipco.extend(full(b"auxC", 0, &auxc));
+            ipma_body.extend_from_slice(&3u16.to_be_bytes());
+            ipma_body.extend_from_slice(&[1, 0x83]);
+        }
         let mut iprp = boxed(b"ipco", &ipco);
         iprp.extend(full(b"ipma", 0, &ipma_body));
         let iprp = boxed(b"iprp", &iprp);
@@ -440,7 +491,32 @@ mod tests {
         assert_eq!(info.exif.as_deref(), Some(&b"MM\0\x2a\0\0\0\x08\0\0"[..]));
         assert_eq!(info.icc.as_deref(), Some(&b"an icc profile"[..]));
         assert!(!info.hdr);
-        assert!(!info.alpha);
+        assert_eq!(info.alpha, None);
+    }
+
+    #[test]
+    fn finds_transparency_but_not_an_iphones_mattes() {
+        for urn in [
+            &b"urn:mpeg:hevc:2015:auxid:1"[..],
+            b"urn:mpeg:mpegB:cicp:systems:auxiliary:alpha",
+        ] {
+            let alpha = read(&sample_with(1, Some(urn))).alpha;
+            assert_eq!(
+                alpha,
+                Some(Alpha {
+                    item: 3,
+                    grid: false
+                }),
+                "{urn:?}"
+            );
+        }
+        for urn in [
+            &b"urn:mpeg:hevc:2015:auxid:2"[..],
+            b"urn:com:apple:photo:2018:aux:portraiteffectsmatte",
+            b"urn:com:apple:photo:2020:aux:hdrgainmap",
+        ] {
+            assert_eq!(read(&sample_with(1, Some(urn))).alpha, None, "{urn:?}");
+        }
     }
 
     #[test]

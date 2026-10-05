@@ -38,6 +38,9 @@ pub struct Stream {
     pub frame_rate: Option<Rate>,
     /// Bits per second, when the file records it.
     pub bit_rate: Option<u64>,
+    /// FFmpeg knows the codec but can't decode it, such as the spatial audio iPhones record
+    /// (`apple_apac`). Set by [`crate::capabilities::Decoders::mark`].
+    pub undecodable: bool,
 }
 
 /// A frame rate as FFmpeg writes it, such as `30000/1001`.
@@ -177,6 +180,7 @@ fn parse(json: &[u8]) -> Result<MediaInfo, ProbeError> {
             height: s.height.filter(|&h| h > 0),
             frame_rate: Rate::parse(&s.avg_frame_rate).or_else(|| Rate::parse(&s.r_frame_rate)),
             bit_rate: s.bit_rate.and_then(|b| b.parse().ok()).filter(|&b| b > 0),
+            undecodable: false,
         })
         .collect();
     let duration = raw

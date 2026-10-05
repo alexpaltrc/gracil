@@ -7,7 +7,7 @@ use gracil_core::job::JobState;
 use gracil_core::queue::Job;
 use iced::widget::text::Wrapping;
 use iced::widget::{Canvas, Space, button, column, container, row, scrollable, text, tooltip};
-use iced::{Center, Element, Fill, window};
+use iced::{Center, Element, Fill, Padding, window};
 
 use crate::app::{EngineState, Finished, Gracil, Message};
 use crate::dial::{self, Dial, Shows};
@@ -174,6 +174,14 @@ fn finished_view<'a>(state: &'a Gracil, finished: &Finished) -> Element<'a, Mess
             .size(size::BODY)
             .style(style::muted)
             .align_x(Center),
+        // The way to a new start: back to the empty window, ready for the next files.
+        container(
+            button(text(state.text.clear_list).size(size::BODY))
+                .padding([space::XS, space::M])
+                .style(style::action_button)
+                .on_press(Message::Clear),
+        )
+        .padding(Padding::default().top(space::M)),
     ]
     .spacing(space::XS)
     .align_x(Center)

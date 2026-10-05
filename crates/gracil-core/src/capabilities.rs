@@ -10,6 +10,7 @@ use std::process::Stdio;
 
 use tracing::info;
 
+use crate::probe::{MediaInfo, StreamKind};
 use crate::standard::NvencLevel;
 use crate::toolchain::Toolchain;
 
@@ -45,6 +46,50 @@ impl Encoders {
 
     pub fn contains(&self, name: &str) -> bool {
         self.0.contains(name)
+    }
+}
+
+/// Codecs FFmpeg can decode, by the names FFprobe reports (`ffmpeg -codecs`).
+#[derive(Debug, Clone, Default)]
+pub struct Decoders(HashSet<String>);
+
+impl Decoders {
+    pub fn list(toolchain: &Toolchain) -> io::Result<Self> {
+        let listing = capture(toolchain, &["-hide_banner", "-codecs"])?;
+        Ok(Self::parse(&listing))
+    }
+
+    /// Parses lines such as ` DEA.L. aac   AAC ...`, keeping those whose first flag is `D`.
+    fn parse(listing: &str) -> Self {
+        let names = listing
+            .lines()
+            .filter_map(|line| {
+                let mut fields = line.split_whitespace();
+                let flags = fields.next()?;
+                let name = fields.next()?;
+                let is_entry = flags.len() == 6
+                    && flags.starts_with('D')
+                    && flags.chars().all(|c| c.is_ascii_uppercase() || c == '.');
+                (is_entry && name != "=").then(|| name.to_owned())
+            })
+            .collect();
+        Self(names)
+    }
+
+    pub fn can_decode(&self, codec: &str) -> bool {
+        self.0.contains(codec)
+    }
+
+    /// Marks the audio streams of `info` that FFmpeg can't decode. An empty list (FFmpeg didn't
+    /// answer) marks nothing, so every stream is tried as before.
+    pub fn mark(&self, info: &mut MediaInfo) {
+        if self.0.is_empty() {
+            return;
+        }
+        for stream in &mut info.streams {
+            stream.undecodable =
+                stream.kind == StreamKind::Audio && !self.can_decode(&stream.codec);
+        }
     }
 }
 
@@ -187,6 +232,25 @@ Encoders:
         for not_a_name in ["=", "Video", "------", "Encoders:", "H.265"] {
             assert!(!encoders.contains(not_a_name), "{not_a_name}");
         }
+    }
+
+    #[test]
+    fn knows_which_codecs_decode() {
+        let listing = "\
+Codecs:
+ D..... = Decoding supported
+ .E.... = Encoding supported
+ -------
+ DEA.L. aac                  AAC (Advanced Audio Coding) (decoders: aac aac_fixed)
+ D.AI.S apac                 Marian's A-pac audio
+ ..A.L. apple_apac           Apple Positional Audio Codec
+";
+        let decoders = Decoders::parse(listing);
+        assert!(decoders.can_decode("aac"));
+        assert!(decoders.can_decode("apac"));
+        assert!(!decoders.can_decode("apple_apac"));
+        assert!(!decoders.can_decode("="));
+        assert!(!decoders.can_decode("Decoding"));
     }
 
     #[test]

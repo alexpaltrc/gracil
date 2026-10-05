@@ -1024,6 +1024,22 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   the files not done are offered with **Continue**; Exit never waits on a slow drive. *Built
   2026-10-04 (ADR 0044).*
 
+*Recorded 2026-10-05 by the product owner.*
+
+- **A steady temperature.** *Decided by the product owner.* Instead of resting harder the warmer
+  the card gets and then speeding back up, Gracil holds a safe temperature, about 70 °C, and
+  works as much as that temperature allows. Rests and work alternate fast enough that the parts
+  stay at an even temperature. *Built 2026-10-05 (ADR 0046).*
+- **Back to the start when done.** *Decided by the product owner.* When the whole list is done,
+  **Clear the list** is offered right under the summary, so starting again feels natural. *Built
+  2026-10-05.*
+- **Videos from recent iPhones.** Their spatial sound can't be read by FFmpeg, which made every
+  one of them fail. It is left out while the usual sound is kept. *Built 2026-10-05 (ADR 0047).*
+- **See-through HEIC and AVIF.** These were refused. Their transparency is now kept. *Built
+  2026-10-05 (ADR 0048).*
+- **Opening Gracil again shows it.** Opening Gracil from Start or the taskbar while it runs next
+  to the clock must open its window. *Fixed 2026-10-05.*
+
 # 78. Temporary UI decisions
 
 Intentionally unfinished: final icon, colors, typography, animation language, detailed styling,

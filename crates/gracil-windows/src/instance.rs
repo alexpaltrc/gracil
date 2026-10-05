@@ -132,10 +132,9 @@ fn serve_on(name: &str, on_request: impl Fn(Vec<OsString>) + Send + 'static) -> 
                     let mut bytes = Vec::new();
                     // A client that goes away early just sends less.
                     let _ = (&mut *file).take(MAX_REQUEST).read_to_end(&mut bytes);
-                    let arguments = decode(&bytes);
-                    if !arguments.is_empty() {
-                        on_request(arguments);
-                    }
+                    // No arguments is a plain launch, from Start or the taskbar: it still asks
+                    // for the window.
+                    on_request(decode(&bytes));
                 }
                 // SAFETY: the handle is valid; disconnecting readies it for the next client.
                 #[allow(unsafe_code)]
@@ -252,10 +251,13 @@ mod tests {
         let second = [OsString::from("--save-copy"), OsString::from(r"D:\dos.mkv")];
         forward_to(&name, &first).unwrap();
         forward_to(&name, &second).unwrap();
+        forward_to(&name, &[]).unwrap();
 
         let wait = Duration::from_secs(5);
         assert_eq!(received.recv_timeout(wait).unwrap(), first);
         assert_eq!(received.recv_timeout(wait).unwrap(), second);
+        // A plain launch sends nothing, and is still heard.
+        assert!(received.recv_timeout(wait).unwrap().is_empty());
         // Only one server may hold the name.
         assert!(serve_on(&name, |_| {}).is_err());
     }

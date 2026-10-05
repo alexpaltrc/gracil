@@ -35,14 +35,16 @@ Gracil is still being built, but you can already compress videos and images with
   files not done yet wait on a quiet line with **Continue**, so you can carry on whenever you
   like. Exit no longer keeps you waiting either.
 - Gracil never lets the computer run too hot, and it never has to stop to cool down. With an
-  NVIDIA graphics card it watches its temperature, and as the card gets warm Gracil takes on less
-  and takes short rests you won't notice, longer the warmer it gets. The work only goes a little
+  NVIDIA graphics card it keeps the card at about 70 °C at most: above that it eases off little by
+  little, with pauses too short to notice, until it finds the pace that holds the temperature
+  there, instead of slowing down sharply and speeding back up. The work only goes a little
   slower.
 - If Gracil closes before its list is done, because you chose **Exit**, it stopped suddenly or the
   computer was turned off, it remembers the files left. Next time, a quiet line offers
   **Continue** to carry on with them.
-- Gracil runs only once. Opening it again, or opening videos with it while it is running, brings
-  the open Gracil forward and adds the videos to the same list.
+- Gracil runs only once. Opening it again, from Start, the taskbar or anywhere else, brings the
+  open Gracil's window forward, even when it was closed next to the clock. Opening videos with
+  it while it is running adds them to the same list.
 - Closing the window no longer stops Gracil: it keeps working next to the clock. Its marble there
   fills up as the work goes on, shows two bars when paused, and changes to Windows' warning
   color if something went wrong while the window was closed. Right-click it for **Open Gracil**
@@ -70,10 +72,11 @@ Gracil is still being built, but you can already compress videos and images with
   **Settings → Apps → Startup**.
 - Gracil compresses photos and other images too, the same way as videos: drop them in, then
   **Replace** or **Save copy**. A PNG stays a PNG; JPEG, HEIC from an iPhone, WebP, AVIF, TIFF and
-  BMP become a JPEG, which opens everywhere, or a PNG when the image has see-through parts. Every
-  JPEG is made with jpegli, Google's modern photo compressor, which comes inside Gracil. The first
-  time, a photo looks the same as before and keeps its full size, its date, camera, place,
-  captions, colors and which way is up. Nothing pops up while Gracil works on images.
+  BMP become a JPEG, which opens everywhere, or a PNG when the image has see-through parts, HEIC
+  and AVIF included. Every JPEG is made with jpegli, Google's modern photo compressor, which
+  comes inside Gracil. The first time, a photo looks the same as before and keeps its full size,
+  its date, camera, place, captions, colors and which way is up. Nothing pops up while Gracil
+  works on images.
 - Moving images (such as GIF), camera RAW files, JPEG XL and photos stored in HDR aren't
   compressed: they are left exactly as they are, and a small "!" says why.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
@@ -98,7 +101,8 @@ Gracil is still being built, but you can already compress videos and images with
 - When the whole list is done, the window says so clearly: the ring's middle fills with green and
   a check mark draws itself, and just below, in large letters, how much room the list saved, for
   example **130 MB smaller**, with a quiet line such as **22 files compressed · 4 were already
-  compressed**.
+  compressed**. Below it, **Clear the list** takes you back to the empty window, ready for your
+  next files.
 - When a video is done, you see how much smaller it became, and its size before and after, for
   example **120 MB → 78 MB**. Then you choose: **Replace** puts it in place of the original,
   keeping its name and the date it was created; **Save copy** keeps your original and saves
@@ -144,6 +148,8 @@ Gracil is still being built, but you can already compress videos and images with
   slowed-down effect.
 - Sound that takes much more room than it needs, such as uncompressed sound from cameras, is made
   compact and still sounds the same for normal listening.
+- Videos from recent iPhones compress too: their spatial sound, which FFmpeg can't read yet, is
+  left out, and the usual sound every player uses is kept.
 - If a video is unusual, Gracil quietly tries simpler ways until one works, instead of giving up.
 - If a video can't be made smaller, Gracil doesn't keep it. Its buttons turn off, and a small "!"
   explains why when you point at it.

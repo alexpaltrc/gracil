@@ -50,3 +50,6 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0043](0043-never-too-hot.md) | Never too hot: fewer images when warm, everything waits when too hot, reading NVIDIA cards and Windows' processor limit |
 | [0044](0044-stop-means-stop.md) | Stop stops the whole list at once and offers it with **Continue**; Exit never waits on a slow drive |
 | [0045](0045-breathing-instead-of-cooling-down.md) | Breathing instead of cooling down: short unseen rests that grow with the heat, never a stop |
+| [0046](0046-holding-a-steady-temperature.md) | Holding a steady temperature: about 70 °C at most, one-second breaths, the work share eased up and down gradually |
+| [0047](0047-sound-ffmpeg-cannot-read.md) | Sound FFmpeg can't read, such as iPhones' spatial audio, is left out while other sound remains |
+| [0048](0048-see-through-heif-and-avif.md) | See-through HEIF and AVIF keep their transparency; depth and mattes aren't transparency |

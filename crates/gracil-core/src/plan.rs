@@ -118,8 +118,20 @@ impl EncodePlan {
     ) -> Self {
         let mut streams = Vec::with_capacity(info.streams.len());
         let mut dropped = Vec::new();
+        // Audio FFmpeg can't decode can't be converted, and MP4 can't hold it as it is: the
+        // spatial audio iPhones record next to an ordinary track. It is left out while another
+        // track keeps the sound; a video whose only sound it is fails rather than go silent.
+        let other_audio = info
+            .streams
+            .iter()
+            .any(|s| s.kind == StreamKind::Audio && !s.undecodable);
         for stream in &info.streams {
-            match stream_action(stream, attempt.preservation) {
+            let action = if stream.undecodable && other_audio {
+                None
+            } else {
+                stream_action(stream, attempt.preservation)
+            };
+            match action {
                 Some(action) => streams.push(MappedStream {
                     source_index: stream.index,
                     action,
@@ -532,6 +544,34 @@ mod tests {
         assert_eq!(actions(&plan), [(0, SAME), (1, ToAac { kbps: 384 })]);
         assert_eq!(plan.dropped, [2, 3]);
         assert!(joined(&plan).contains("-c:1 aac -b:1 384k"));
+    }
+
+    #[test]
+    fn audio_ffmpeg_cant_read_is_left_out_while_other_sound_remains() {
+        let spatial = Stream {
+            undecodable: true,
+            ..stream(1, StreamKind::Audio, "apple_apac")
+        };
+        let iphone = info(vec![
+            stream(0, StreamKind::Video, "hevc"),
+            spatial.clone(),
+            stream(2, StreamKind::Audio, "aac"),
+        ]);
+        for attempt in [
+            nvenc_full(),
+            Attempt {
+                preservation: Preservation::Essential,
+                ..nvenc_full()
+            },
+        ] {
+            let plan = plan(&iphone, attempt);
+            assert_eq!(plan.dropped, [1]);
+            assert_eq!(plan.streams.len(), 2);
+        }
+
+        // As the only sound it is kept, and the video fails rather than go silent.
+        let only = info(vec![stream(0, StreamKind::Video, "hevc"), spatial]);
+        assert!(plan(&only, nvenc_full()).dropped.is_empty());
     }
 
     #[test]

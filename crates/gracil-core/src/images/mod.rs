@@ -399,20 +399,63 @@ impl Job<'_> {
         if info.hdr {
             return Err(ImageError::Hdr);
         }
-        if info.alpha {
-            // FFmpeg reads only the main picture; its transparency would be lost.
-            return Err(ImageError::Unreadable(
-                "transparency in a HEIF picture".into(),
-            ));
+        if info.alpha.is_some_and(|alpha| alpha.grid) {
+            // FFmpeg reads a grid of tiles one tile at a time when it is not the main picture, so
+            // the transparency can't be put together: such a picture stays as it is.
+            return Err(ImageError::AsSmallAsItGets);
         }
-        let output = self.scratch.file("decoded.png")?;
+        let png = self.ffmpeg_png(source, None, "rgba", "decoded.png")?;
+        let mut decoded = decode_with_image(&png, false)?;
+        if let Some(alpha) = info.alpha {
+            // The transparency is a picture of its own, in gray, the size of the main one.
+            let name = format!("0:i:{}", alpha.item);
+            let png = self.ffmpeg_png(source, Some(&name), "gray", "alpha.png")?;
+            let mask = image::load_from_memory(&png)
+                .map_err(|e| ImageError::Unreadable(e.to_string()))?
+                .into_luma8();
+            let (width, height) = (decoded.reference.width, decoded.reference.height);
+            if mask.dimensions() != (width, height) {
+                return Err(ImageError::Unreadable(
+                    "transparency of another size than the picture".into(),
+                ));
+            }
+            let mut pixels = std::mem::take(&mut decoded.reference.pixels);
+            for (pixel, value) in pixels.iter_mut().zip(mask.as_raw()) {
+                pixel[3] = *value;
+            }
+            // Measured again from the pixels: a picture whose transparency covers nothing is
+            // opaque, and may become a JPEG.
+            decoded.reference = Reference::new(pixels, width, height);
+        }
+        decoded.icc = info.icc;
+        decoded.exif = info.exif.map(|mut tiff| {
+            exif::set_upright(&mut tiff);
+            tiff
+        });
+        Ok(decoded)
+    }
+
+    /// One picture of `source` decoded by FFmpeg into a PNG of `pix_fmt`: the main picture, or the
+    /// stream `map` names.
+    fn ffmpeg_png(
+        &mut self,
+        source: &Path,
+        map: Option<&str>,
+        pix_fmt: &str,
+        name: &str,
+    ) -> Result<Vec<u8>, ImageError> {
+        let output = self.scratch.file(name)?;
         let mut args: Vec<OsString> = vec!["-v".into(), "error".into(), "-i".into()];
         args.push(source.into());
+        if let Some(map) = map {
+            args.push("-map".into());
+            args.push(map.into());
+        }
         for arg in [
             "-frames:v",
             "1",
             "-pix_fmt",
-            "rgba",
+            pix_fmt,
             "-c:v",
             "png",
             "-compression_level",
@@ -433,14 +476,7 @@ impl Job<'_> {
                 return Err(ImageError::Unreadable(error));
             }
         }
-        let png = fs::read(&output)?;
-        let mut decoded = decode_with_image(&png, false)?;
-        decoded.icc = info.icc;
-        decoded.exif = info.exif.map(|mut tiff| {
-            exif::set_upright(&mut tiff);
-            tiff
-        });
-        Ok(decoded)
+        Ok(fs::read(&output)?)
     }
 
     /// jpegli at `distance`, from `input` (a JPEG or a PPM), with `carried` inserted.

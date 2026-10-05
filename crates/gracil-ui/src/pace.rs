@@ -2,7 +2,8 @@
 //! compresses while the next one gets ready; images compress beside it, more of them while the
 //! computer is otherwise idle and fewer while the person is using it, and fewer when they are
 //! large, so memory never runs short. When the computer runs warm it does fewer images at once
-//! and takes short, unnoticed rests, longer the warmer it is, so it never gets hot (ADR 0045).
+//! and takes short, unnoticed rests, eased up and down to hold the graphics card at a steady
+//! temperature, so it never gets hot (ADR 0045, 0046).
 
 use std::time::Duration;
 
@@ -79,40 +80,60 @@ pub fn image_memory(pixels: Option<u64>) -> u64 {
     pixels.unwrap_or(UNKNOWN_PIXELS) * BYTES_PER_PIXEL
 }
 
-/// How long one breath lasts: a rest, then work (ADR 0045). Short enough that nothing on screen
-/// seems to stop, long enough that the parts cool down a little in every rest.
-const BREATH: Duration = Duration::from_secs(3);
+/// How long one breath lasts: a rest, then work (ADR 0045, 0046). Short enough that the parts
+/// stay at an even temperature through it, the way a dimmer flickers too fast to see.
+const BREATH: Duration = Duration::from_secs(1);
+/// A rest shorter than this isn't worth taking: it would only stop and start the work.
+const SHORTEST_REST: Duration = Duration::from_millis(50);
 
-/// A graphics card starts breathing from here, or from 20 degrees below the temperature at which
-/// it starts slowing itself down, whichever is lower.
-const GRAPHICS_WARM: u32 = 70;
-const WARM_BELOW_SLOWDOWN: u32 = 20;
-/// A card works least from here, or from 10 degrees below its slowdown temperature.
-const GRAPHICS_HOT: u32 = 80;
-const HOT_BELOW_SLOWDOWN: u32 = 10;
+/// The temperature Gracil keeps a graphics card at, at most: 70 degrees, or 20 below the
+/// temperature at which the card starts slowing itself down, whichever is lower (ADR 0046).
+const GRAPHICS_TARGET: u32 = 70;
+const TARGET_BELOW_SLOWDOWN: u32 = 20;
+/// Past this many degrees above the target, the card gets the least work at once rather than step
+/// by step.
+const FAR_ABOVE_TARGET: u32 = 10;
+/// How much the share of work changes each second, per degree away from the target: slowly, so
+/// it settles at the share that holds the temperature instead of swinging around it.
+const STEP_PER_DEGREE: f64 = 0.02;
 /// The least share of each breath spent working: the work slows down, but never stops.
 const LEAST_WORK: f64 = 0.25;
 /// The processor counts as held back when it is allowed this much less than usual.
 const HELD_BACK_BY: f64 = 10.0;
 /// Readings in a row the processor must be held back for, so a moment's dip is not mistaken for
 /// heat.
-const HELD_BACK_READINGS: u8 = 2;
+const HELD_BACK_READINGS: u8 = 5;
 
 /// Turns readings into the share of each breath Gracil works, remembering what it needs between
-/// them (ADR 0045).
-#[derive(Debug, Default)]
+/// them (ADR 0046).
+#[derive(Debug)]
 pub struct Warmer {
+    /// The share of each breath worked now.
+    work: f64,
     /// The highest the processor's limit has been seen at: its usual value.
     usual_limit: Option<f64>,
     /// Readings in a row with the processor held back.
     held_back: u8,
 }
 
+impl Default for Warmer {
+    fn default() -> Self {
+        Self {
+            work: 1.0,
+            usual_limit: None,
+            held_back: 0,
+        }
+    }
+}
+
 impl Warmer {
-    /// Takes in a reading: the share of each breath to work, from 1 (all of it, the computer is
-    /// cool) down to [`LEAST_WORK`], less the warmer the graphics card runs. A card or processor
-    /// slowing itself down because of heat gets the least.
-    pub fn read(&mut self, heat: &Heat) -> f64 {
+    /// Takes in a reading, `elapsed` after the last: the share of each breath to work, from 1
+    /// (all of it) down to [`LEAST_WORK`]. Above the target temperature the share goes down a
+    /// little, more the further above; below it, it comes back up the same way. So the card
+    /// settles at the target, working as much as that temperature allows. A card or processor
+    /// slowing itself down because of heat, or a card far above the target, gets the least at
+    /// once.
+    pub fn read(&mut self, heat: &Heat, elapsed: Duration) -> f64 {
         let processor_held_back = match heat.processor_limit {
             Some(limit) => {
                 let usual = self.usual_limit.map_or(limit, |usual| usual.max(limit));
@@ -126,27 +147,32 @@ impl Warmer {
         } else {
             0
         };
-        if self.held_back >= HELD_BACK_READINGS || heat.graphics.iter().any(|card| card.held_back) {
-            return LEAST_WORK;
-        }
-        heat.graphics.iter().map(work).fold(1.0, f64::min)
+        // Degrees below the target of the card closest to it, or furthest above.
+        let below = heat
+            .graphics
+            .iter()
+            .map(|card| i64::from(target(card)) - i64::from(card.celsius))
+            .min();
+        let urgent = self.held_back >= HELD_BACK_READINGS
+            || heat.graphics.iter().any(|card| card.held_back)
+            || below.is_some_and(|below| below < -i64::from(FAR_ABOVE_TARGET));
+        self.work = if urgent {
+            LEAST_WORK
+        } else {
+            // Without a card to read, the processor alone decides, and it isn't held back: the
+            // share comes back up as if well below the target.
+            let step = below.unwrap_or(10) as f64 * STEP_PER_DEGREE * elapsed.as_secs_f64();
+            (self.work + step).clamp(LEAST_WORK, 1.0)
+        };
+        self.work
     }
 }
 
-/// The share of each breath `card` allows working: all of it until it gets warm, then less and
-/// less, in proportion, down to [`LEAST_WORK`] once it is hot.
-fn work(card: &GraphicsHeat) -> f64 {
-    let (warm, hot) = card
-        .slowdown
-        .map_or((GRAPHICS_WARM, GRAPHICS_HOT), |slowdown| {
-            (
-                GRAPHICS_WARM.min(slowdown.saturating_sub(WARM_BELOW_SLOWDOWN)),
-                GRAPHICS_HOT.min(slowdown.saturating_sub(HOT_BELOW_SLOWDOWN)),
-            )
-        });
-    let span = f64::from(hot.saturating_sub(warm).max(1));
-    let past_warm = f64::from(card.celsius.saturating_sub(warm)) / span;
-    1.0 - past_warm.min(1.0) * (1.0 - LEAST_WORK)
+/// The temperature `card` is kept at, at most.
+fn target(card: &GraphicsHeat) -> u32 {
+    card.slowdown.map_or(GRAPHICS_TARGET, |slowdown| {
+        GRAPHICS_TARGET.min(slowdown.saturating_sub(TARGET_BELOW_SLOWDOWN))
+    })
 }
 
 /// What the work does right now, as Gracil breathes (ADR 0045).
@@ -178,26 +204,27 @@ pub fn watch(changed: impl Fn(Breath) + Send + 'static) {
             let mut logged = None;
             loop {
                 let heat = thermometer.read();
-                let work = warmer.read(&heat);
+                let work = warmer.read(&heat, BREATH);
                 let step = (work * 20.0).round() as u8;
                 if logged != Some(step) {
                     info!(work, ?heat, "warmth");
                     logged = Some(step);
                 }
-                if work < 1.0 {
+                let rest = BREATH.mul_f64(1.0 - work);
+                if rest >= SHORTEST_REST {
                     tell(Breath {
                         warm: true,
                         resting: true,
                     });
-                    std::thread::sleep(BREATH.mul_f64(1.0 - work));
+                    std::thread::sleep(rest);
                     tell(Breath {
                         warm: true,
                         resting: false,
                     });
-                    std::thread::sleep(BREATH.mul_f64(work));
+                    std::thread::sleep(BREATH - rest);
                 } else {
                     tell(Breath {
-                        warm: false,
+                        warm: work < 1.0,
                         resting: false,
                     });
                     std::thread::sleep(BREATH);
@@ -263,33 +290,78 @@ mod tests {
         }
     }
 
+    const SECOND: Duration = Duration::from_secs(1);
+
     #[test]
-    fn a_warmer_card_rests_more_but_never_stops() {
+    fn a_card_below_the_target_works_fully() {
         let mut warmer = Warmer::default();
-        assert_eq!(warmer.read(&card(60)), 1.0);
-        assert_eq!(warmer.read(&card(70)), 1.0);
-        let warm = warmer.read(&card(75));
-        assert!(LEAST_WORK < warm && warm < 1.0, "{warm}");
-        assert_eq!(warmer.read(&card(80)), LEAST_WORK);
-        assert_eq!(warmer.read(&card(95)), LEAST_WORK);
+        for celsius in [40, 60, 70] {
+            assert_eq!(warmer.read(&card(celsius), SECOND), 1.0);
+        }
     }
 
     #[test]
-    fn a_card_that_slows_down_early_rests_sooner() {
+    fn above_the_target_the_work_eases_off_step_by_step() {
         let mut warmer = Warmer::default();
-        let mut heat = card(65);
-        heat.graphics[0].slowdown = Some(80);
-        assert!(warmer.read(&heat) < 1.0);
-        heat.graphics[0].celsius = 70;
-        assert_eq!(warmer.read(&heat), LEAST_WORK);
+        let first = warmer.read(&card(73), SECOND);
+        let second = warmer.read(&card(73), SECOND);
+        assert!(second < first && first < 1.0, "{first} {second}");
+        // Further above, faster.
+        let mut other = Warmer::default();
+        assert!(other.read(&card(78), SECOND) < first);
+        // Never below the least.
+        for _ in 0..200 {
+            warmer.read(&card(75), SECOND);
+        }
+        assert_eq!(warmer.read(&card(75), SECOND), LEAST_WORK);
     }
 
     #[test]
-    fn a_card_slowing_itself_down_works_least() {
+    fn below_the_target_the_work_comes_back_gradually() {
+        let mut warmer = Warmer::default();
+        for _ in 0..200 {
+            warmer.read(&card(75), SECOND);
+        }
+        let back = warmer.read(&card(67), SECOND);
+        assert!(LEAST_WORK < back && back < 1.0, "{back}");
+        for _ in 0..200 {
+            warmer.read(&card(67), SECOND);
+        }
+        assert_eq!(warmer.read(&card(67), SECOND), 1.0);
+    }
+
+    #[test]
+    fn it_settles_where_the_temperature_holds() {
+        // A card whose temperature follows the work: 50 degrees idle, 90 at full work.
+        let mut warmer = Warmer::default();
+        let mut celsius = 50.0_f64;
+        let mut highest = 0.0_f64;
+        for _ in 0..600 {
+            let work = warmer.read(&card(celsius.round() as u32), SECOND);
+            // It warms and cools toward that temperature over about twenty seconds.
+            celsius += (50.0 + 40.0 * work - celsius) / 20.0;
+            highest = highest.max(celsius);
+        }
+        assert!((celsius - 70.0).abs() <= 2.0, "{celsius}");
+        assert!(highest <= 75.0, "{highest}");
+    }
+
+    #[test]
+    fn a_card_that_slows_down_early_is_kept_cooler() {
+        let mut warmer = Warmer::default();
+        let mut heat = card(60);
+        heat.graphics[0].slowdown = Some(78);
+        assert!(warmer.read(&heat, SECOND) < 1.0);
+    }
+
+    #[test]
+    fn far_above_the_target_or_slowing_itself_down_works_least() {
+        let mut warmer = Warmer::default();
+        assert_eq!(warmer.read(&card(85), SECOND), LEAST_WORK);
         let mut warmer = Warmer::default();
         let mut heat = card(60);
         heat.graphics[0].held_back = true;
-        assert_eq!(warmer.read(&heat), LEAST_WORK);
+        assert_eq!(warmer.read(&heat, SECOND), LEAST_WORK);
     }
 
     #[test]
@@ -299,13 +371,19 @@ mod tests {
             processor_limit: Some(limit),
         };
         let mut warmer = Warmer::default();
-        assert_eq!(warmer.read(&processor(100.0)), 1.0);
+        assert_eq!(warmer.read(&processor(100.0), SECOND), 1.0);
         // A moment's dip is not heat.
-        assert_eq!(warmer.read(&processor(70.0)), 1.0);
-        assert_eq!(warmer.read(&processor(100.0)), 1.0);
-        assert_eq!(warmer.read(&processor(70.0)), 1.0);
-        assert_eq!(warmer.read(&processor(70.0)), LEAST_WORK);
-        assert_eq!(warmer.read(&processor(100.0)), 1.0);
+        for _ in 0..HELD_BACK_READINGS - 1 {
+            assert_eq!(warmer.read(&processor(70.0), SECOND), 1.0);
+        }
+        assert_eq!(warmer.read(&processor(100.0), SECOND), 1.0);
+        for _ in 0..HELD_BACK_READINGS - 1 {
+            assert_eq!(warmer.read(&processor(70.0), SECOND), 1.0);
+        }
+        assert_eq!(warmer.read(&processor(70.0), SECOND), LEAST_WORK);
+        // Then back up, gradually.
+        let back = warmer.read(&processor(100.0), SECOND);
+        assert!(LEAST_WORK < back && back < 1.0, "{back}");
     }
 
     #[test]
@@ -315,15 +393,15 @@ mod tests {
             graphics: Vec::new(),
             processor_limit: Some(80.0),
         };
-        for _ in 0..5 {
-            assert_eq!(warmer.read(&always), 1.0);
+        for _ in 0..10 {
+            assert_eq!(warmer.read(&always, SECOND), 1.0);
         }
     }
 
     #[test]
     fn nothing_to_read_is_cool() {
         let mut warmer = Warmer::default();
-        assert_eq!(warmer.read(&Heat::default()), 1.0);
+        assert_eq!(warmer.read(&Heat::default(), SECOND), 1.0);
     }
 
     #[test]
