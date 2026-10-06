@@ -29,9 +29,9 @@ with it.
   Explorer. It sits on a small tile in Windows' own greys, always the opposite of Windows: dark
   when Windows is light, light when Windows is dark, so it stands out in both. It stays sharp at
   any screen size.
-- Drop videos, images or whole folders onto the window, or choose files, and Gracil compresses
-  them. The first time you open it, the window shows only where to drop; everything else comes up
-  once there are files. You can keep adding files while it works, by dropping them or with the
+- Drop videos, images or whole folders onto the window, or choose files, and Gracil compresses them.
+  The empty window shows where to drop and, at its foot, the **Always** line; everything else comes
+  up once there are files. You can keep adding files while it works, by dropping them or with the
   **+** at the bottom of the window.
 - Gracil works on several files at once: while one video compresses, the next one gets ready, so
   there is no wait between them, and images compress a few at a time alongside it. Two videos are

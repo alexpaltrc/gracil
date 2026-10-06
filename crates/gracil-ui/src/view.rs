@@ -75,8 +75,6 @@ pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     if !state.offered.is_empty() {
         content = content.push(offer(state));
     }
-    // An empty window shows only where to drop; what to do with finished files comes up with
-    // the first file (ADR 0055).
     if !state.queue.is_empty() {
         content = content.push(footer(state));
         if state.drawer_open || state.drawer_folding {
@@ -86,8 +84,10 @@ pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
                 Message::DrawerFolded,
             ));
         }
-        content = content.push(always(state));
     }
+    // Always in sight, the empty window included: it is also what File Explorer's menu follows,
+    // so it can be set before the files come (ADR 0057).
+    content = content.push(always(state));
     container(content).padding(space::M).into()
 }
 

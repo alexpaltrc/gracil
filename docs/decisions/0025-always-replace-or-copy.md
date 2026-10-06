@@ -37,6 +37,8 @@ technical ones; this one is about the user's files, not about encoding.
 - One extra line in the main window, always visible, since it is a choice people make once.
   *Changed by [0055](0055-natural-first-use.md):* the line comes up with the first file; the
   empty window shows only where to drop. Hovering **Always** says what it does.
+  *Back as first decided by [0057](0057-always-in-sight.md):* always visible, the empty window
+  included, since File Explorer's menu follows it too.
 - "Always replace" puts results in place of originals without a click. The swap is still the safe
   one, and a result that is not smaller is never kept (§40.1), so nothing is lost to a bad result.
 - Iced's `advanced` feature is enabled for the pill widget; no new dependency.

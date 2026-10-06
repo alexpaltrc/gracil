@@ -61,3 +61,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0054](0054-wholly-portable.md) | Wholly portable: data only in Gracil's folder, a start with Windows that forgets itself, **Prepare to delete Gracil**, GPL-3.0-or-later with every library's license |
 | [0055](0055-natural-first-use.md) | Natural from the first use: folders can be dropped, an empty window with only where to drop, an honest done screen, a breathing "getting ready", Exit that counts every loss, a few keys |
 | [0056](0056-the-list-unfolds.md) | The list unfolds and folds away instead of appearing at once |
+| [0057](0057-always-in-sight.md) | **Always** stays in sight, the empty window included |

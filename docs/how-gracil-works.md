@@ -122,14 +122,14 @@ example **120 MB → 78 MB**), and two buttons:
 You decide after seeing the result, so you never trade your original for a file that didn't
 shrink. With several files done, **View files** offers **Replace all** and **Save all as copies**.
 
-If you always answer the same way, use the line at the foot of the window, which appears once you
-add files: **Always**, followed by **Replace**, a small circle and **Save copy** (point at
+If you always answer the same way, use the line at the foot of the window, always there, even before
+you add files: **Always**, followed by **Replace**, a small circle and **Save copy** (point at
 **Always** for a reminder of what it does). Pick **Replace** or **Save copy** and Gracil does that
-with every file that finishes from then on, without asking. On the circle in the middle, the
-setting is off and Gracil asks each time; that is how it starts. Files already waiting for you
-keep waiting, and if Gracil can't do what you picked for a file (for example replacing would
-overwrite another file), that file waits for you with a **!** that explains why. When you
-compress from File Explorer, the command you clicked decides instead.
+with every file that finishes from then on, without asking. On the circle in the middle, the setting
+is off and Gracil asks each time; that is how it starts. Files already waiting for you keep waiting,
+and if Gracil can't do what you picked for a file (for example replacing would overwrite another
+file), that file waits for you with a **!** that explains why. When you compress from File Explorer,
+the command you clicked decides instead.
 
 A finished file waits until you choose. If you take it off the list, the smaller version is
 deleted and your original stays exactly as it was. If you exit Gracil first, Gracil asks before

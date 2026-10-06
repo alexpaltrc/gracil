@@ -595,8 +595,8 @@ The empty state is immediately understandable: **Drop videos here**. Avoid techn
 terminal-like presentation, giant settings pages, dense tables, excessive borders, unnecessary
 navigation, advanced encoder controls and permanent diagnostic information.
 
-*Update (ADR 0055):* the empty window says **Drop videos or images here** and shows nothing else
-but a way to choose files; the list's line and the **Always** pill come up with the first file.
+*Update (ADR 0055):* the empty window says **Drop videos or images here** with a way to choose
+files, and the **Always** pill at its foot (ADR 0057); the list's line comes up with the first file.
 Folders can be dropped too. **Esc** steps back, **Space** pauses and resumes, **Ctrl+O** chooses
 files.
 
@@ -1070,6 +1070,9 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
 - **The list unfolds.** *Asked by the product owner.* **View files** unfolds and folds away
   instead of appearing at once, as gently as the rest of Gracil moves. *Built 2026-10-06 (ADR
   0056).*
+- **Always stays in sight.** *Asked by the product owner.* The **Always** pill is at the foot of
+  the main window even before there are files, since File Explorer's menu follows it and it is
+  best set before a large folder starts. *Built 2026-10-06 (ADR 0057).*
 
 # 78. Temporary UI decisions
 

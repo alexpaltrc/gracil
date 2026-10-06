@@ -24,8 +24,9 @@ through every screen found a few places that fell short:
 1. **Folders can be dropped.** A dropped folder brings in the videos and images inside it, the
    same as from File Explorer's menu.
 2. **The empty window shows only where to drop.** **Always** and the list's line come up with the
-   first file. Hovering the word **Always** says what it does; hovering the **×** of the line
-   about unfinished files says it forgets them.
+   first file. Hovering the word **Always** says what it does; hovering the **×** of the line about
+   unfinished files says it forgets them. *Changed by [0057](0057-always-in-sight.md):* **Always**
+   stays in sight, the empty window included.
 3. **An honest done screen.** The green middle and check mark appear only when something became
    smaller. Otherwise the big line says *Nothing to make smaller* or *Nothing was compressed*.
    Files that failed are counted apart, as a quiet link with a "!", which opens the list on the
