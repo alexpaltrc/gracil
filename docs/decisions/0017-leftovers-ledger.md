@@ -12,7 +12,7 @@ because their names look like Gracil's.
 
 1. Each Gracil process writes down every `.part` it creates and every `.bak` it is about to make
    (with the original it belongs to) in a ledger of its own:
-   `%LOCALAPPDATA%\Gracil\temporary\<pid>-<start time>.txt`, one tab-separated line per file,
+   `<data folder>\temporary\<pid>-<start time>.txt`, one tab-separated line per file,
    written to disk at once.
 2. The process holds its ledger open with no sharing for as long as it runs. Being able to open a
    ledger therefore proves its process has ended; no process ids are compared, so a reused id

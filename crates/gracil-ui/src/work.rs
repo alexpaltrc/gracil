@@ -157,15 +157,16 @@ impl Prepared {
     }
 }
 
-/// Finds or installs FFmpeg and detects the hardware.
+/// Finds FFmpeg and detects the hardware.
 pub fn start_engine() -> Task<Option<Arc<Engine>>> {
     on_thread(|mut sender: Sender<Option<Arc<Engine>>>| {
-        let engine = toolchain::default_private_dir().and_then(|dir| {
+        if let Some(dir) = toolchain::default_private_dir() {
             tidy_leftovers(&dir);
-            Engine::start(&dir)
-                .inspect_err(|e| error!(error = %e, "engine unavailable"))
-                .ok()
-        });
+        }
+        let engine = Engine::start();
+        if engine.is_none() {
+            error!("no usable FFmpeg; Gracil's ffmpeg folder is missing or broken");
+        }
         let _ = block_on(sender.send(engine.map(Arc::new)));
     })
 }

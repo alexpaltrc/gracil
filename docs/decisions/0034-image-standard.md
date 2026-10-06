@@ -73,20 +73,21 @@ the two images, about 80 means no difference at normal viewing, 70 is "high qual
      HEIC's EXIF data and color profile, so Gracil reads those from the file itself. The picture
      goes to the encoder as a PPM file in Gracil's temporary space: jpegli reads only JPEG, PNG
      and the simple uncompressed formats, and this one extra step is lossless. Windows' own image
-     reader (WIC) was set aside: it needs the Store's HEIF extension for HEIC, and nothing it
-     offered was missing otherwise. Nothing opens a window: no image viewer, no console.
+     reader (WIC) was set aside: it needs a separately installed HEIF extension for HEIC, and
+     nothing it offered was missing otherwise. Nothing opens a window: no image viewer, no
+     console.
    - JPEG: `cjpegli`, Google's jpegli, built by Gracil from the official repository
      (`github.com/google/jpegli`, BSD-3) at a pinned commit with `scripts/build-jpegli.ps1`, and
-     shipped inside the MSIX (about 1.7 MB). jpegli is no longer part of libjxl; nothing from
-     libjxl or JPEG XL is used. Run as a separate, hidden program, like FFmpeg. `cjpegli` opens
-     files with the C library's narrow functions, so the build script gives it a manifest that
-     makes its code page UTF-8: names in any language, emoji included, work.
+     shipped in the zip beside `gracil.exe` (about 1.7 MB). jpegli is no longer part of libjxl;
+     nothing from libjxl or JPEG XL is used. Run as a separate, hidden program, like FFmpeg.
+     `cjpegli` opens files with the C library's narrow functions, so the build script gives it a
+     manifest that makes its code page UTF-8: names in any language, emoji included, work.
    - PNG: `oxipng` (MIT) and `exoquant` (MIT), linked into Gracil. GPL quantizers such as
-     libimagequant/pngquant are never used: Gracil is proprietary.
+     libimagequant/pngquant are not used.
    - Credits and license texts for jpegli and what is built into it (libjpeg-turbo and the IJG
-     notice, Highway, libpng, zlib, skcms, Little CMS) ship next to `cjpegli.exe` as
-     `cjpegli-licenses.txt`; with those of oxipng, exoquant, `image` and `ssimulacra2` they go in
-     the About screen and the Store listing, as for FFmpeg.
+     notice, Highway, libpng, zlib, skcms, Little CMS) ship in the zip's `licenses\` folder as
+     `cjpegli-licenses.txt`, as FFmpeg's do. Those of oxipng, exoquant, `image` and
+     `ssimulacra2` are to join them (in progress).
 10. **Metadata** (spec §41, best effort, never a reason to reject): the date taken, camera data
     and location (EXIF), descriptions and captions (XMP, IPTC), the orientation and the color
     profile are carried over. jpegli keeps the color profile but not EXIF, XMP or IPTC, so Gracil
@@ -163,7 +164,7 @@ about 2 s).
 - A phone photo is usually compressed once at distance 1.0; an iPhone HEIC that is already small
   goes straight to the "compressing again" path, as HEIC 2 does.
 - Building `cjpegli` needs Visual Studio Build Tools with CMake and Ninja (already part of the
-  development setup); it is not rebuilt on every package.
+  development setup); `scripts/portable.ps1` builds it only when it is missing.
 - The PNG and SSIMULACRA2 crates add to Gracil's own binary; jpegli stays a separate program.
 - These thresholds come from one person's test set, as ADR 0029's did; they are revisited when
   more images are measured.

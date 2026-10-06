@@ -24,7 +24,7 @@ setting does not justify one.
    area. It is placed once more after it appears, in case that screen's scale changed its size.
    Without an icon to go by, it takes the main screen's clock corner.
 4. The setting **Show mini-window when compressing from File Explorer** is a checkable item in the
-   tray menu, saved as one line in `%LOCALAPPDATA%\Gracil\settings.txt`. A missing or damaged
+   tray menu, saved as one line in `<data folder>\settings.txt`. A missing or damaged
    file means the default (on).
 5. When File Explorer sends videos with the choice already made, the mini-window opens if the
    setting is on and Gracil's window is not already open. A Gracil started only for that work

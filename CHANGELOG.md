@@ -166,4 +166,5 @@ Gracil is still being built, but you can already compress videos and images with
 - If a video can't be made smaller, Gracil doesn't keep it. Its buttons turn off, and a small "!"
   explains why when you point at it.
 - Gracil comes with FFmpeg, the free tool it uses to compress video, so there is nothing else to
-  download.
+  download. If that part of Gracil ever goes missing, a quiet line says so: download Gracil again
+  and it works as before.

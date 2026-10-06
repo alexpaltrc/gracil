@@ -39,8 +39,7 @@ impl Drop for TempDir {
 }
 
 fn engine() -> Option<Engine> {
-    let unused_private_dir = std::env::temp_dir().join("gracil-it-no-private-copy");
-    let found = toolchain::find(&unused_private_dir);
+    let found = toolchain::find();
     if found.is_none() {
         eprintln!("skipped: no FFmpeg installed");
     }

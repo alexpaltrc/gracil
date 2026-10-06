@@ -18,7 +18,7 @@ use crate::plan::{self, Attempt, EncodePlan};
 use crate::probe::{self, MediaInfo, ProbeError, StreamKind};
 use crate::progress::fraction;
 use crate::search::{self, Found};
-use crate::toolchain::{self, Resolved, Toolchain, ToolchainError};
+use crate::toolchain::{self, Resolved, Toolchain};
 
 /// A ready FFmpeg and what it can do on this computer, and jpegli for photos. Built once per
 /// process.
@@ -33,9 +33,9 @@ pub struct Engine {
 }
 
 impl Engine {
-    /// Finds or installs FFmpeg and detects the hardware. Slow on first run; call off the UI thread.
-    pub fn start(private_dir: &Path) -> Result<Self, ToolchainError> {
-        toolchain::resolve(private_dir).map(Self::with)
+    /// Finds FFmpeg and detects the hardware. Takes a few seconds; call off the UI thread.
+    pub fn start() -> Option<Self> {
+        toolchain::find().map(Self::with)
     }
 
     /// An engine for an FFmpeg that has already been found.

@@ -39,7 +39,7 @@ use windows_core::{BOOL, GUID, HRESULT, IUnknown, Interface, PCWSTR, PWSTR, Ref,
 pub use selection::title;
 use selection::{Choice, Place, Scope};
 
-/// The class File Explorer asks for. The package manifest names the same value.
+/// The class File Explorer asks for, registered under the current user by Gracil (ADR 0050).
 pub const CLSID: GUID = GUID::from_u128(0x8D7CC31A_14B9_490F_A5B0_3A2B63DAC4EF);
 
 /// Objects and deliveries still alive; the DLL must stay loaded until there are none.

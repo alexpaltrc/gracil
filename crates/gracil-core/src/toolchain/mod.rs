@@ -1,14 +1,10 @@
-//! Finding the FFmpeg executables Gracil runs, or installing a private copy (spec §20.1, ADR 0008).
-
-mod provision;
+//! Finding the FFmpeg executables Gracil runs (spec §20.1, ADR 0050).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
 use tracing::{info, warn};
-
-pub use provision::{PINNED_BUILD, PinnedBuild, ProvisionError};
 
 use crate::capabilities::Encoders;
 
@@ -19,10 +15,8 @@ const REQUIRED_ENCODER: &str = "libx265";
 pub enum Origin {
     /// The copy that comes with Gracil, in the `ffmpeg` folder beside `gracil.exe` (ADR 0050).
     Bundled,
-    /// Installed by the user (winget, Scoop, a manual download...) and found on `PATH`.
+    /// Installed by the user and found on `PATH`, which is how Gracil runs while developing.
     System,
-    /// Gracil's own copy in its private folder.
-    Private,
 }
 
 #[derive(Debug, Clone)]
@@ -42,10 +36,6 @@ impl Toolchain {
             ffprobe,
             origin,
         })
-    }
-
-    pub fn origin(&self) -> Origin {
-        self.origin
     }
 
     pub fn ffmpeg_path(&self) -> &Path {
@@ -97,14 +87,6 @@ pub(crate) fn hidden_command(program: &Path) -> Command {
         command.creation_flags(CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS);
     }
     command
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum ToolchainError {
-    #[error("no usable FFmpeg was found and installing one failed")]
-    Provision(#[from] ProvisionError),
-    #[error("the installed FFmpeg copy does not work")]
-    PrivateCopyUnusable,
 }
 
 /// A toolchain ready to use, with the encoder list FFmpeg reported while it was checked.
@@ -159,39 +141,16 @@ fn writable(dir: &Path) -> bool {
     ok
 }
 
-/// Finds a usable FFmpeg: the copy that comes with Gracil, one installed on the computer, then
-/// Gracil's private copy, and as a last resort downloads and installs the pinned build into
-/// `private_dir`.
-///
-/// This can take minutes when it has to download, so call it off the UI thread.
-pub fn resolve(private_dir: &Path) -> Result<Resolved, ToolchainError> {
-    if let Some(resolved) = find(private_dir) {
-        return Ok(resolved);
-    }
-    info!(
-        build = PINNED_BUILD.id,
-        "no usable FFmpeg found, installing private copy"
-    );
-    let dir = provision::install(private_dir, &PINNED_BUILD)?;
-    Toolchain::in_dir(&dir, Origin::Private)
-        .and_then(qualify)
-        .ok_or(ToolchainError::PrivateCopyUnusable)
-}
-
-/// A usable FFmpeg already on this computer, never downloading anything.
-pub fn find(private_dir: &Path) -> Option<Resolved> {
+/// A usable FFmpeg: the copy that comes with Gracil, then one installed on the computer. Gracil
+/// never downloads one.
+pub fn find() -> Option<Resolved> {
     let bundled =
         own_folder().and_then(|folder| Toolchain::in_dir(&folder.join("ffmpeg"), Origin::Bundled));
     let system = std::env::var_os("PATH")
         .into_iter()
         .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
         .filter_map(|dir| Toolchain::in_dir(&dir, Origin::System));
-    let private_bin = provision::install_dir(private_dir, &PINNED_BUILD);
-    bundled
-        .into_iter()
-        .chain(system)
-        .chain(Toolchain::in_dir(&private_bin, Origin::Private))
-        .find_map(qualify)
+    bundled.into_iter().chain(system).find_map(qualify)
 }
 
 /// Accepts `candidate` only if FFmpeg itself reports the encoders Gracil depends on.

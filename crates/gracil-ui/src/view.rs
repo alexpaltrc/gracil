@@ -487,7 +487,7 @@ fn status(state: &Gracil, job: &Job) -> Status {
             EngineState::Ready(_) => Status::plain(state.text.waiting),
             EngineState::Unavailable => Status {
                 label: state.text.waiting.into(),
-                notice: Some(state.text.needs_internet_once),
+                notice: Some(state.text.ffmpeg_missing),
             },
         },
         JobState::Preparing => Status::plain(state.text.getting_ready),

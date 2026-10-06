@@ -18,10 +18,9 @@ What can be read without a driver or administrator rights:
   because of heat right now. NVENC, which Gracil prefers for video, is NVIDIA's, so this covers
   most of the video work.
 - The processor's temperature can't be read from an ordinary program: tools that show it install
-  a kernel driver, which Gracil must never do (it needs full control of the computer, the
-  Microsoft Store would not allow it, and several such drivers are flagged as vulnerable by
-  Windows). ACPI thermal zones exist on
-  some laptops, but on most desktops they are missing or report a fixed value.
+  a kernel driver, which Gracil must never do (it needs full control of the computer and an
+  administrator, and several such drivers are flagged as vulnerable by Windows). ACPI thermal
+  zones exist on some laptops, but on most desktops they are missing or report a fixed value.
 - Windows' "% Performance Limit" counter says how much of its full speed the processor is allowed
   right now. It drops when the processor is held back, for heat among other reasons. Some
   computers keep it below 100 all the time on purpose, so only a drop from its usual value means

@@ -1,20 +1,20 @@
 # FFmpeg
 
-How Gracil finds, installs and drives FFmpeg. Decision records:
+How Gracil finds and drives FFmpeg. Decision records:
 [ADR 0008](../decisions/0008-ffmpeg-detected-or-provisioned.md),
-[ADR 0050](../decisions/0050-portable-and-open-source.md).
+[ADR 0050](../decisions/0050-portable-and-open-source.md),
+[ADR 0053](../decisions/0053-ready-for-github.md).
 
 ## Finding it
 
-`toolchain::resolve` runs at startup, off the UI thread:
+`toolchain::find` runs at startup, off the UI thread:
 
-1. The copy in Gracil's zip, `ffmpeg\` beside `gracil.exe` (`Origin::Bundled`).
-2. Every folder on `PATH` holding both `ffmpeg.exe` and `ffprobe.exe` (winget, Scoop, manual
-   installs). The first one whose `-encoders` listing includes `libx265` wins.
-3. Gracil's private copy in its data folder, `data\ffmpeg\<build id>\`.
-4. Otherwise the download build below is installed there, silently.
+1. The copy in Gracil's zip, the `ffmpeg` folder beside `gracil.exe` (`Origin::Bundled`).
+2. While developing, every folder on `PATH` holding both `ffmpeg.exe` and `ffprobe.exe`
+   (`Origin::System`).
 
-`toolchain::find` does steps 1–3 only; tests use it so they never download anything.
+The first one whose `-encoders` listing includes `libx265` wins. Gracil never downloads FFmpeg;
+without a usable copy it shows a quiet line asking to download Gracil again.
 
 ## The bundled build
 
@@ -29,28 +29,6 @@ any other. To move to a new build, put its `bin` folder first on `PATH` or pass 
 not link to it. The zip carries FFmpeg's license and `ffmpeg-source.txt`, which names the build
 and points to FFmpeg's source commit and to the builder's scripts with every library's source.
 
-## The download build
-
-Only used when the zip's `ffmpeg` folder is missing and `PATH` has no suitable FFmpeg.
-
-| | |
-|---|---|
-| Build | Gyan.dev `ffmpeg-9.0.2-essentials` (GPL) |
-| Source | `https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip` |
-| Size | 114,768,076 bytes |
-| SHA-256 | `60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba` |
-
-The archive is fetched with Windows' own `curl.exe` (HTTPS only), checked against size and hash,
-and only `bin/ffmpeg.exe` and `bin/ffprobe.exe` are extracted with Windows' `tar.exe`. The folder
-appears in one rename, and copies of older pinned builds are removed afterwards.
-
-To move to a new build: download it, record its size and SHA-256 in `PINNED_BUILD`
-(`crates/gracil-core/src/toolchain/provision.rs`) and here, give it a new `id`, and run the
-integration tests with that copy first on `PATH`.
-
-The essentials build is GPL-licensed too; Gyan's builds are distributed with their sources and
-license texts.
-
 ## Capabilities
 
 Detected once per process (`Capabilities::detect`):
@@ -63,7 +41,7 @@ Detected once per process (`Capabilities::detect`):
   with lookahead, B-frame references and multipass; `Basic` drops the B-frame settings; `Legacy`
   is the original 8-bit p6 setting. No tier uses adaptive quantization or the temporal filter (ADR 0029).
 - **CUDA decoding**: NVENC works and `-hwaccels` lists `cuda`.
-- **Filters**: `-filters` lists `libvmaf` (the quality search); the essentials build has it.
+- **Filters**: `-filters` lists `libvmaf` (the quality search); the bundled build has it.
   `libvmaf_cuda` with `scale_cuda` and `hwupload_cuda` (VMAF on the GPU, ADR 0030) is used when
   present; no public Windows build has it.
 - **x265 10-bit**: `-h encoder=libx265` lists `yuv420p10le`.

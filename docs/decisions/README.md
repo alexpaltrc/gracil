@@ -9,10 +9,10 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0002](0002-ffmpeg-as-external-process.md) | FFmpeg runs as a bundled external process |
 | [0003](0003-iced-with-wgpu.md) | Iced with the WGPU renderer |
 | [0004](0004-one-encode-at-a-time.md) | One compression at a time |
-| [0005](0005-msix-packaging.md) | MSIX packaging (superseded by 0050) |
+| 0005 | MSIX packaging (removed by 0053; Gracil is a portable zip, 0050) |
 | [0006](0006-explorer-extension-forwards-only.md) | The Explorer extension only forwards requests |
 | [0007](0007-close-to-tray.md) | Closing the window always minimizes to the tray |
-| [0008](0008-ffmpeg-detected-or-provisioned.md) | FFmpeg is detected or provisioned, not bundled |
+| [0008](0008-ffmpeg-detected-or-provisioned.md) | FFmpeg is found, never downloaded: the copy in the zip, or PATH while developing (changed by 0050, 0053) |
 | [0009](0009-choose-after-compressing.md) | The main window asks replace or copy after compressing |
 | [0010](0010-replacing-updates-modified-date.md) | Replacing keeps the creation date and updates the modified date |
 | [0011](0011-english-and-spanish.md) | Gracil speaks English and Spanish, following Windows |
@@ -27,10 +27,10 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0020](0020-tray.md) | The tray icon is drawn by Gracil, on a thread of its own |
 | [0021](0021-mini-window.md) | The mini-window opens from the tray icon, and its one setting lives in the tray menu |
 | [0022](0022-explorer-command.md) | File Explorer's menu is one Rust `IExplorerCommand` with two subcommands |
-| [0023](0023-package-build.md) | One script builds the package from a manifest template (superseded by 0050) |
+| 0023 | Building the MSIX package (removed by 0053) |
 | [0024](0024-start-with-windows.md) | Gracil starts with Windows, always |
 | [0025](0025-always-replace-or-copy.md) | "Always": replace or save a copy without being asked |
-| [0026](0026-icon-tile.md) | The app icon sits on its own Piedra tile, light or dark with the taskbar (superseded by 0050) |
+| 0026 | Piedra tiles for the package icons (removed by 0053) |
 | [0027](0027-version-scheme.md) | Versions stay small: 1.0 at the first public release, then slowly |
 | [0028](0028-quality-standard.md) | Gracil's quality standard: each video finds its own level |
 | [0029](0029-lighter-never-heavier.md) | Lighter, never heavier: predicted sizes and lighter choices for already-compressed videos |
@@ -57,3 +57,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0050](0050-portable-and-open-source.md) | Portable, free and open source on GitHub, without the Store: a zip with FFmpeg, data beside the program, the classic File Explorer menu |
 | [0051](0051-efficiency-mode-and-any-card-temperature.md) | Windows' efficiency mode for the tools while the computer is in use or on battery; the temperature of Intel and AMD graphics cards from their driver |
 | [0052](0052-intel-and-amd-encoders.md) | Compressing on Intel (Quick Sync) and AMD graphics, after NVIDIA and before the processor, with tiers and test encodes as for NVENC |
+| [0053](0053-ready-for-github.md) | Ready for GitHub: no FFmpeg download, nothing left from the Store, `-Install` keeps the daily Gracil in one place |

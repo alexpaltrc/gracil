@@ -18,7 +18,6 @@ use gracil_core::images;
 use gracil_core::media::{Kind, kind_of};
 use gracil_core::output::save_as_new;
 use gracil_core::plan::output_extension;
-use gracil_core::toolchain;
 
 fn main() {
     // Shows the engine's decisions, such as the quality level each video gets.
@@ -30,16 +29,9 @@ fn main() {
         eprintln!("usage: compress <file>...");
         std::process::exit(2);
     }
-    let Some(private_dir) = toolchain::default_private_dir() else {
-        eprintln!("Gracil has no folder for its data");
+    let Some(engine) = Engine::start() else {
+        eprintln!("no usable FFmpeg found");
         std::process::exit(1);
-    };
-    let engine = match Engine::start(&private_dir) {
-        Ok(engine) => engine,
-        Err(error) => {
-            eprintln!("{error}");
-            std::process::exit(1);
-        }
     };
     eprintln!("{:?}", engine.capabilities);
 

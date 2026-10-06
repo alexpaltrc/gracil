@@ -1,7 +1,7 @@
 # 0031 — Windows 11's own colors and the user's accent
 
 **Status:** Accepted. Requested by the product owner (2026-10-03). Replaces the Piedra palette of
-[0015](0015-piedra-identity.md) (items 1 and 2) and the tiles of [0026](0026-icon-tile.md);
+[0015](0015-piedra-identity.md) (items 1 and 2) and the Piedra icon tiles that followed it;
 0015's item 3, following Windows' light and dark theme, still holds.
 
 **Context.** Gracil should look as native as possible on Windows 11. The Piedra palette (ivory,
@@ -39,13 +39,12 @@ around it, and it ignored the accent color the user picked in Windows.
    and the accent in its middle, riding on a trail in the accent.
 4. Accent buttons turn a little see-through under the pointer and when pressed, like Windows'.
 5. The icon is recolored in the same neutrals and is always the opposite of Windows, so it stands
-   out (replacing [0026](0026-icon-tile.md)'s Piedra tiles):
+   out (replacing Piedra's tiles):
    - light taskbar or theme: a dark tile (`#202020`) with a white support;
    - dark taskbar or theme: a light tile (`#F3F3F3`) with a `#1A1A1A` support;
-   - the marble is a neutral grey (`#8A8A8A`) on both, since packaged icons can't follow the
+   - the marble is a neutral grey (`#8A8A8A`) on both, since an icon file can't follow the
      accent.
-   `scripts/icons.ps1` draws every package icon (app list, Start, Store, with their light and dark
-   variants) and the window's two icon files, `gracil-app-dark.ico` and `gracil-app-light.ico`.
+   `scripts/icons.ps1` draws the two icon files, `gracil-app-dark.ico` and `gracil-app-light.ico`.
    Both are linked into gracil.exe; File Explorer shows the dark one, and each window gets the one
    for Windows' current theme and changes with it (`gracil_windows::set_icon_theme`). Next to the
    clock the icon stays a single color like Windows' own tray icons: `#1A1A1A` on a light taskbar,
@@ -54,5 +53,5 @@ around it, and it ignored the accent color the user picked in Windows.
 **Consequences.**
 
 - Gracil follows the user's colors with nothing to set, and changes with them while open.
-- Piedra's delivery stays in `docs/design/piedra/` as history; its colored icon files are no longer
-  in `assets/icons/`, whose SVGs now hold the marble's shapes in the new colors.
+- Piedra's colored icon files are no longer in `assets/icons/`, whose SVGs now hold the marble's
+  shapes in the new colors.

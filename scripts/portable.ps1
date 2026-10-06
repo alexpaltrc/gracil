@@ -3,14 +3,17 @@
 #   scripts/portable.ps1                       release build + folder in target\portable\Gracil
 #                                               + target\portable\Gracil-<version>-x64.zip
 #   scripts/portable.ps1 -FFmpeg <folder>      take ffmpeg.exe and ffprobe.exe from <folder>
-#   scripts/portable.ps1 -Install <folder>     ...and copy the folder there, closing Gracil first
+#   scripts/portable.ps1 -Install              ...and copy it to %LOCALAPPDATA%\Programs\Gracil, the
+#                                               Gracil in daily use, closing it first
+#   scripts/portable.ps1 -InstallTo <folder>   ...or to another folder
 #
 # FFmpeg is the pinned build in packaging\ffmpeg.psd1; without -FFmpeg, the first folder on PATH
 # holding executables with the pinned hashes is used. Exit codes are checked explicitly, as in
 # check.ps1.
 param(
     [string]$FFmpeg,
-    [string]$Install
+    [switch]$Install,
+    [string]$InstallTo
 )
 
 $root = Split-Path $PSScriptRoot -Parent
@@ -109,16 +112,17 @@ if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "Gracil $version ready in $layout and $zip"
 
-if ($Install) {
+if ($Install -and -not $InstallTo) { $InstallTo = Join-Path $env:LOCALAPPDATA 'Programs\Gracil' }
+if ($InstallTo) {
     # The running Gracil and its helpers hold their files; they are closed before copying.
     Get-Process gracil, ffmpeg, ffprobe, cjpegli -ErrorAction SilentlyContinue |
-        Where-Object { $_.Path -and $_.Path.StartsWith($Install, [System.StringComparison]::OrdinalIgnoreCase) } |
+        Where-Object { $_.Path -and $_.Path.StartsWith($InstallTo, [System.StringComparison]::OrdinalIgnoreCase) } |
         Stop-Process -Force
     Wait-Process -Name gracil -Timeout 15 -ErrorAction SilentlyContinue
-    New-Item -ItemType Directory -Force -Path $Install | Out-Null
+    New-Item -ItemType Directory -Force -Path $InstallTo | Out-Null
     # Everything but the data folder, which keeps the settings and logs.
     Get-ChildItem -LiteralPath $layout | ForEach-Object {
-        Copy-Item -LiteralPath $_.FullName -Destination $Install -Recurse -Force
+        Copy-Item -LiteralPath $_.FullName -Destination $InstallTo -Recurse -Force
     }
-    Write-Host "Gracil $version copied to $Install"
+    Write-Host "Gracil $version copied to $InstallTo"
 }

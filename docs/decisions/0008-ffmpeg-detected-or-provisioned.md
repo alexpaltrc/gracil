@@ -1,35 +1,33 @@
-# 0008 — FFmpeg is detected or provisioned, not bundled
+# 0008 — FFmpeg comes with Gracil
 
-**Status:** Accepted. Supersedes the bundling part of [0002](0002-ffmpeg-as-external-process.md).
+**Status:** Accepted. Sets where Gracil finds the FFmpeg of
+[0002](0002-ffmpeg-as-external-process.md).
 
-**Changed** by [ADR 0050](0050-portable-and-open-source.md) (2026-10-06): FFmpeg now comes in the zip and is looked for beside `gracil.exe` first; `PATH` and the download below remain as fallbacks.
+**Changed** by [ADR 0050](0050-portable-and-open-source.md) and
+[ADR 0053](0053-ready-for-github.md): Gracil first looked for an FFmpeg on `PATH` and otherwise
+downloaded a pinned build into a private folder. FFmpeg now comes in Gracil's zip, and Gracil
+never downloads anything.
 
-**Context.** The product owner wants Gracil to reuse an FFmpeg the user already has and to install
-one invisibly when there is none (spec §20.1). This also keeps the package small (a full FFmpeg
-build is over 100 MB).
+**Context.** Gracil needs an FFmpeg it can rely on, with nothing for the user to install or set
+up (spec §20.1).
 
 **Decision.**
 
-1. Look for `ffmpeg.exe` on `PATH` (this covers winget, Scoop and Chocolatey installs). Accept it
-   only if `ffprobe.exe` is in the same folder and `ffmpeg -encoders` lists `libx265`, the CPU
-   encoder every compression can fall back to.
-2. Otherwise use Gracil's own copy in `%LOCALAPPDATA%\Gracil\ffmpeg\<build>\` if it exists.
-3. Otherwise download the pinned build (see `docs/development/ffmpeg.md`) with Windows' own
-   `curl.exe`, verify its SHA-256, extract only `ffmpeg.exe` and `ffprobe.exe` with Windows' own
-   `tar.exe`, and move the folder into place in one rename. Both tools ship with Windows 11 and run
-   without a console window, so this adds no HTTP or ZIP dependency to Gracil.
+1. Use the `ffmpeg` folder beside `gracil.exe`, where the zip puts the pinned build
+   (`packaging/ffmpeg.psd1`, see `docs/development/ffmpeg.md`).
+2. Otherwise, while developing, use an `ffmpeg.exe` found on `PATH`.
+3. Accept a copy only if `ffprobe.exe` is in the same folder and `ffmpeg -encoders` lists
+   `libx265`, the CPU encoder every compression can fall back to.
+4. If none qualifies, a quiet line says Gracil is missing part of itself and should be
+   downloaded again.
 
-Gracil never installs FFmpeg system-wide and never modifies `PATH`. Under MSIX, the private folder
-is redirected into the package's own storage and is removed on uninstall.
+Gracil never installs FFmpeg system-wide, never modifies `PATH` and never uses the internet.
 
 **Consequences.**
 
-- On a computer with no FFmpeg, the first compression needs an internet connection once. After
-  that, Gracil works offline.
-- A user-installed FFmpeg can change under Gracil (for example, after an upgrade). Capabilities
-  are checked again every time Gracil starts, so a build that no longer qualifies is simply not
-  used.
-- Gracil does not redistribute FFmpeg, so the GPL obligations of a GPL build fall on its
-  publisher, not on Gracil. The pinned build and its license are still documented.
-- Microsoft Store policies on downloading executable code must be reviewed before submission. If
-  they rule this out, the fallback is to ship the pinned build inside the package.
+- Gracil works offline from the first run.
+- The zip is large, since a full FFmpeg build is most of it.
+- Gracil redistributes a GPL FFmpeg build, so its license and a pointer to its source ship in
+  `licenses\`.
+- Capabilities are checked again every time Gracil starts, so a copy that no longer qualifies is
+  simply not used.

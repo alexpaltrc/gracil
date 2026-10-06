@@ -1,4 +1,4 @@
 # Link the C runtime into gracil.exe and gracil_shell.dll, so the zip needs no Visual C++ runtime
-# installed and the menu DLL inside File Explorer brings what it uses (ADR 0023, ADR 0050).
+# installed and the menu DLL inside File Explorer brings what it uses (ADR 0050).
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]

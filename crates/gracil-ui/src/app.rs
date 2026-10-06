@@ -202,7 +202,7 @@ pub struct Summary {
 pub enum EngineState {
     Starting,
     Ready(Arc<Engine>),
-    /// FFmpeg could not be found or installed (usually no internet on the very first run).
+    /// No usable FFmpeg was found: the `ffmpeg` folder beside `gracil.exe` is missing or broken.
     /// Retried whenever the user adds videos.
     Unavailable,
 }

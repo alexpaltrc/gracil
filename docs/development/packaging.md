@@ -28,14 +28,20 @@ git and Visual Studio Build Tools with the C++ workload, CMake and Ninja.
 
 Nothing is signed, so Windows' SmartScreen may warn the first time the zip's Gracil is opened.
 
-## Try it on this computer
+## The Gracil in daily use
+
+The Gracil used every day, also while developing, lives in `%LOCALAPPDATA%\Programs\Gracil`. Start
+it from its `gracil.exe` there (pinned to Start or the taskbar). To update it with the current
+code:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/portable.ps1 -Install $env:LOCALAPPDATA\Programs\Gracil
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/portable.ps1 -Install
 ```
 
 This closes the Gracil running from that folder, with its helpers, and copies the new files over,
-keeping its `data` folder. Then start `gracil.exe`. On every start, a whole Gracil folder (with
+keeping its `data` folder, so settings and unfinished lists stay. Then start `gracil.exe` again.
+`-InstallTo <folder>` puts it somewhere else. A development build run from `target` keeps its own
+`data` folder there and never touches the daily one's. On every start, a whole Gracil folder (with
 FFmpeg and the DLL beside the program) registers File Explorer's menu for the current user and
 starts with Windows; a development build in `target` leaves both as they are. On Windows 11 the
 menu is under **Show more options**. If File Explorer still shows an old menu, restart it (Task

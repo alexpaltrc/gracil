@@ -150,9 +150,9 @@ FFmpeg comes inside Gracil's zip, in its `ffmpeg` folder, so there is nothing to
 never uses the internet. Its license and where to find its source code are in the `licenses`
 folder.
 
-If that folder were ever removed, Gracil would use an FFmpeg already on your computer, or, as a
-last resort, download it once from its official build distributor, checking that it is exactly
-the expected file.
+If that folder is ever removed or damaged, Gracil can't compress videos and says so with a quiet
+line: download Gracil again from GitHub and it works as before. Gracil never downloads anything
+by itself.
 
 ## Choosing the fastest way to compress
 

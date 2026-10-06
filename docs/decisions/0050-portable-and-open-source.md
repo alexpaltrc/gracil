@@ -1,10 +1,11 @@
 # 0050 — Portable, free and open source, without the Store
 
-**Status:** Accepted, built (2026-10-06). Decided by the product owner. Supersedes
-[0005](0005-msix-packaging.md), [0023](0023-package-build.md), the package parts of
-[0022](0022-explorer-command.md), [0024](0024-start-with-windows.md) and
-[0026](0026-icon-tile.md), and the Store part of [0027](0027-version-scheme.md); replaces the
-FFmpeg lookup order of [0008](0008-ffmpeg-detected-or-provisioned.md). Changes spec §64 and §65.
+**Status:** Accepted, built (2026-10-06). Decided by the product owner. Supersedes ADR 0005
+(MSIX packaging), ADR 0023 (package build) and ADR 0026 (icon tile), all three since removed
+([0053](0053-ready-for-github.md)), the package parts of [0022](0022-explorer-command.md) and
+[0024](0024-start-with-windows.md), and the Store part of [0027](0027-version-scheme.md); replaces
+the FFmpeg lookup order of [0008](0008-ffmpeg-detected-or-provisioned.md). Changes spec §64 and
+§65.
 
 **Context.** The product owner reserved Gracil's name in the Microsoft Store and then learned that
 Gracil could not stay there, even for free. Gracil goes on as a free, open-source program
@@ -26,8 +27,9 @@ patent pools ask for nothing in practice.
    `%LOCALAPPDATA%\Gracil` is used instead.
 3. **FFmpeg comes in the zip**: the BtbN `win64-gpl` build Gracil was already tested with, pinned
    by hash in `packaging/ffmpeg.psd1`, with its license and a pointer to its source in
-   `licenses\`. Gracil looks for FFmpeg beside itself first, then on `PATH`, then its private
-   download (ADR 0008, kept as a fallback for a folder with FFmpeg removed).
+   `licenses\`. Gracil looks for FFmpeg beside itself first, then, while developing, on `PATH`.
+   The private download of ADR 0008 was kept here as a last fallback;
+   [ADR 0053](0053-ready-for-github.md) removed it, so Gracil never uses the internet.
 4. **File Explorer's classic menu.** The same `IExplorerCommand` (ADR 0022) is registered for the
    current user only (`HKCU\Software\Classes`, no administrator), for files and folders. On
    Windows 11 it shows under **Show more options**. Explorer loads a copy kept in

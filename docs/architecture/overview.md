@@ -44,9 +44,9 @@ process holds: temporary files are deleted, a parked original goes back if its p
 and anything on an absent drive or in use waits for the next start (ADR 0017). Gracil puts itself
 in a kill-on-close job object at startup, so FFmpeg never outlives it (ADR 0018).
 
-**Finding FFmpeg.** At startup, in the background: use an FFmpeg on `PATH` that has `ffprobe.exe`
-beside it and the `libx265` encoder; otherwise Gracil's private copy; otherwise download the pinned
-build, verify it and install it privately (ADR 0008).
+**Finding FFmpeg.** At startup, in the background: the `ffmpeg` folder beside `gracil.exe`, or,
+while developing, an FFmpeg on `PATH`; either needs `ffprobe.exe` beside it and the `libx265`
+encoder. Nothing is ever downloaded (ADR 0050, ADR 0053).
 
 **Choosing how to encode.** Capabilities are detected once per process: `ffmpeg -encoders` must
 list a card encoder (`hevc_nvenc`, then `hevc_qsv`, then `hevc_amf`), then a sub-second test encode

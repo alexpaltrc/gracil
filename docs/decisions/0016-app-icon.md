@@ -26,4 +26,4 @@ for that size.
 
 - Changing the icon means replacing the ICO file; the build picks it up.
 - The tray icon is drawn by Gracil from the tray artwork's shapes and follows the taskbar's
-  theme ([0020](0020-tray.md)). The MSIX manifest still needs wiring.
+  theme ([0020](0020-tray.md)).

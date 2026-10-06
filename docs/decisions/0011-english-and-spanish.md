@@ -23,5 +23,5 @@ about (§66).
   can show a half-translated state.
 - File names Gracil creates keep the `Gracil-` prefix in every language, so they sort the same
   everywhere.
-- The Explorer menu (M7) and the package's store listing will need their own Spanish wording
-  when they are built.
+- File Explorer's menu runs outside Gracil's window, so it keeps its own English and Spanish
+  wording (`gracil-shell`'s `selection.rs`) and follows the same Windows language.

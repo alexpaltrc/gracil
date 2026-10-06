@@ -6,11 +6,9 @@
 **Context.** The product owner commissioned the visual identity "La canica · Piedra": a marble
 (the video) resting on a support (Gracil, which prepares the way). Its philosophy is "letting go is
 enough": the power stays in the system, the calm in the experience. It comes with a palette, the
-icon in every Windows size, tray versions for light and dark taskbars, and MSIX assets.
+icon in every Windows size, and tray versions for light and dark taskbars.
 
-Naming: the icon is the marble ("la canica"); "Piedra" is the name of the palette only. The
-delivered files are named after the palette (`piedra-app.ico`, `docs/design/piedra/`), and keep
-those names so they match the delivery's checksums.
+Naming: the icon is the marble ("la canica"); "Piedra" is the name of the palette only.
 
 **Decision.**
 
@@ -38,8 +36,7 @@ those names so they match the delivery's checksums.
    Secondary text is a color of its own rather than the text made transparent. Filled buttons use
    the accent with the background color as their text. A picked end of the "Always" pill is
    marble grey with the "on the marble" text. The warm "!" and the success and danger colors stay as they were, since they
-   carry meaning. The previous violet palette is kept in
-   [`../design/previous-palette.md`](../design/previous-palette.md).
+   carry meaning.
 2. The dial borrows the logo: its trail is the support color and the stone-grey marble rests on
    it, edged in the background color so it stays readable in both themes.
 3. Gracil always follows Windows' light or dark theme. At start it reads the apps' theme from
@@ -48,11 +45,10 @@ those names so they match the delivery's checksums.
    opened from File Explorer used to appear light and then fade to dark. Later changes fade
    between the two palettes over 600 ms, slow at both ends. Frames are
    requested only during the fade (spec §51).
-4. The identity's files live in the repository: icons (ICO, PNG, SVG) in `assets/icons/`, MSIX
-   assets in `packaging/msix/Assets/`, the presentation and its notes in `docs/design/piedra/`.
+4. The icon files live in `assets/icons/`.
 
 **Consequences.**
 
 - The window and executable use the icon ([0016](0016-app-icon.md)). The tray icon follows
-  the taskbar's theme ([0020](0020-tray.md)). The MSIX manifest is still to be done.
+  the taskbar's theme ([0020](0020-tray.md)).
 - The marble grey on ivory is low contrast (3.2:1), so it is used for shapes only, never for text.
