@@ -1,6 +1,6 @@
 //! The files left unfinished, kept so that after Gracil closes in the middle of its work (Exit
 //! while working, a crash, the computer shutting down) it can offer to carry on with them the next
-//! time it opens (ADR 0042). They are kept in `%LOCALAPPDATA%\Gracil\unfinished.txt`, one per
+//! time it opens (ADR 0042). They are kept in `unfinished.txt` in Gracil's data folder, one per
 //! line, with the choice File Explorer made for it, if any, before a tab: `replace`, `copy` or
 //! nothing. Like the logs, the list never leaves the computer.
 

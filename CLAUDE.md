@@ -8,7 +8,7 @@
 - `gracil-core` must never depend on Iced, WGPU or any windowing crate.
 - `unsafe` is denied workspace-wide; only Windows-integration crates may opt in, with documented
   safety comments.
-- Versioning, MSIX mapping, changelog style and commit rules: `docs/development/versioning.md`.
+- Versioning, changelog style and commit rules: `docs/development/versioning.md`.
   The changelog is user-facing, plain language, no technical terms.
 - Tests that touch the filesystem use fresh temporary directories only.
 - `docs/how-gracil-works.md` is the user-facing explanation of how Gracil works. Update it in the

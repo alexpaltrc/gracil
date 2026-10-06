@@ -3,6 +3,8 @@
 **Status:** Accepted. Carries out [0006](0006-explorer-extension-forwards-only.md); registered by
 the package of [0005](0005-msix-packaging.md).
 
+**Changed** by [ADR 0050](0050-portable-and-open-source.md) (2026-10-06): the command is registered for the current user in File Explorer's classic menu instead of by a package; how it works is unchanged.
+
 **Context.** Spec §57–§62 ask for **Gracil (N)** in Windows 11's modern context menu, with
 **Compress and replace** and **Compress and save a copy**, for one or many videos. The handler
 runs inside `explorer.exe`, must answer at once and must never take the shell down. §61 prefers

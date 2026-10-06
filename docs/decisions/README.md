@@ -9,7 +9,7 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0002](0002-ffmpeg-as-external-process.md) | FFmpeg runs as a bundled external process |
 | [0003](0003-iced-with-wgpu.md) | Iced with the WGPU renderer |
 | [0004](0004-one-encode-at-a-time.md) | One compression at a time |
-| [0005](0005-msix-packaging.md) | MSIX packaging |
+| [0005](0005-msix-packaging.md) | MSIX packaging (superseded by 0050) |
 | [0006](0006-explorer-extension-forwards-only.md) | The Explorer extension only forwards requests |
 | [0007](0007-close-to-tray.md) | Closing the window always minimizes to the tray |
 | [0008](0008-ffmpeg-detected-or-provisioned.md) | FFmpeg is detected or provisioned, not bundled |
@@ -27,11 +27,11 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0020](0020-tray.md) | The tray icon is drawn by Gracil, on a thread of its own |
 | [0021](0021-mini-window.md) | The mini-window opens from the tray icon, and its one setting lives in the tray menu |
 | [0022](0022-explorer-command.md) | File Explorer's menu is one Rust `IExplorerCommand` with two subcommands |
-| [0023](0023-package-build.md) | One script builds the package from a manifest template |
+| [0023](0023-package-build.md) | One script builds the package from a manifest template (superseded by 0050) |
 | [0024](0024-start-with-windows.md) | Gracil starts with Windows, always |
 | [0025](0025-always-replace-or-copy.md) | "Always": replace or save a copy without being asked |
-| [0026](0026-icon-tile.md) | The app icon sits on its own Piedra tile, light or dark with the taskbar |
-| [0027](0027-version-scheme.md) | Versions stay small: 1.0 at the Store, then slowly |
+| [0026](0026-icon-tile.md) | The app icon sits on its own Piedra tile, light or dark with the taskbar (superseded by 0050) |
+| [0027](0027-version-scheme.md) | Versions stay small: 1.0 at the first public release, then slowly |
 | [0028](0028-quality-standard.md) | Gracil's quality standard: each video finds its own level |
 | [0029](0029-lighter-never-heavier.md) | Lighter, never heavier: predicted sizes and lighter choices for already-compressed videos |
 | [0030](0030-faster-quality-measurement.md) | Faster quality measurement: every other frame, and on the GPU when FFmpeg can |
@@ -54,3 +54,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0047](0047-sound-ffmpeg-cannot-read.md) | Sound FFmpeg can't read, such as iPhones' spatial audio, is left out while other sound remains |
 | [0048](0048-see-through-heif-and-avif.md) | See-through HEIF and AVIF keep their transparency; depth and mattes aren't transparency |
 | [0049](0049-limits-windows-enforces.md) | Limits Windows enforces: part of the processor (less while in use and on battery), memory per process, room on the drive |
+| [0050](0050-portable-and-open-source.md) | Portable, free and open source on GitHub, without the Store: a zip with FFmpeg, data beside the program, the classic File Explorer menu |

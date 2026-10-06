@@ -1,4 +1,4 @@
-//! Clicks one of the menu's commands the way File Explorer would, without needing the package:
+//! Clicks one of the menu's commands the way File Explorer would, without File Explorer:
 //! loads the built `gracil_shell.dll` (next to `gracil.exe`), asks it for the menu, and invokes
 //! the command on the given files.
 //!
@@ -8,7 +8,7 @@
 //! cargo run -p gracil-shell --example invoke -- replace C:\Videos\Holidays
 //! ```
 //!
-//! Set `GRACIL_SHELL_DLL` to the DLL in `packaging/msix/out/layout` to try the registered package's.
+//! Set `GRACIL_SHELL_DLL` to another build of the DLL, such as the one in `target\portable\Gracil`.
 
 // A development tool that drives COM by hand; every call uses objects created right here.
 #![allow(unsafe_code, clippy::unwrap_used, clippy::expect_used)]
@@ -48,7 +48,7 @@ fn main() {
         })
         .collect();
 
-    // `GRACIL_SHELL_DLL` picks another build, such as the one in the registered package.
+    // `GRACIL_SHELL_DLL` picks another build, such as the one in the portable folder.
     let dll = std::env::var_os("GRACIL_SHELL_DLL").map_or_else(
         || {
             std::env::current_exe()

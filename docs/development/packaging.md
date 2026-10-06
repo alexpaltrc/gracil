@@ -1,75 +1,63 @@
 # Packaging Gracil
 
-Gracil ships as an MSIX package ([ADR 0005](../decisions/0005-msix-packaging.md),
-[ADR 0023](../decisions/0023-package-build.md)). Everything goes through `scripts/package.ps1`.
+Gracil ships as a portable zip, free and open source, with no installer and no Store
+([ADR 0050](../decisions/0050-portable-and-open-source.md)). Everything goes through
+`scripts/portable.ps1`.
 
-## Build the layout
+## Build the zip
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/portable.ps1
 ```
 
-This makes a release build and puts the package's files in `packaging/msix/out/layout`, with the
-manifest filled in from `packaging/msix/identity.psd1` and the version from `Cargo.toml`.
+This makes a release build and lays out `target\portable\Gracil`, then zips it as
+`target\portable\Gracil-<version>-x64.zip`, with the version from `Cargo.toml`:
 
-It also puts jpegli's `cjpegli.exe`, which compresses every photo
-([ADR 0034](../decisions/0034-image-standard.md)), next to `gracil.exe`, with the licenses of
-jpegli and the libraries built into it in `cjpegli-licenses.txt`. When `cjpegli.exe` has not been
-built yet, the script first runs `scripts/build-jpegli.ps1`, which needs git and Visual Studio
-Build Tools with the C++ workload, CMake and Ninja.
+| | |
+|---|---|
+| `gracil.exe` | Gracil |
+| `gracil_shell.dll` | File Explorer's menu ([ADR 0022](../decisions/0022-explorer-command.md)) |
+| `cjpegli.exe` | jpegli, which compresses every photo ([ADR 0034](../decisions/0034-image-standard.md)) |
+| `ffmpeg\` | `ffmpeg.exe` and `ffprobe.exe`, the pinned build ([FFmpeg](ffmpeg.md)) |
+| `licenses\` | FFmpeg's license and where its source is, the licenses of jpegli and the libraries built into it, and Gracil's own |
+
+FFmpeg is the build pinned in `packaging/ffmpeg.psd1`. Without `-FFmpeg <folder>`, the script uses
+the first folder on `PATH` whose `ffmpeg.exe` and `ffprobe.exe` have the pinned hashes. When
+`cjpegli.exe` has not been built yet, the script first runs `scripts/build-jpegli.ps1`, which needs
+git and Visual Studio Build Tools with the C++ workload, CMake and Ninja.
+
+Nothing is signed, so Windows' SmartScreen may warn the first time the zip's Gracil is opened.
 
 ## Try it on this computer
 
-Registering the layout needs Windows' **Developer Mode** (Settings → System → For developers).
-
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1 -Register
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/portable.ps1 -Install $env:LOCALAPPDATA\Programs\Gracil
 ```
 
-Gracil then appears in the Start menu, and **Gracil** in File Explorer's right-click menu for
-videos. Run it again after each change; it replaces the registered version. To remove it:
+This closes the Gracil running from that folder, with its helpers, and copies the new files over,
+keeping its `data` folder. Then start `gracil.exe`. On every start, a whole Gracil folder (with
+FFmpeg and the DLL beside the program) registers File Explorer's menu for the current user and
+starts with Windows; a development build in `target` leaves both as they are. On Windows 11 the
+menu is under **Show more options**. If File Explorer still shows an old menu, restart it (Task
+Manager → Windows Explorer → Restart).
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1 -Unregister
-```
+To remove Gracil, turn off **Show Gracil in File Explorer's menu** in its tray menu, exit, and
+delete the folder. Its start with Windows can be turned off in Settings → Apps → Startup.
 
-If File Explorer still shows an old menu, restart it (Task Manager → Windows Explorer → Restart).
+## Where Gracil keeps its data
 
-## Make an installable package
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1 -Pack -Certificate C:\path\to\gracil.pfx -Password <password>
-```
-
-This writes `packaging/msix/out/Gracil_<version>_x64.msix`, signed. Without `-Certificate` the
-package is created but not signed, which is only useful to check that it builds. The Windows SDK
-(MakeAppx, MakePri and SignTool) must be installed.
-
-The certificate's subject must match `Publisher` in `identity.psd1` exactly. A computer installs
-the package only if it trusts that certificate; for a self-made test certificate, that means
-adding it to the computer's *Trusted People*, which is the owner's decision. `.pfx` files are
-never committed.
-
-## Changing the identity
-
-`packaging/msix/identity.psd1` holds the package name, publisher and publisher display name, and
-nothing else repeats them. For the Microsoft Store, copy the three values from Partner Center
-(the app's Product identity page). For direct distribution, use the subject of the code-signing
-certificate as `Publisher`. Changing the identity makes Windows see a different app: uninstall
-the old one first.
+In `data\` beside `gracil.exe`: `settings.txt`, `logs\`, `unfinished.txt`, `temporary\` and
+`shell\` (the copy of the menu's DLL that File Explorer loads). If that folder can't be written,
+`%LOCALAPPDATA%\Gracil` is used instead.
 
 ## Versions
 
-The script maps `X.Y.Z` and `X.Y.Z-dev` to `X.Y.Z.0`
-([versioning](versioning.md#msix-version-mapping)). Never edit the version in the manifest.
+The zip's name carries the version from `Cargo.toml` ([versioning](versioning.md)).
 
 ## Icons
 
-`scripts/icons.ps1` draws the package icons in `packaging/msix/Assets` and the window's two icon
-files in `assets/icons/ico` from the marble's shapes, in Windows 11's neutrals: a dark tile for a
-light taskbar or theme, a light one for a dark taskbar or theme
-([ADR 0031](../decisions/0031-windows-11-colors.md)). The files are committed; run the script
-again only when the artwork or the colors change. `package.ps1` indexes them in `resources.pri` with
-MakePri (Windows SDK), so Windows can pick the right one; without that index it would show the
-plain icon on the accent colour. Windows keeps icons in a cache, so a changed icon may only show
-after signing out.
+`scripts/icons.ps1` draws the window's two icon files in `assets/icons/ico` from the marble's
+shapes, in Windows 11's neutrals: a dark tile for a light taskbar or theme, a light one for a dark
+taskbar or theme ([ADR 0031](../decisions/0031-windows-11-colors.md)). The files are committed; run
+the script again only when the artwork or the colors change. Windows keeps icons in a cache, so a
+changed icon may only show after signing out.

@@ -13,6 +13,12 @@ Gracil is free and private. You don't need an account, and Gracil doesn't need t
 work. Your videos never leave your computer: Gracil sends no videos, file names or usage data
 anywhere.
 
+Gracil is also open source: its code is public on GitHub for anyone to read. There is nothing to
+install. Gracil comes as a zip; unpack it wherever you like, even on a USB drive, and open
+`gracil.exe`. Everything it needs comes inside, and it keeps its settings and its diary in a `data`
+folder next to itself, so they go wherever the folder goes. To remove Gracil, delete its folder
+(see [Questions and answers](faq.md)).
+
 ## English and Spanish
 
 Gracil speaks English and Spanish. It uses the language Windows is shown in, so there's nothing
@@ -34,8 +40,8 @@ Every word and every button is chosen to stay easy to read in both, by the usual
 measure: the buttons for what to do with a finished video are filled, so they stand out clearly.
 
 Gracil's symbol is a marble resting on a support: the marble is your video, and the support is
-Gracil, which takes care of the technical work. It is Gracil's icon in the window, the taskbar,
-the Start menu and File Explorer. It rests on a small tile in Windows' own greys, always the
+Gracil, which takes care of the technical work. It is Gracil's icon in the window, the taskbar and
+File Explorer. It rests on a small tile in Windows' own greys, always the
 opposite of Windows so it stands out: a dark tile when Windows is light, a light tile when Windows
 is dark. The window's icon changes with Windows' theme too. Next to the clock it appears without a
 tile, in black on a light taskbar and in white on a dark one.
@@ -140,14 +146,13 @@ To compress video, Gracil relies on **FFmpeg**, the free, open-source tool trust
 industry. It is the gold standard for this kind of work, and Gracil cannot compress anything
 without it.
 
-- If FFmpeg is already on your computer, Gracil uses it.
-- If it isn't, Gracil downloads it once from its official build distributor and installs it in
-  its own folder. This happens quietly the first time Gracil needs it. You don't have to do
-  anything.
-- Before using what it downloaded, Gracil checks that it is exactly the expected file. If
-  anything differs, Gracil discards it.
+FFmpeg comes inside Gracil's zip, in its `ffmpeg` folder, so there is nothing to download and Gracil
+never uses the internet. Its license and where to find its source code are in the `licenses`
+folder.
 
-This one-time download is the only time Gracil uses the internet.
+If that folder were ever removed, Gracil would use an FFmpeg already on your computer, or, as a
+last resort, download it once from its official build distributor, checking that it is exactly
+the expected file.
 
 ## Choosing the fastest way to compress
 
@@ -405,14 +410,14 @@ existing file.
 
 ## Only one Gracil
 
-Gracil runs once. If you open it again while it is already running, from Start, the taskbar or
-anywhere else, the Gracil you have opens its window and comes forward, even when it was working
+Gracil runs once. If you open it again while it is already running, from its folder, the taskbar
+or anywhere else, the Gracil you have opens its window and comes forward, even when it was working
 quietly next to the clock. If you open videos with it, they join the same list.
 
-Right-click videos, images or a folder in File Explorer and you'll find **Gracil** in the menu,
-with the number of files in brackets when you picked more than one, for example **Gracil (3)**.
-Other files you picked along with them are left alone, and if there's no video, image or folder
-among them, the menu doesn't show Gracil at all.
+Right-click videos, images or a folder in File Explorer and you'll find **Gracil** in the menu (on
+Windows 11, choose **Show more options** first), with the number of files in brackets when you
+picked more than one, for example **Gracil (3)**. Other files you picked along with them are left
+alone, and if there's no video, image or folder among them, the menu doesn't show Gracil at all.
 
 Inside, the commands say exactly what will happen, and they follow the **Always** line at the foot
 of Gracil's window:
@@ -441,13 +446,17 @@ With **Replace** or **Save a copy**, the files are compressed without opening th
 Gracil is already running, the files join its list. If Gracil wasn't running, it starts for that,
 and closes by itself once the work is done.
 
+Gracil puts itself in File Explorer's menu each time it starts, so after moving its folder, open it
+once from the new place. If you'd rather not have it there, turn off **Show Gracil in File
+Explorer's menu** in the menu of its marble next to the clock; turn it on again to bring it back.
+
 ## Starting with Windows
 
 Gracil starts by itself when you sign in to Windows, and waits quietly next to the clock, with no
 window, until you give it videos. There is nothing to set in Gracil. If you'd rather it didn't
 start with Windows, turn it off where Windows lists the apps that start with it: **Settings →
 Apps → Startup**, or the **Startup apps** page of Task Manager. Gracil respects that and never
-turns it back on; you can still open it from the Start menu whenever you like.
+turns it back on; you can still open `gracil.exe` from its folder whenever you like.
 
 ## Closing Gracil
 
@@ -499,10 +508,10 @@ them go. Files that were being compressed start again from their beginning; file
 aren't done again, except perhaps the last few before a sudden stop. Finished videos you
 hadn't chosen for count as unfinished, since they are deleted when Gracil closes. If you used
 File Explorer's **Replace** or **Save copy**, that choice comes back with them. The list stays
-on your computer, in Gracil's own folder, and is gone once everything on it is done.
+on your computer, in Gracil's `data` folder, and is gone once everything on it is done.
 
 ## What Gracil writes down
 
 Gracil keeps a simple diary of what it did, such as which way it compressed each video, so
-problems can be understood later. It stays on your computer, in Gracil's own folder, and only the
-last seven days are kept.
+problems can be understood later. It stays on your computer, in Gracil's `data` folder, and only
+the last seven days are kept.

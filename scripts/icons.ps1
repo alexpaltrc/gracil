@@ -1,20 +1,16 @@
 # Draws Gracil's icons from the marble's shapes, in Windows 11's own neutral colors (ADR 0031):
-# the app-list, Start and Store icons in packaging/msix/Assets, and the window's icons in
-# assets/icons/ico. The icon always contrasts with Windows: on a light taskbar or theme it is the
-# dark version, on a dark one the light version.
+# the icons of gracil.exe and its window in assets/icons/ico. The icon always contrasts with
+# Windows: on a light taskbar or theme it is the dark version, on a dark one the light version.
 #
 #   scripts/icons.ps1
 #
-#   *_altform-lightunplated, *_theme-light   light Windows   dark tile, light support
-#   *_altform-unplated, *_theme-dark         dark Windows    light tile, dark support
-#   plain files                              anywhere else   the dark tile
-#   gracil-app-dark.ico, gracil-app-light.ico                the window's icon, chosen by theme
+#   gracil-app-dark.ico    light Windows   dark tile, light support
+#   gracil-app-light.ico   dark Windows    light tile, dark support
 # Run it again only when the artwork or the colors change; the files are committed.
 
 Add-Type -AssemblyName System.Drawing
 
 $root = Split-Path $PSScriptRoot -Parent
-$assets = Join-Path $root 'packaging\msix\Assets'
 $icons = Join-Path $root 'assets\icons\ico'
 
 # Windows 11's app backgrounds and text, and a neutral grey marble that reads on both.
@@ -99,12 +95,6 @@ function Picture([int]$px, $tone, [bool]$rounded) {
     $bitmap
 }
 
-function Draw([int]$px, $tone, [bool]$rounded, [string]$file) {
-    $bitmap = Picture $px $tone $rounded
-    $bitmap.Save((Join-Path $assets $file), [System.Drawing.Imaging.ImageFormat]::Png)
-    $bitmap.Dispose()
-}
-
 # An icon file holding the rounded tile at every size Windows asks for, each stored as PNG.
 function Ico($tone, [string]$file) {
     $sizes = 16, 20, 24, 32, 40, 48, 64, 256
@@ -131,24 +121,6 @@ function Ico($tone, [string]$file) {
     [System.IO.File]::WriteAllBytes((Join-Path $icons $file), $out.ToArray())
 }
 
-$scales = @{ 100 = 1.0; 125 = 1.25; 150 = 1.5; 200 = 2.0; 250 = 2.5; 300 = 3.0; 400 = 4.0 }
-foreach ($px in 16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256) {
-    Draw $px $tones.light $true "AppList.targetsize-${px}_altform-unplated.png"
-    Draw $px $tones.dark $true "AppList.targetsize-${px}_altform-lightunplated.png"
-    Draw $px $tones.dark $false "AppList.targetsize-$px.png"
-}
-foreach ($scale in $scales.GetEnumerator()) {
-    Draw ([int](44 * $scale.Value)) $tones.dark $false "AppList.scale-$($scale.Key).png"
-    foreach ($logo in @{ Square150x150Logo = 150; StoreLogo = 50 }.GetEnumerator()) {
-        $px = [int]($logo.Value * $scale.Value)
-        Draw $px $tones.dark $true "$($logo.Key).scale-$($scale.Key).png"
-        Draw $px $tones.dark $true "$($logo.Key).scale-$($scale.Key)_altform-colorful_theme-light.png"
-        Draw $px $tones.light $true "$($logo.Key).scale-$($scale.Key)_altform-colorful_theme-dark.png"
-    }
-}
-foreach ($name in 'AppList', 'Square150x150Logo', 'StoreLogo') {
-    Copy-Item -LiteralPath (Join-Path $assets "$name.scale-100.png") -Destination (Join-Path $assets "$name.png") -Force
-}
 Ico $tones.dark 'gracil-app-dark.ico'
 Ico $tones.light 'gracil-app-light.ico'
-Write-Host "Icons drawn in $assets and $icons"
+Write-Host "Icons drawn in $icons"

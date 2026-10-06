@@ -1,19 +1,37 @@
 # FFmpeg
 
-How Gracil finds, installs and drives FFmpeg. Decision record: [ADR 0008](../decisions/0008-ffmpeg-detected-or-provisioned.md).
+How Gracil finds, installs and drives FFmpeg. Decision records:
+[ADR 0008](../decisions/0008-ffmpeg-detected-or-provisioned.md),
+[ADR 0050](../decisions/0050-portable-and-open-source.md).
 
 ## Finding it
 
 `toolchain::resolve` runs at startup, off the UI thread:
 
-1. Every folder on `PATH` holding both `ffmpeg.exe` and `ffprobe.exe` (winget, Scoop, manual
+1. The copy in Gracil's zip, `ffmpeg\` beside `gracil.exe` (`Origin::Bundled`).
+2. Every folder on `PATH` holding both `ffmpeg.exe` and `ffprobe.exe` (winget, Scoop, manual
    installs). The first one whose `-encoders` listing includes `libx265` wins.
-2. Gracil's private copy in `%LOCALAPPDATA%\Gracil\ffmpeg\<build id>\`.
-3. Otherwise the pinned build is downloaded and installed there, silently.
+3. Gracil's private copy in its data folder, `data\ffmpeg\<build id>\`.
+4. Otherwise the download build below is installed there, silently.
 
-`toolchain::find` does steps 1–2 only; tests use it so they never download anything.
+`toolchain::find` does steps 1–3 only; tests use it so they never download anything.
 
-## The pinned build
+## The bundled build
+
+`packaging/ffmpeg.psd1` pins the build that goes in the zip, by the SHA-256 of `ffmpeg.exe` and
+`ffprobe.exe`: BtbN's `N-125875-g5d4d3bdc61-20260731 win64-gpl`, the build Gracil was tested with
+(it has `libvmaf`, NVENC, Quick Sync, AMF, `libx265` and SVT-AV1). `scripts/portable.ps1` refuses
+any other. To move to a new build, put its `bin` folder first on `PATH` or pass it with
+`-FFmpeg`, run the integration tests with it, and record its name, source commit and hashes in
+`ffmpeg.psd1`.
+
+**Licensing.** The build is GPL version 3 or later. Gracil runs it as a separate program and does
+not link to it. The zip carries FFmpeg's license and `ffmpeg-source.txt`, which names the build
+and points to FFmpeg's source commit and to the builder's scripts with every library's source.
+
+## The download build
+
+Only used when the zip's `ffmpeg` folder is missing and `PATH` has no suitable FFmpeg.
 
 | | |
 |---|---|
@@ -30,10 +48,8 @@ To move to a new build: download it, record its size and SHA-256 in `PINNED_BUIL
 (`crates/gracil-core/src/toolchain/provision.rs`) and here, give it a new `id`, and run the
 integration tests with that copy first on `PATH`.
 
-**Licensing.** The essentials build is GPL-licensed. Gracil runs it as a separate program and
-does not link to it. Gyan's builds are distributed with their sources and license texts.
-Before release, the About screen and the Store listing must credit FFmpeg, state its license and
-point to its source.
+The essentials build is GPL-licensed too; Gyan's builds are distributed with their sources and
+license texts.
 
 ## Capabilities
 

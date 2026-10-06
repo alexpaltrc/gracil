@@ -31,7 +31,7 @@ fn main() {
         std::process::exit(2);
     }
     let Some(private_dir) = toolchain::default_private_dir() else {
-        eprintln!("LOCALAPPDATA is not set");
+        eprintln!("Gracil has no folder for its data");
         std::process::exit(1);
     };
     let engine = match Engine::start(&private_dir) {

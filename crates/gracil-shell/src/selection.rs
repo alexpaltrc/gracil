@@ -26,8 +26,8 @@ impl Choice {
     /// The setting as Gracil saved it. Anything missing or unreadable asks, which never touches
     /// an original.
     pub fn saved() -> Self {
-        gracil_core::toolchain::default_private_dir()
-            .and_then(|dir| std::fs::read_to_string(dir.join("settings.txt")).ok())
+        gracil_windows::explorer_places()
+            .and_then(|places| std::fs::read_to_string(places.data.join("settings.txt")).ok())
             .map_or(Self::Ask, |text| Self::from_settings(&text))
     }
 

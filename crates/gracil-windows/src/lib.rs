@@ -9,6 +9,7 @@ mod flyout;
 mod heat;
 mod icon;
 mod instance;
+mod integration;
 mod lifetime;
 mod numbers;
 mod process;
@@ -22,6 +23,10 @@ pub use flyout::place_near_tray;
 pub use heat::{GraphicsHeat, Heat, Thermometer};
 pub use icon::{set_icon_theme, set_window_icon};
 pub use instance::{claim, forward, is_running, serve};
+pub use integration::{
+    EXPLORER_CLSID, Places, add_to_explorer, explorer_menu, explorer_places, remove_from_explorer,
+    start_with_windows,
+};
 pub use lifetime::{end_children_with_this_process, use_processors};
 pub use numbers::{NumberSettings, number_settings};
 pub use process::set_suspended;

@@ -57,6 +57,9 @@ it, and FFmpeg is the gold standard for this kind of tool. Wherever Gracil expla
 (store listing, About, documentation), it says this plainly. Once FFmpeg is present, Gracil never
 connects to the internet again.
 
+*Update (ADR 0050):* FFmpeg now comes inside Gracil's zip, so Gracil never connects to the
+internet at all. The download remains only for a folder whose FFmpeg was removed.
+
 # 2.3 Quiet signals instead of dialogs
 
 *Added after the original specification.*
@@ -104,6 +107,8 @@ Future ARM64 support may be evaluated later but is not required now.
 Use: Rust, Iced, WGPU as the Iced renderer, FFmpeg, FFprobe, windows-rs for Windows-specific APIs,
 a lightweight native tray implementation where required, MSIX packaging.
 
+*Update (ADR 0050):* no MSIX. Gracil is a portable zip published on GitHub.
+
 Do not use: Electron, Chromium, WebView, Tauri, Node.js, a local HTTP server, a browser-based
 frontend.
 
@@ -139,7 +144,7 @@ gracil/
 │   ├── icons/
 │   └── development/
 ├── packaging/
-│   └── msix/
+│   └── ffmpeg.psd1
 ├── scripts/
 ├── tests/
 ├── Cargo.toml
@@ -191,6 +196,8 @@ release scripts.
 
 Where MSIX versioning rules cannot directly represent the exact application semantic version
 string, keep a documented mapping instead of silently inventing one.
+
+*Update (ADR 0050):* there is no MSIX version anymore; the zip is named after the version.
 
 # 11. CHANGELOG philosophy
 
@@ -312,6 +319,9 @@ system-wide and never changes PATH.
 
 Gracil starts this preparation as soon as it launches, so it is normally finished before the first
 video arrives. Videos added before it finishes simply wait in their normal waiting state.
+
+*Update (ADR 0050):* FFmpeg is bundled again, in the zip's `ffmpeg` folder, and is looked for
+there first. Detection and the invisible install stay as fallbacks.
 
 # 21. Reference NVIDIA compression behavior
 
@@ -694,6 +704,10 @@ integration. Expected technologies: MSIX package identity, `windows.fileExplorer
 `IExplorerCommand`, COM shell extension. Verify current Microsoft requirements before
 implementing.
 
+*Update (ADR 0050):* without a package Windows offers no modern menu, so the same
+`IExplorerCommand` is registered for the current user in the classic menu (under **Show more
+options** on Windows 11), by Gracil itself on every start, and can be turned off from the tray.
+
 # 58. Explorer multi-selection
 
 Selecting several videos and right-clicking shows approximately **Gracil (8)** with the
@@ -752,11 +766,18 @@ development, sideload testing, signed direct distribution and eventual Microsoft
 submission. The package includes Gracil, Explorer integration components, assets and manifest
 configuration. *FFmpeg and FFprobe are no longer packaged; see §20.1.*
 
+*Superseded by ADR 0050:* Gracil is portable after all. It ships as a zip holding Gracil, the File
+Explorer menu, jpegli, FFmpeg and FFprobe, and their licenses; it keeps its data in a `data`
+folder beside itself. Removing Gracil is deleting its folder.
+
 # 65. Future Microsoft Store distribution
 
 Do not hardcode a final Store Publisher identity. Keep identity values easy to replace and
 document the process. Eventually pass Windows App Certification. Do not add Store-specific
 features that are not required yet.
+
+*Superseded by ADR 0050:* Gracil can't stay in the Microsoft Store, even for free. It is free and
+open source on GitHub instead.
 
 # 66. Settings philosophy
 
@@ -857,6 +878,7 @@ Every milestone compiles and is testable.
   multi-selection, dynamic Gracil (N), both commands, IPC forwarding, shell stability testing.
 - **M8 — Packaging**: MSIX, manifest registration, clean install/update/uninstall, packaged FFmpeg
   and shell extension, versioning scripts, Store readiness.
+  *Changed by ADR 0050:* a portable zip with FFmpeg inside, built by `scripts/portable.ps1`.
 - **M9 — Image compression** *(planned, not started; added 2026-10-03 at the product owner's
   request)*: compress photos and other images the way Gracil compresses video. See §77.1.
 
@@ -1043,6 +1065,10 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   overheating, no roaring fans, no memory or disk filled. Windows itself holds Gracil to part of
   the processor (less while the person works and on battery), to part of the memory, and to a
   drive with room to spare. *Built 2026-10-05 (ADR 0049).*
+- **Free and open source, outside the Store.** *Decided by the product owner.* Gracil can't stay
+  in the Microsoft Store, even for free, so it is published on GitHub as a portable zip with
+  FFmpeg inside, keeping its data beside itself, with Gracil in File Explorer's classic menu.
+  *Built 2026-10-06 (ADR 0050).*
 
 # 78. Temporary UI decisions
 
@@ -1074,6 +1100,9 @@ conventional queue; add a permanent Windows service; add startup execution; add 
 telemetry; introduce cloud processing; upload videos anywhere; change versioning rules.
 
 *Update (ADR 0024):* startup execution was requested and added; see §53.
+
+*Update (ADR 0050):* MSIX was dropped and the Explorer menu is the classic one, decided by the
+product owner when the Store turned out not to be possible.
 
 If a requirement becomes technically problematic, explain the conflict before changing behavior.
 

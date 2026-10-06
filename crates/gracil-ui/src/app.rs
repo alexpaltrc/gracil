@@ -22,6 +22,7 @@ use tracing::{info, warn};
 use crate::logging;
 use crate::outside::{self, Outside};
 use crate::pace::{self, Breath};
+use crate::place;
 use crate::request::Request;
 use crate::settings::Settings;
 use crate::style;
@@ -274,8 +275,10 @@ impl Gracil {
     pub fn boot() -> (Self, Task<Message>) {
         let text = Text::get(Language::detect());
         let settings = Settings::load();
+        place::settle(settings.explorer_menu);
         let menu = TrayMenu {
             open: text.open_gracil.to_owned(),
+            explorer_menu: text.explorer_menu.to_owned(),
             explorer_mini_window: text.explorer_mini_window.to_owned(),
             exit: text.exit.to_owned(),
         };
@@ -286,6 +289,7 @@ impl Gracil {
         .ok();
         if let Some(tray) = &tray {
             tray.check_explorer_mini_window(settings.explorer_mini_window);
+            tray.check_explorer_menu(settings.explorer_menu);
         }
         // Read from Windows itself: Iced only learns the theme once a window exists, so its first
         // answer would come too late and the first window would fade from light (ADR 0015).
@@ -648,6 +652,17 @@ impl Gracil {
                 None => self.open_mini(),
             },
             Message::Outside(Outside::Tray(TrayEvent::Open)) => self.show_main(),
+            Message::Outside(Outside::Tray(TrayEvent::ExplorerMenu)) => {
+                self.settings.explorer_menu = !self.settings.explorer_menu;
+                if let Some(tray) = &self.tray {
+                    tray.check_explorer_menu(self.settings.explorer_menu);
+                }
+                if let Err(error) = self.settings.save() {
+                    warn!(%error, "could not save the settings");
+                }
+                place::settle(self.settings.explorer_menu);
+                Task::none()
+            }
             Message::Outside(Outside::Tray(TrayEvent::ExplorerMiniWindow)) => {
                 self.settings.explorer_mini_window = !self.settings.explorer_mini_window;
                 if let Some(tray) = &self.tray {

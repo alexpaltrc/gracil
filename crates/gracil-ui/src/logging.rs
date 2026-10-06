@@ -1,5 +1,5 @@
-//! Local diagnostic logs (spec §70): plain text files in `%LOCALAPPDATA%\Gracil\logs`, one per
-//! day, the last week kept. They never leave the computer.
+//! Local diagnostic logs (spec §70): plain text files in `logs` in Gracil's data folder, one
+//! per day, the last week kept. They never leave the computer.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};

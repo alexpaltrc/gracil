@@ -434,8 +434,18 @@ fn duplicate(text: &str) -> Result<PWSTR> {
     }
 }
 
-/// `gracil.exe`, which the package installs next to this DLL.
+/// The `gracil.exe` that put this menu in Explorer (ADR 0050). Gracil registers a copy of this
+/// DLL kept in its data folder, so the one in Gracil's own folder is never held by Explorer and
+/// an update can overwrite it.
 fn gracil_exe() -> Option<PathBuf> {
+    gracil_windows::explorer_places()
+        .map(|places| places.program)
+        .filter(|program| program.is_file())
+        .or_else(beside_this_dll)
+}
+
+/// `gracil.exe` next to this DLL, for a menu registered by hand while developing.
+fn beside_this_dll() -> Option<PathBuf> {
     let mut module = HMODULE::default();
     let mut buffer = vec![0u16; 32_768];
     // SAFETY: the address is a function in this DLL, so it names this module; the count stays
@@ -444,7 +454,7 @@ fn gracil_exe() -> Option<PathBuf> {
     let length = unsafe {
         GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            PCWSTR(gracil_exe as *const () as *const u16),
+            PCWSTR(beside_this_dll as *const () as *const u16),
             &mut module,
         )
         .ok()?;
@@ -455,22 +465,6 @@ fn gracil_exe() -> Option<PathBuf> {
     }
     let dll = PathBuf::from(OsString::from_wide(&buffer[..length]));
     Some(dll.with_file_name("gracil.exe"))
-}
-
-/// What to start Gracil with. From its package (a manifest beside it), Gracil must be started
-/// through the package's alias: started by its path it would run without the package's identity,
-/// and its settings and files would end up somewhere else (ADR 0023). Outside a package, the
-/// `gracil.exe` beside this DLL.
-fn launcher() -> Option<PathBuf> {
-    let gracil = gracil_exe()?;
-    let packaged = gracil.with_file_name("AppxManifest.xml").is_file();
-    let alias = std::env::var_os("LOCALAPPDATA")
-        .map(|local| PathBuf::from(local).join(r"Microsoft\WindowsApps\gracil.exe"));
-    match alias {
-        // The alias is a link with no size, so only its presence is checked.
-        Some(alias) if packaged && alias.symlink_metadata().is_ok() => Some(alias),
-        _ => Some(gracil),
-    }
 }
 
 /// Hands the files to Gracil on a thread of its own, so Explorer's menu closes at once (spec §60).
@@ -491,7 +485,7 @@ fn deliver(choice: Choice, scope: Scope, files: Vec<PathBuf>) {
             let rest = if gracil_windows::is_running() {
                 &paths[..]
             } else {
-                let Some(gracil) = launcher() else {
+                let Some(gracil) = gracil_exe() else {
                     return;
                 };
                 let (first, rest) =
@@ -512,4 +506,18 @@ fn deliver(choice: Choice, scope: Scope, files: Vec<PathBuf>) {
                 let _ = gracil_windows::forward(&arguments);
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registers_the_class_it_answers_to() {
+        let registered = format!("{:?}", CLSID);
+        assert_eq!(
+            format!("{{{registered}}}"),
+            gracil_windows::EXPLORER_CLSID.to_owned()
+        );
+    }
 }

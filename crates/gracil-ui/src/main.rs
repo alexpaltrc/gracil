@@ -12,6 +12,7 @@ mod numbers;
 mod outside;
 mod pace;
 mod pill;
+mod place;
 mod request;
 mod settings;
 mod style;

@@ -50,6 +50,8 @@ pub enum TrayEvent {
     Toggle,
     /// Open in the icon's menu: show Gracil's window.
     Open,
+    /// The menu's File Explorer menu setting was clicked, to turn it the other way.
+    ExplorerMenu,
     /// The menu's File Explorer setting was clicked, to turn it the other way.
     ExplorerMiniWindow,
     /// Exit in the icon's menu.
@@ -61,6 +63,8 @@ pub enum TrayEvent {
 /// The words of the icon's menu, in the interface's language.
 pub struct TrayMenu {
     pub open: String,
+    /// The setting for Gracil being in File Explorer's menu.
+    pub explorer_menu: String,
     /// The setting for showing the mini-window when compressing from File Explorer.
     pub explorer_mini_window: String,
     pub exit: String,
@@ -81,10 +85,12 @@ const REFRESH: u32 = WM_APP + 2;
 const OPEN: usize = 1;
 const EXIT: usize = 2;
 const EXPLORER_MINI_WINDOW: usize = 3;
+const EXPLORER_MENU: usize = 4;
 
 /// Everything the icon's window needs, shared with the rest of Gracil.
 struct Shared {
     open: Vec<u16>,
+    explorer_menu: Vec<u16>,
     explorer_mini_window: Vec<u16>,
     exit: Vec<u16>,
     on_event: Box<dyn Fn(TrayEvent) + Send + Sync>,
@@ -101,6 +107,8 @@ struct Current {
     /// Gracil is leaving: the icon is gone and must not come back.
     gone: bool,
     light_taskbar: bool,
+    /// Whether the menu shows Gracil in File Explorer's menu as on.
+    explorer_menu: bool,
     /// Whether the menu shows the File Explorer setting as on.
     explorer_mini_window: bool,
 }
@@ -119,6 +127,7 @@ impl Tray {
     ) -> io::Result<Self> {
         let shared = Shared {
             open: wide(&menu.open),
+            explorer_menu: wide(&menu.explorer_menu),
             explorer_mini_window: wide(&menu.explorer_mini_window),
             exit: wide(&menu.exit),
             on_event: Box::new(on_event),
@@ -129,6 +138,7 @@ impl Tray {
                 added: false,
                 gone: false,
                 light_taskbar: crate::theme::light_taskbar(),
+                explorer_menu: false,
                 explorer_mini_window: false,
             }),
         };
@@ -160,6 +170,13 @@ impl Tray {
         unsafe {
             PostMessageW(self.window as HWND, REFRESH, 0, 0)
         };
+    }
+
+    /// Whether the menu shows Gracil in File Explorer's menu as on.
+    pub fn check_explorer_menu(&self, on: bool) {
+        if let Some(shared) = SHARED.get() {
+            lock(shared).explorer_menu = on;
+        }
     }
 
     /// Whether the menu shows the File Explorer setting as on.
@@ -333,10 +350,13 @@ fn show_menu(window: HWND, x: i32, y: i32) {
     let Some(shared) = SHARED.get() else {
         return;
     };
-    let explorer_check = if lock(shared).explorer_mini_window {
-        MF_CHECKED
-    } else {
-        0
+    let (menu_check, explorer_check) = {
+        let current = lock(shared);
+        let check = |on: bool| if on { MF_CHECKED } else { 0 };
+        (
+            check(current.explorer_menu),
+            check(current.explorer_mini_window),
+        )
     };
     // SAFETY: the menu is created, used and destroyed here; the labels are NUL-terminated UTF-16
     // buffers that outlive it. Bringing the hidden window forward first, and posting it an empty
@@ -348,6 +368,12 @@ fn show_menu(window: HWND, x: i32, y: i32) {
             return;
         }
         AppendMenuW(menu, MF_STRING, OPEN, shared.open.as_ptr());
+        AppendMenuW(
+            menu,
+            MF_STRING | menu_check,
+            EXPLORER_MENU,
+            shared.explorer_menu.as_ptr(),
+        );
         AppendMenuW(
             menu,
             MF_STRING | explorer_check,
@@ -373,6 +399,7 @@ fn show_menu(window: HWND, x: i32, y: i32) {
     };
     match chosen as usize {
         OPEN => notify(TrayEvent::Open),
+        EXPLORER_MENU => notify(TrayEvent::ExplorerMenu),
         EXPLORER_MINI_WINDOW => notify(TrayEvent::ExplorerMiniWindow),
         EXIT => notify(TrayEvent::Exit),
         _ => {}

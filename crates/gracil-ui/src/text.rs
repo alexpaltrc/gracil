@@ -67,6 +67,8 @@ pub struct Text {
     pub exit: &'static str,
     pub exit_question: &'static str,
     pub keep_working: &'static str,
+    /// The tray menu's setting for Gracil in File Explorer's menu (ADR 0050).
+    pub explorer_menu: &'static str,
     pub explorer_mini_window: &'static str,
     /// "Always", before the pill that picks what to do with every finished file (ADR 0025).
     pub always: &'static str,
@@ -308,6 +310,7 @@ static ENGLISH: Text = Text {
     exit: "Exit",
     exit_question: "Exit Gracil?",
     keep_working: "Keep working",
+    explorer_menu: "Show Gracil in File Explorer's menu",
     explorer_mini_window: "Show mini-window when compressing from File Explorer",
     always: "Always",
     always_choices: ["Replace", "Save a copy"],
@@ -419,6 +422,7 @@ static SPANISH: Text = Text {
     exit: "Salir",
     exit_question: "¿Salir de Gracil?",
     keep_working: "Seguir trabajando",
+    explorer_menu: "Mostrar Gracil en el menú del Explorador de archivos",
     explorer_mini_window: "Mostrar miniventana al comprimir desde el Explorador de archivos",
     always: "Siempre",
     always_choices: ["Reemplazar", "Guardar como copia"],

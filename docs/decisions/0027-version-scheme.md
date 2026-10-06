@@ -3,6 +3,8 @@
 **Status:** Accepted. Decided by the product owner (2026-10-03). Settles the "pending" note in
 `docs/development/versioning.md`; the MSIX mapping there is unchanged.
 
+**Changed** by [ADR 0050](0050-portable-and-open-source.md) (2026-10-06): 1.0 is the first public release on GitHub; there is no MSIX version anymore.
+
 **Context.** Before the first Microsoft Store release the product owner wanted to consider a
 different-looking version, such as `0.0.01` or `01.00`, and prefers numbers that grow slowly. MSIX
 versions are four plain numbers (a leading zero is dropped, so `01` is `1`), the Store wants the

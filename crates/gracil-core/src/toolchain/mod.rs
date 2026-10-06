@@ -4,6 +4,7 @@ mod provision;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 
 use tracing::{info, warn};
 
@@ -16,6 +17,8 @@ const REQUIRED_ENCODER: &str = "libx265";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Origin {
+    /// The copy that comes with Gracil, in the `ffmpeg` folder beside `gracil.exe` (ADR 0050).
+    Bundled,
     /// Installed by the user (winget, Scoop, a manual download...) and found on `PATH`.
     System,
     /// Gracil's own copy in its private folder.
@@ -60,7 +63,7 @@ impl Toolchain {
     }
 }
 
-/// jpegli's `cjpegli.exe` (ADR 0034): next to Gracil's own executable, where the package puts it,
+/// jpegli's `cjpegli.exe` (ADR 0034): next to Gracil's own executable, where the zip puts it,
 /// or, while developing, where `scripts/build-jpegli.ps1` builds it inside `target`.
 pub fn find_jpegli() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
@@ -111,13 +114,54 @@ pub struct Resolved {
     pub encoders: Encoders,
 }
 
-/// Gracil's private data folder, `%LOCALAPPDATA%\Gracil`.
+/// The name of Gracil's data folder beside `gracil.exe`.
+pub const DATA_FOLDER: &str = "data";
+
+/// Gracil's data folder (ADR 0050): `data` beside `gracil.exe`, so the folder Gracil came in
+/// carries its settings, logs and temporary notes with it. Where that can't be written (a
+/// read-only drive, or a folder only an administrator can change), `%LOCALAPPDATA%\Gracil`.
 pub fn default_private_dir() -> Option<PathBuf> {
+    static DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+    DIR.get_or_init(|| {
+        own_folder()
+            .map(|folder| folder.join(DATA_FOLDER))
+            .filter(|dir| writable(dir))
+            .or_else(local_app_data)
+    })
+    .clone()
+}
+
+/// The data folder of the Gracil in `folder`, for code that doesn't run as `gracil.exe` (File
+/// Explorer's menu): its `data` folder when Gracil made one, `%LOCALAPPDATA%\Gracil` otherwise.
+pub fn private_dir_of(folder: &Path) -> Option<PathBuf> {
+    Some(folder.join(DATA_FOLDER))
+        .filter(|dir| dir.is_dir())
+        .or_else(local_app_data)
+}
+
+/// The folder holding the running executable.
+pub fn own_folder() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()?
+        .parent()
+        .map(Path::to_path_buf)
+}
+
+fn local_app_data() -> Option<PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|dir| PathBuf::from(dir).join("Gracil"))
 }
 
-/// Finds a usable FFmpeg: one already installed on the computer, then Gracil's private copy, and
-/// as a last resort downloads and installs the pinned build into `private_dir`.
+/// Whether Gracil can keep files in `dir`, creating it if needed.
+fn writable(dir: &Path) -> bool {
+    let probe = dir.join(format!(".write-test-{}", std::process::id()));
+    let ok = std::fs::create_dir_all(dir).is_ok() && std::fs::write(&probe, b"").is_ok();
+    let _ = std::fs::remove_file(&probe);
+    ok
+}
+
+/// Finds a usable FFmpeg: the copy that comes with Gracil, one installed on the computer, then
+/// Gracil's private copy, and as a last resort downloads and installs the pinned build into
+/// `private_dir`.
 ///
 /// This can take minutes when it has to download, so call it off the UI thread.
 pub fn resolve(private_dir: &Path) -> Result<Resolved, ToolchainError> {
@@ -136,12 +180,16 @@ pub fn resolve(private_dir: &Path) -> Result<Resolved, ToolchainError> {
 
 /// A usable FFmpeg already on this computer, never downloading anything.
 pub fn find(private_dir: &Path) -> Option<Resolved> {
+    let bundled =
+        own_folder().and_then(|folder| Toolchain::in_dir(&folder.join("ffmpeg"), Origin::Bundled));
     let system = std::env::var_os("PATH")
         .into_iter()
         .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
         .filter_map(|dir| Toolchain::in_dir(&dir, Origin::System));
     let private_bin = provision::install_dir(private_dir, &PINNED_BUILD);
-    system
+    bundled
+        .into_iter()
+        .chain(system)
         .chain(Toolchain::in_dir(&private_bin, Origin::Private))
         .find_map(qualify)
 }

@@ -1,7 +1,8 @@
-//! Gracil's two settings (spec §66, ADR 0025): whether the mini-window appears when compressing
-//! from File Explorer, and whether finished videos are always replaced or always saved as copies
-//! instead of asking. They are kept in `%LOCALAPPDATA%\Gracil\settings.txt` as `name=value`
-//! lines, so a later setting only adds a line.
+//! Gracil's settings (spec §66, ADR 0025, ADR 0050): whether Gracil is in File Explorer's menu,
+//! whether the mini-window appears when compressing from there, and whether finished videos are
+//! always replaced or always saved as copies instead of asking. They are kept in Gracil's data
+//! folder (`data\settings.txt` beside `gracil.exe`) as `name=value` lines, so a later setting
+//! only adds a line.
 
 use std::fs;
 use std::io;
@@ -12,9 +13,12 @@ use crate::work::Choice;
 const FILE: &str = "settings.txt";
 const EXPLORER_MINI_WINDOW: &str = "explorer_mini_window";
 const ALWAYS: &str = "always";
+const EXPLORER_MENU: &str = "explorer_menu";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Settings {
+    /// Gracil in File Explorer's menu (ADR 0050). On unless turned off.
+    pub explorer_menu: bool,
     /// Show the mini-window when compressing from File Explorer (spec §56). On unless turned off.
     pub explorer_mini_window: bool,
     /// What to do with every finished video without asking (ADR 0025). `None`, the default,
@@ -25,6 +29,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            explorer_menu: true,
             explorer_mini_window: true,
             always: None,
         }
@@ -57,6 +62,8 @@ impl Settings {
                 Some((ALWAYS, "replace")) => settings.always = Some(Choice::Replace),
                 Some((ALWAYS, "copy")) => settings.always = Some(Choice::SaveCopy),
                 Some((ALWAYS, "ask")) => settings.always = None,
+                Some((EXPLORER_MENU, "on")) => settings.explorer_menu = true,
+                Some((EXPLORER_MENU, "off")) => settings.explorer_menu = false,
                 _ => {}
             }
         }
@@ -67,11 +74,7 @@ impl Settings {
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir)?;
         }
-        let mini_window = if self.explorer_mini_window {
-            "on"
-        } else {
-            "off"
-        };
+        let switch = |on: bool| if on { "on" } else { "off" };
         let always = match self.always {
             Some(Choice::Replace) => "replace",
             Some(Choice::SaveCopy) => "copy",
@@ -79,7 +82,11 @@ impl Settings {
         };
         fs::write(
             path,
-            format!("{EXPLORER_MINI_WINDOW}={mini_window}\n{ALWAYS}={always}\n"),
+            format!(
+                "{EXPLORER_MENU}={}\n{EXPLORER_MINI_WINDOW}={}\n{ALWAYS}={always}\n",
+                switch(self.explorer_menu),
+                switch(self.explorer_mini_window),
+            ),
         )
     }
 }
@@ -103,9 +110,10 @@ mod tests {
     }
 
     #[test]
-    fn defaults_show_the_mini_window_and_ask() {
+    fn defaults_add_the_menu_show_the_mini_window_and_ask() {
         let dir = fresh_dir("default");
         let settings = Settings::read(&dir.join(FILE));
+        assert!(settings.explorer_menu);
         assert!(settings.explorer_mini_window);
         assert_eq!(settings.always, None);
         fs::remove_dir_all(dir).unwrap();
@@ -117,6 +125,7 @@ mod tests {
         let path = dir.join("nested").join(FILE);
         for always in [Some(Choice::Replace), Some(Choice::SaveCopy), None] {
             let saved = Settings {
+                explorer_menu: always.is_some(),
                 explorer_mini_window: false,
                 always,
             };

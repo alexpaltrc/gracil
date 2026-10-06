@@ -38,7 +38,7 @@ ADR 0013) → validate the output with FFprobe (HEVC, same duration) → finaliz
 that is not smaller than the original is discarded (spec §40.1).
 
 **Leftovers.** Every `.part` and parked `.bak` a process creates is written down in its own
-ledger in `%LOCALAPPDATA%\Gracil\temporary\`, held open exclusively while the process runs. At
+ledger in the data folder's `temporary\`, held open exclusively while the process runs. At
 startup, before the engine starts, `gracil_core::leftovers::sweep` settles the ledgers no running
 process holds: temporary files are deleted, a parked original goes back if its place is empty,
 and anything on an absent drive or in use waits for the next start (ADR 0017). Gracil puts itself
@@ -83,7 +83,7 @@ always on top and off the taskbar (ADR 0021). It opens hidden; `gracil_windows::
 puts it against the taskbar's edge on the icon's screen, and only then is it shown. The app keeps
 its `window::Id` apart from the main window's, so closing it never counts as closing Gracil, and
 drag-and-drop tracks which window files hover over. Its setting lives in
-`settings.rs` (`%LOCALAPPDATA%\Gracil\settings.txt`) and is toggled from the tray menu. A
+`settings.rs` (`settings.txt` in the data folder) and is toggled from the tray menu. A
 finished result can be decided in it as in the main window.
 
 **Opening without white.** Iced's windows have no class background, so Windows shows a new one
@@ -114,21 +114,29 @@ work in the background. A Gracil whose window never opened ends itself when that
 (`gracil_core::media::looks_like_video`) and hidden when there are none, with **Compress and
 replace** and **Compress and save a copy** under it. A click returns at once; a thread of the DLL
 forwards the paths over the pipe when Gracil is running, or starts Gracil with as many paths as
-fit on its command line and forwards the rest (ADR 0022). Packaged, it starts Gracil through the
-package's `gracil.exe` alias, so Gracil keeps the package's identity (ADR 0023); otherwise it
-starts the `gracil.exe` beside the DLL.
+fit on its command line and forwards the rest (ADR 0022). It starts the `gracil.exe` recorded in its
+registration (ADR 0050), or the one beside the DLL.
 
-**Starting with Windows.** The package's hidden `Startup` application runs `gracil.exe --startup`
-at sign-in (`windows.startupTask`). That request opens nothing, and marks the app `resident`:
-it stays in the tray for the session instead of leaving when background work is done
-(ADR 0024).
+**Starting with Windows.** The current user's `Run` key starts `gracil.exe --startup` at sign-in.
+That request opens nothing, and marks the app `resident`: it stays in the tray for the session
+instead of leaving when background work is done (ADR 0024).
+
+**Its place in Windows** (`place.rs`, ADR 0050). Gracil is a portable folder with no installer. On
+every start, off the UI thread, a whole Gracil folder (FFmpeg and `gracil_shell.dll` beside
+`gracil.exe`) writes the `Run` value again and registers File Explorer's classic menu for the
+current user (`gracil_windows::add_to_explorer`): the `IExplorerCommand` class, pointing at a copy
+of the DLL in `data\shell\` so the shipped one is never held, with the program and data folder
+recorded beside it for the DLL to find. With the menu turned off in the tray, the registration is
+removed if it points at this folder. A development build in `target` leaves Windows alone.
 
 ## Data on disk
 
-- Settings: `%LOCALAPPDATA%\Gracil\settings.txt`, one `name=value` per line.
-- When Gracil runs from its package, what it writes under `%LOCALAPPDATA%` lands in the package's
-  private folder and is removed on uninstall (ADR 0023).
-- Logs: `%LOCALAPPDATA%\Gracil\logs\`, one plain-text file per day, the last seven kept.
+All in `data\` beside `gracil.exe`, or `%LOCALAPPDATA%\Gracil` when that can't be written
+(`toolchain::default_private_dir`):
+
+- Settings: `settings.txt`, one `name=value` per line.
+- Logs: `logs\`, one plain-text file per day, the last seven kept.
+- Unfinished files: `unfinished.txt`; leftovers' ledgers: `temporary\`; the menu's DLL: `shell\`.
 - No job history is persisted.
 
 See [`../decisions/`](../decisions/) for the reasoning behind the main choices.

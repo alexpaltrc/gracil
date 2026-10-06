@@ -2,6 +2,8 @@
 
 **Status:** Accepted. Supersedes the bundling part of [0002](0002-ffmpeg-as-external-process.md).
 
+**Changed** by [ADR 0050](0050-portable-and-open-source.md) (2026-10-06): FFmpeg now comes in the zip and is looked for beside `gracil.exe` first; `PATH` and the download below remain as fallbacks.
+
 **Context.** The product owner wants Gracil to reuse an FFmpeg the user already has and to install
 one invisibly when there is none (spec §20.1). This also keeps the package small (a full FFmpeg
 build is over 100 MB).
