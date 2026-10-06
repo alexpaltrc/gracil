@@ -2,6 +2,9 @@
 
 **Status:** Accepted, built (2026-10-04).
 
+*Changed by [ADR 0051](0051-efficiency-mode-and-any-card-temperature.md):* the temperature of
+Intel and AMD cards is now read too, from their driver.
+
 **Context.** Lists of 15,000 files keep the computer busy for many hours, often overnight. On a
 computer with poor cooling, hours of work at a steady load can run the graphics card or the
 processor hot. The product owner asked for a limit: when the graphics card or the processor

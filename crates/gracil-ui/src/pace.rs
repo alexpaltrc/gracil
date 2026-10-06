@@ -99,6 +99,13 @@ pub fn processors(threads: usize, idle: bool, saving_energy: bool) -> usize {
     share.max(1)
 }
 
+/// Whether the tools run in Windows' efficiency mode (ADR 0051): while the person uses the computer
+/// or it saves energy, so they keep to the efficient cores and lower clock speeds and the computer
+/// stays cool and quiet. Left to Windows while the computer is idle and plugged in.
+pub fn efficiency_mode(idle: bool, saving_energy: bool) -> bool {
+    !idle || saving_energy
+}
+
 /// How often Gracil writes down how much memory it holds, so a long run can be checked for
 /// memory it never gives back.
 const MEMORY_LOG_EVERY: Duration = Duration::from_secs(10 * 60);
@@ -228,6 +235,7 @@ pub fn watch(changed: impl Fn(Breath) + Send + 'static) {
             let threads = share::processor_threads();
             let mut allowed = None;
             let mut memory_logged: Option<std::time::Instant> = None;
+            let mut efficient_logged = None;
             loop {
                 let idle = gracil_windows::idle_for().is_some_and(|idle| idle >= IDLE_AFTER);
                 let saving_energy = gracil_windows::saving_energy();
@@ -244,6 +252,20 @@ pub fn watch(changed: impl Fn(Breath) + Send + 'static) {
                         Err(error) => warn!(%error, "the processor share can't be set"),
                     }
                     allowed = Some(now);
+                }
+                // Tools start all the time, so the mode is given again every breath.
+                let efficient = efficiency_mode(idle, saving_energy);
+                match gracil_windows::use_efficiency_mode(efficient) {
+                    Ok(()) if efficient_logged != Some(efficient) => {
+                        info!(on = efficient, "efficiency mode");
+                        efficient_logged = Some(efficient);
+                    }
+                    Ok(()) => {}
+                    Err(error) if efficient_logged.is_some() => {
+                        warn!(%error, "efficiency mode can't be set");
+                        efficient_logged = None;
+                    }
+                    Err(_) => {}
                 }
                 if memory_logged.is_none_or(|at| at.elapsed() >= MEMORY_LOG_EVERY) {
                     info!(bytes = gracil_windows::own_memory(), "memory held");
@@ -458,6 +480,14 @@ mod tests {
         assert_eq!(processors(12, true, true), 3);
         assert_eq!(processors(4, false, true), 1);
         assert_eq!(processors(1, true, false), 1);
+    }
+
+    #[test]
+    fn efficiency_mode_unless_idle_and_plugged_in() {
+        assert!(!efficiency_mode(true, false));
+        assert!(efficiency_mode(false, false));
+        assert!(efficiency_mode(true, true));
+        assert!(efficiency_mode(false, true));
     }
 
     #[test]

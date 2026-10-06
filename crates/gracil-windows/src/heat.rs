@@ -3,6 +3,9 @@
 //! - NVIDIA graphics cards: their temperature, the temperature at which the card starts slowing
 //!   itself down, and whether it is slowing down because of heat, from `nvml.dll`, which comes
 //!   with NVIDIA's driver. It is loaded from System32 only, and only if it is there.
+//! - Other graphics cards (Intel, AMD): their temperature, as Task Manager shows it, from what the
+//!   card's driver tells Windows (ADR 0051). Only cards whose driver reports it; built-in graphics
+//!   usually doesn't.
 //! - The processor: Windows' "% Performance Limit", which falls below its usual value when the
 //!   processor is held back, for example because it is too hot. Its temperature itself can't be
 //!   read without a driver.
@@ -11,6 +14,11 @@ use std::ffi::c_void;
 use std::mem;
 use std::ptr;
 
+use windows_sys::Wdk::Graphics::Direct3D::{
+    D3DKMT_ADAPTER_PERFDATA, D3DKMT_ADAPTERINFO, D3DKMT_CLOSEADAPTER, D3DKMT_ENUMADAPTERS2,
+    D3DKMT_QUERYADAPTERINFO, D3DKMTCloseAdapter, D3DKMTEnumAdapters2, D3DKMTQueryAdapterInfo,
+    KMTQAITYPE_ADAPTERPERFDATA, KMTQAITYPE_PHYSICALADAPTERCOUNT, KMTQUERYADAPTERINFOTYPE,
+};
 use windows_sys::Win32::Foundation::HMODULE;
 use windows_sys::Win32::System::LibraryLoader::{
     GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW,
@@ -34,7 +42,8 @@ pub struct GraphicsHeat {
 /// How warm the computer is running, as far as can be told.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Heat {
-    /// Every NVIDIA graphics card. Empty for other cards, or without NVIDIA's driver.
+    /// Every NVIDIA graphics card, or without one, every other card whose driver reports its
+    /// temperature. Empty when none does.
     pub graphics: Vec<GraphicsHeat>,
     /// How much of its full speed the processor is allowed right now, in percent, if Windows
     /// says.
@@ -59,7 +68,12 @@ impl Thermometer {
     /// Reads the computer now.
     pub fn read(&mut self) -> Heat {
         Heat {
-            graphics: self.nvml.as_ref().map_or_else(Vec::new, Nvml::read),
+            graphics: self
+                .nvml
+                .as_ref()
+                .map(Nvml::read)
+                .filter(|cards| !cards.is_empty())
+                .unwrap_or_else(reported_by_drivers),
             processor_limit: self.processor.as_ref().and_then(Counter::read),
         }
     }
@@ -167,6 +181,83 @@ impl Nvml {
     }
 }
 
+/// The temperature of every graphics card whose driver tells Windows, as Task Manager reads it.
+/// Cards are looked up each time, so one added or a driver updated is followed.
+fn reported_by_drivers() -> Vec<GraphicsHeat> {
+    let mut list = D3DKMT_ENUMADAPTERS2::default();
+    // SAFETY: with no buffer, Windows only answers how many adapters there are.
+    #[allow(unsafe_code)]
+    if unsafe { D3DKMTEnumAdapters2(&mut list) } != 0 {
+        return Vec::new();
+    }
+    let mut adapters = vec![D3DKMT_ADAPTERINFO::default(); list.NumAdapters as usize];
+    list.pAdapters = adapters.as_mut_ptr();
+    // SAFETY: the buffer holds `NumAdapters` entries and outlives the call.
+    #[allow(unsafe_code)]
+    if unsafe { D3DKMTEnumAdapters2(&mut list) } != 0 {
+        return Vec::new();
+    }
+    adapters.truncate(list.NumAdapters as usize);
+    let mut cards = Vec::new();
+    for adapter in &adapters {
+        let mut physical = 0_u32;
+        // SAFETY: Windows answers this kind with one `u32`.
+        #[allow(unsafe_code)]
+        let count = unsafe {
+            query(
+                adapter.hAdapter,
+                KMTQAITYPE_PHYSICALADAPTERCOUNT,
+                &mut physical,
+            )
+        };
+        for index in 0..if count { physical } else { 1 } {
+            let mut data = D3DKMT_ADAPTER_PERFDATA {
+                PhysicalAdapterIndex: index,
+                ..Default::default()
+            };
+            // SAFETY: Windows answers this kind with a `D3DKMT_ADAPTER_PERFDATA`.
+            #[allow(unsafe_code)]
+            let read = unsafe { query(adapter.hAdapter, KMTQAITYPE_ADAPTERPERFDATA, &mut data) };
+            // Tenths of a degree; 0 when the driver doesn't say.
+            if read && data.Temperature > 0 {
+                cards.push(GraphicsHeat {
+                    celsius: data.Temperature / 10,
+                    slowdown: None,
+                    held_back: false,
+                });
+            }
+        }
+        let close = D3DKMT_CLOSEADAPTER {
+            hAdapter: adapter.hAdapter,
+        };
+        // SAFETY: the handle was opened by the enumeration above and is closed once, here.
+        #[allow(unsafe_code)]
+        unsafe {
+            D3DKMTCloseAdapter(&close);
+        }
+    }
+    cards
+}
+
+/// Asks the adapter `adapter` for `kind`, answered in `answer`. Whether it answered.
+///
+/// # Safety
+///
+/// `T` must be the plain structure Windows documents as the answer to `kind`.
+#[allow(unsafe_code)]
+unsafe fn query<T>(adapter: u32, kind: KMTQUERYADAPTERINFOTYPE, answer: &mut T) -> bool {
+    let mut info = D3DKMT_QUERYADAPTERINFO {
+        hAdapter: adapter,
+        Type: kind,
+        pPrivateDriverData: (answer as *mut T).cast(),
+        PrivateDriverDataSize: mem::size_of::<T>() as u32,
+    };
+    // SAFETY: the answer buffer is `answer`, of the size given, and outlives the call; the
+    // caller vouches that it is the structure Windows writes for `kind`.
+    let status = unsafe { D3DKMTQueryAdapterInfo(&mut info) };
+    status == 0
+}
+
 /// The function `name` (NUL-terminated) of `library`, as `F`.
 ///
 /// # Safety
@@ -244,6 +335,14 @@ impl Drop for Counter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drivers_report_sensible_temperatures() {
+        for card in reported_by_drivers() {
+            println!("{card:?}");
+            assert!(card.celsius < 150);
+        }
+    }
 
     #[test]
     fn reads_without_failing() {

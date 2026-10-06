@@ -32,8 +32,9 @@ Gracil is still being built, but you can already compress videos and images with
 - Gracil never gets in your way: it works below your other programs, and Windows itself keeps it
   to part of the processor, half while you use the computer and a quarter on battery, so the
   computer stays responsive, cool and quiet, even a simple laptop. It never fills your drive or
-  your memory. It takes on more when you leave the
-  computer alone and less as soon as you come back, and fewer large images at once so memory
+  your memory. While you use the computer, and always on battery, Windows runs Gracil's work at
+  the processor's calmest speed, so the computer stays cooler and quieter. It takes on more when
+  you leave the computer alone and less as soon as you come back, and fewer large images at once so memory
   never runs short. The window stays quick to answer even after hours of work on tens of
   thousands of files.
 - Images on a network or cloud drive compress much faster: each one is read from the drive only
@@ -41,8 +42,9 @@ Gracil is still being built, but you can already compress videos and images with
 - Stop stops the whole list at once, even on a slow network or cloud drive. Nothing is lost: the
   files not done yet wait on a quiet line with **Continue**, so you can carry on whenever you
   like. Exit no longer keeps you waiting either.
-- Gracil never lets the computer run too hot, and it never has to stop to cool down. With an
-  NVIDIA graphics card it keeps the card at about 70 °C at most: above that it eases off little by
+- Gracil never lets the computer run too hot, and it never has to stop to cool down. It keeps
+  the graphics card at about 70 °C at most, whether it is NVIDIA, Intel or AMD, as long as the
+  card tells Windows its temperature: above that it eases off little by
   little, with pauses too short to notice, until it finds the pace that holds the temperature
   there, instead of slowing down sharply and speeding back up. The work only goes a little
   slower.

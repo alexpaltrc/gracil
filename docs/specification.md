@@ -1069,6 +1069,9 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   in the Microsoft Store, even for free, so it is published on GitHub as a portable zip with
   FFmpeg inside, keeping its data beside itself, with Gracil in File Explorer's classic menu.
   *Built 2026-10-06 (ADR 0050).*
+- **Cooler while in use, and any graphics card.** The tools run in Windows' efficiency mode
+  while the person works or the computer is on battery, and the temperature of Intel and AMD
+  cards is read from their driver and held like an NVIDIA card's. *Built 2026-10-05 (ADR 0051).*
 
 # 78. Temporary UI decisions
 

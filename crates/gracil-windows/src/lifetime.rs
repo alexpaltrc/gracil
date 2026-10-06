@@ -6,20 +6,28 @@
 //! never keep running, or keep a temporary file in use, after Gracil is gone.
 //!
 //! The same job holds Gracil and everything it starts to some of the processor's threads, and
-//! keeps any one of them from taking most of the computer's memory.
+//! keeps any one of them from taking most of the computer's memory. The tools in it can also be
+//! put in Windows' efficiency mode (EcoQoS), as Task Manager does.
 
 use std::io;
 use std::mem;
 use std::ptr;
 use std::sync::OnceLock;
 
+use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_AFFINITY,
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_PROCESS_MEMORY,
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+    JOBOBJECT_BASIC_PROCESS_ID_LIST, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JobObjectBasicProcessIdList, JobObjectExtendedLimitInformation, QueryInformationJobObject,
     SetInformationJobObject,
 };
-use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessAffinityMask};
+use windows_sys::Win32::System::Threading::{
+    GetCurrentProcess, GetCurrentProcessId, GetProcessAffinityMask, OpenProcess,
+    PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+    PROCESS_POWER_THROTTLING_STATE, PROCESS_SET_INFORMATION, ProcessPowerThrottling,
+    SetProcessInformation,
+};
 
 /// The share of the computer's memory any one process in the job may hold. Past it, the process
 /// is refused more memory instead of pushing the whole computer into the swap file.
@@ -78,6 +86,87 @@ pub fn use_processors(count: usize) -> io::Result<()> {
         return Ok(());
     };
     limit(job, Some(last_threads(job.threads, count)))
+}
+
+/// Puts every tool Gracil runs (FFmpeg, jpegli) in Windows' efficiency mode, or lets Windows decide
+/// again: in it, Windows runs them on its efficient cores and at lower clock speeds, cooler and
+/// quieter but slower. Gracil's own process, which draws the window, is left alone. Applies to
+/// the tools running now; call it again for those started later. Does nothing before
+/// [`end_children_with_this_process`].
+pub fn use_efficiency_mode(on: bool) -> io::Result<()> {
+    let Some(job) = JOB.get() else {
+        return Ok(());
+    };
+    // SAFETY: takes no arguments.
+    #[allow(unsafe_code)]
+    let own = unsafe { GetCurrentProcessId() };
+    let state = PROCESS_POWER_THROTTLING_STATE {
+        Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+        ControlMask: if on {
+            PROCESS_POWER_THROTTLING_EXECUTION_SPEED
+        } else {
+            0
+        },
+        StateMask: if on {
+            PROCESS_POWER_THROTTLING_EXECUTION_SPEED
+        } else {
+            0
+        },
+    };
+    for id in processes_in(job)?.into_iter().filter(|&id| id != own) {
+        // SAFETY: asks only for the right to change the process's information; the handle is
+        // checked before use and closed right after.
+        #[allow(unsafe_code)]
+        unsafe {
+            let process = OpenProcess(PROCESS_SET_INFORMATION, 0, id);
+            if process.is_null() {
+                // It has just ended.
+                continue;
+            }
+            SetProcessInformation(
+                process,
+                ProcessPowerThrottling,
+                (&raw const state).cast(),
+                mem::size_of::<PROCESS_POWER_THROTTLING_STATE>() as u32,
+            );
+            CloseHandle(process);
+        }
+    }
+    Ok(())
+}
+
+/// The processes in the job right now, Gracil's own included.
+fn processes_in(job: &Job) -> io::Result<Vec<u32>> {
+    // Room for far more processes than Gracil ever runs at once. `usize` keeps the list aligned;
+    // its two counts fill the first one.
+    const ROOM: usize = 256;
+    let mut list = vec![0_usize; 1 + ROOM];
+    let size = mem::size_of_val(list.as_slice()) as u32;
+    // SAFETY: the job handle is open for the life of the process; the buffer is aligned for the
+    // list, `size` bytes long and outlives the call.
+    #[allow(unsafe_code)]
+    let read = unsafe {
+        QueryInformationJobObject(
+            job.handle as *mut core::ffi::c_void,
+            JobObjectBasicProcessIdList,
+            list.as_mut_ptr().cast(),
+            size,
+            ptr::null_mut(),
+        )
+    };
+    if read == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: Windows filled the header at the start of the aligned buffer.
+    #[allow(unsafe_code)]
+    let listed = unsafe {
+        (*list.as_ptr().cast::<JOBOBJECT_BASIC_PROCESS_ID_LIST>()).NumberOfProcessIdsInList
+    };
+    Ok(list[1..]
+        .iter()
+        .take(listed as usize)
+        .filter_map(|&id| u32::try_from(id).ok())
+        .collect())
 }
 
 /// The last `count` threads of `threads`, a set of processor threads as Windows writes it (one
@@ -157,6 +246,25 @@ mod tests {
         assert_ne!(read, 0);
         assert_eq!(process.count_ones(), 1);
         use_processors(usize::MAX).unwrap();
+    }
+
+    #[test]
+    fn tools_can_be_put_in_efficiency_mode() {
+        end_children_with_this_process().unwrap();
+        let mut child = Command::new("ping")
+            .args(["-n", "5", "127.0.0.1"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        assert!(
+            processes_in(JOB.get().unwrap())
+                .unwrap()
+                .contains(&child.id())
+        );
+        use_efficiency_mode(true).unwrap();
+        use_efficiency_mode(false).unwrap();
+        child.kill().unwrap();
+        child.wait().unwrap();
     }
 
     const AS_PARENT: &str = "GRACIL_TEST_JOB_PARENT";

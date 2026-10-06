@@ -180,6 +180,11 @@ straining.
   always free for you, which also keeps the computer cooler and its fans quieter, even on a
   simple laptop. On top of that, the video encoder and the quality measure each use at most half
   of what Gracil may use.
+- While you are using the computer, and always on battery, the tools Gracil uses run in Windows'
+  efficiency mode, the one Task Manager marks with a green leaf: Windows runs them at the
+  processor's calmest speed, so the computer stays cooler and quieter. When you have left a
+  plugged-in computer alone, Windows lets them go at full speed. Gracil's own window never uses
+  efficiency mode, so it always answers at once.
 - On battery, Gracil also takes on fewer images at once. The work goes slower, and the battery
   lasts longer.
 - While you are using the computer, Gracil takes on fewer images at once. When you have left it
@@ -199,7 +204,7 @@ straining.
   poor cooling:
   - Gracil never stops to let the computer cool down: it keeps it from getting hot in the first
     place, without you noticing.
-  - With an NVIDIA graphics card, Gracil reads its temperature every second and keeps it at
+  - Gracil reads the graphics card's temperature every second and keeps it at
     about 70 °C at most. Below that it works at full speed. Above it, it takes on fewer images at
     once and works a little less of each second, resting the rest of it, in pauses so short that
     nothing on screen seems to stop and the card's temperature stays even rather than going up
@@ -214,8 +219,10 @@ straining.
   - The processor's own temperature can't be read without installing extra software that needs
     full control of the computer, which Gracil never asks for. So for the processor Gracil relies
     on Windows noticing it is held back, and on never using all of it in the first place.
-  - Gracil can't read the temperature of other graphics cards yet, so with them it relies on
-    the rest of this list.
+  - This works with NVIDIA, Intel and AMD cards whose driver tells Windows their temperature,
+    the same one Task Manager shows. Only NVIDIA cards also say when they start slowing
+    themselves down. Most graphics built into the processor don't report a temperature; there
+    Gracil relies on the rest of this list.
 
 ## Each video gets its own amount of compression
 

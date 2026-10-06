@@ -55,3 +55,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0048](0048-see-through-heif-and-avif.md) | See-through HEIF and AVIF keep their transparency; depth and mattes aren't transparency |
 | [0049](0049-limits-windows-enforces.md) | Limits Windows enforces: part of the processor (less while in use and on battery), memory per process, room on the drive |
 | [0050](0050-portable-and-open-source.md) | Portable, free and open source on GitHub, without the Store: a zip with FFmpeg, data beside the program, the classic File Explorer menu |
+| [0051](0051-efficiency-mode-and-any-card-temperature.md) | Windows' efficiency mode for the tools while the computer is in use or on battery; the temperature of Intel and AMD graphics cards from their driver |

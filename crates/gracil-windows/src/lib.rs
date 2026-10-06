@@ -27,7 +27,7 @@ pub use integration::{
     EXPLORER_CLSID, Places, add_to_explorer, explorer_menu, explorer_places, remove_from_explorer,
     start_with_windows,
 };
-pub use lifetime::{end_children_with_this_process, use_processors};
+pub use lifetime::{end_children_with_this_process, use_efficiency_mode, use_processors};
 pub use numbers::{NumberSettings, number_settings};
 pub use process::set_suspended;
 pub use quiet::{
