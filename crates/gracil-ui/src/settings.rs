@@ -1,6 +1,7 @@
-//! Gracil's settings (spec §66, ADR 0025, ADR 0050): whether Gracil is in File Explorer's menu,
-//! whether the mini-window appears when compressing from there, and whether finished videos are
-//! always replaced or always saved as copies instead of asking. They are kept in Gracil's data
+//! Gracil's settings (spec §66, ADR 0025, ADR 0050, ADR 0054): whether Gracil is in File
+//! Explorer's menu, whether it starts with Windows, whether the mini-window appears when
+//! compressing from File Explorer, and whether finished videos are always replaced or always
+//! saved as copies instead of asking. They are kept in Gracil's data
 //! folder (`data\settings.txt` beside `gracil.exe`) as `name=value` lines, so a later setting
 //! only adds a line.
 
@@ -8,17 +9,21 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::place::Wanted;
 use crate::work::Choice;
 
 const FILE: &str = "settings.txt";
 const EXPLORER_MINI_WINDOW: &str = "explorer_mini_window";
 const ALWAYS: &str = "always";
 const EXPLORER_MENU: &str = "explorer_menu";
+const START_WITH_WINDOWS: &str = "start_with_windows";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Settings {
     /// Gracil in File Explorer's menu (ADR 0050). On unless turned off.
     pub explorer_menu: bool,
+    /// Gracil starts with Windows (ADR 0054). On unless turned off.
+    pub start_with_windows: bool,
     /// Show the mini-window when compressing from File Explorer (spec §56). On unless turned off.
     pub explorer_mini_window: bool,
     /// What to do with every finished video without asking (ADR 0025). `None`, the default,
@@ -30,6 +35,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             explorer_menu: true,
+            start_with_windows: true,
             explorer_mini_window: true,
             always: None,
         }
@@ -41,6 +47,14 @@ impl Settings {
     /// never stops Gracil.
     pub fn load() -> Self {
         file().map_or_else(Self::default, |path| Self::read(&path))
+    }
+
+    /// Gracil's place in Windows, as these settings want it.
+    pub fn place(&self) -> Wanted {
+        Wanted {
+            in_explorer: self.explorer_menu,
+            at_sign_in: self.start_with_windows,
+        }
     }
 
     /// Keeps the settings for next time.
@@ -64,6 +78,8 @@ impl Settings {
                 Some((ALWAYS, "ask")) => settings.always = None,
                 Some((EXPLORER_MENU, "on")) => settings.explorer_menu = true,
                 Some((EXPLORER_MENU, "off")) => settings.explorer_menu = false,
+                Some((START_WITH_WINDOWS, "on")) => settings.start_with_windows = true,
+                Some((START_WITH_WINDOWS, "off")) => settings.start_with_windows = false,
                 _ => {}
             }
         }
@@ -83,8 +99,10 @@ impl Settings {
         fs::write(
             path,
             format!(
-                "{EXPLORER_MENU}={}\n{EXPLORER_MINI_WINDOW}={}\n{ALWAYS}={always}\n",
+                "{EXPLORER_MENU}={}\n{START_WITH_WINDOWS}={}\n{EXPLORER_MINI_WINDOW}={}\n\
+                 {ALWAYS}={always}\n",
                 switch(self.explorer_menu),
+                switch(self.start_with_windows),
                 switch(self.explorer_mini_window),
             ),
         )
@@ -114,6 +132,7 @@ mod tests {
         let dir = fresh_dir("default");
         let settings = Settings::read(&dir.join(FILE));
         assert!(settings.explorer_menu);
+        assert!(settings.start_with_windows);
         assert!(settings.explorer_mini_window);
         assert_eq!(settings.always, None);
         fs::remove_dir_all(dir).unwrap();
@@ -126,6 +145,7 @@ mod tests {
         for always in [Some(Choice::Replace), Some(Choice::SaveCopy), None] {
             let saved = Settings {
                 explorer_menu: always.is_some(),
+                start_with_windows: always.is_none(),
                 explorer_mini_window: false,
                 always,
             };

@@ -82,7 +82,7 @@ source within 1% or one second.
   constant-quality mode without a bitrate, so a constant quantizer is searched instead.
 - x265: `-preset medium -x265-params log-level=error -crf <level>`, 10-bit when supported.
 - HEVC is tagged `hvc1` so Apple devices and Windows players accept it.
-- **Size and frame rate** (`standard::Shape`): the picture size is never changed (ADR 0033). An
+- **Size and frame rate** (`standard::output_rate`): the picture size is never changed (ADR 0033). An
   average above 30.5 fps becomes 30, or 30000/1001 for the NTSC family; slower videos are left as
   they are. Filters go per stream (`-filter:<out>`): `fps`, then, on CPU frames only,
   `format=p010le` (any card)/`yuv420p10le`/`yuv420p`. GPU frames need no format filter; `-highbitdepth 1` handles 10-bit.

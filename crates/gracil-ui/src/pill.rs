@@ -48,13 +48,13 @@ pub fn pill<'a, Message: 'a>(
                 }),
             }
         }))
-        .padding([2.0, space::S + 2.0])
+        .padding([4.0, space::S + 2.0])
         .into()
     };
     // The ring's room: as tall as a word, a little narrower.
     let ring: Element<'a, Message> =
         container(Space::new().width(RING + 8.0).height(size::CAPTION * 1.3))
-            .padding([2.0, space::S])
+            .padding([4.0, space::S])
             .into();
     Pill {
         content: row![label(0, ends[0]), ring, label(2, ends[1])].into(),

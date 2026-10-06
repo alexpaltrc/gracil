@@ -18,9 +18,18 @@ const MENU_DLL: &str = "gracil_shell.dll";
 /// Where the copy Explorer loads is kept, inside the data folder.
 const MENU_FOLDER: &str = "shell";
 
-/// Settles Gracil's place in Windows on a thread of its own: Explorer's menu on or off as
-/// `in_explorer` says, and starting with Windows.
-pub fn settle(in_explorer: bool) {
+/// What Gracil's place in Windows should be, as the settings say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Wanted {
+    /// In File Explorer's menu.
+    pub in_explorer: bool,
+    /// Started with Windows at the next sign-in (ADR 0054).
+    pub at_sign_in: bool,
+}
+
+/// Settles Gracil's place in Windows on a thread of its own: Explorer's menu and starting with
+/// Windows, each on or off as `wanted` says.
+pub fn settle(wanted: Wanted) {
     let _ = thread::Builder::new()
         .name("gracil-place".into())
         .spawn(move || {
@@ -28,19 +37,74 @@ pub fn settle(in_explorer: bool) {
                 info!("not a whole Gracil folder; Windows is left as it is");
                 return;
             };
-            if let Err(error) = gracil_windows::start_with_windows(&places.program) {
-                warn!(%error, "Gracil won't start with Windows");
+            let started = if wanted.at_sign_in {
+                gracil_windows::start_with_windows(&places.program)
+            } else {
+                gracil_windows::stop_starting_with_windows()
+            };
+            if let Err(error) = started {
+                warn!(%error, wanted.at_sign_in, "start with Windows not settled");
             }
-            let settled = if in_explorer {
+            let settled = if wanted.in_explorer {
                 add_to_explorer(&places)
             } else {
                 remove_from_explorer(&places)
             };
             match settled {
-                Ok(()) => info!(in_explorer, "File Explorer's menu settled"),
-                Err(error) => warn!(%error, in_explorer, "File Explorer's menu not settled"),
+                Ok(()) => info!(wanted.in_explorer, "File Explorer's menu settled"),
+                Err(error) => warn!(%error, wanted.in_explorer, "File Explorer's menu not settled"),
             }
         });
+}
+
+/// Readies Gracil's folder to be deleted (ADR 0054): takes Gracil out of File Explorer's menu
+/// and out of starting with Windows, so deleting the folder leaves nothing, then shows the
+/// folder in File Explorer, picked. Done before returning, since Gracil exits right after.
+pub fn prepare_to_delete() {
+    let Some(places) = whole_folder() else {
+        return;
+    };
+    if let Err(error) = gracil_windows::stop_starting_with_windows() {
+        warn!(%error, "start with Windows not removed");
+    }
+    match remove_from_explorer(&places) {
+        Ok(()) => info!("Gracil taken out of Windows"),
+        Err(error) => warn!(%error, "File Explorer's menu not removed"),
+    }
+    release_menu_copies(&places.data.join(MENU_FOLDER));
+    if let Some(folder) = places.program.parent() {
+        use std::os::windows::process::CommandExt;
+        let shown = std::process::Command::new("explorer.exe")
+            .raw_arg(format!("/select,\"{}\"", folder.display()))
+            .spawn();
+        if let Err(error) = shown {
+            warn!(%error, "Gracil's folder not shown");
+        }
+    }
+}
+
+/// Clears the menu's DLL copies out of the data folder. A copy Explorer still has loaded cannot
+/// be deleted, but it can be moved: it goes to the temporary folder, so it never stops the
+/// folder from being deleted, and Windows clears it from there.
+fn release_menu_copies(copies: &Path) {
+    let Ok(entries) = fs::read_dir(copies) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if fs::remove_file(&path).is_ok() {
+            continue;
+        }
+        let parked = std::env::temp_dir().join(format!(
+            "gracil-shell-{:x}-{}",
+            std::process::id(),
+            entry.file_name().to_string_lossy()
+        ));
+        if let Err(error) = fs::rename(&path, &parked) {
+            warn!(%error, "a copy of the menu stays in the data folder");
+        }
+    }
+    let _ = fs::remove_dir(copies);
 }
 
 /// This Gracil's program and data folder, when it runs from a whole Gracil folder.

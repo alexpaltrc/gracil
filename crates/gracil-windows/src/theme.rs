@@ -6,6 +6,8 @@ use windows_sys::Win32::System::Registry::{
     HKEY_CURRENT_USER, RRF_RT_REG_BINARY, RRF_RT_REG_DWORD, RegGetValueW,
 };
 
+use crate::wide;
+
 /// Whether apps should be light, as chosen in Windows' settings, or `None` if it can't be read.
 /// Known before any window exists, so a first window opens in the right colors.
 pub fn light_apps() -> Option<bool> {
@@ -78,8 +80,4 @@ fn personalize(name: &str) -> Option<bool> {
         )
     };
     (status == 0).then_some(data != 0)
-}
-
-fn wide(text: &str) -> Vec<u16> {
-    text.encode_utf16().chain(Some(0)).collect()
 }

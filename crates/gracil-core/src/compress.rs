@@ -58,8 +58,6 @@ impl Engine {
 pub struct Update {
     /// `0.0..=1.0`, or `None` when the source length is unknown.
     pub fraction: Option<f64>,
-    /// Encoding speed relative to real time.
-    pub speed: Option<f64>,
 }
 
 #[derive(Debug)]
@@ -123,7 +121,6 @@ pub fn prepare(
     // Shown as "getting ready" until the compressing reports progress; Stop works throughout.
     on_update(Update {
         fraction: fraction(Duration::ZERO, info.duration),
-        speed: None,
     });
     let capabilities = engine.capabilities;
     let found = match plan::attempts(capabilities).first() {
@@ -182,13 +179,11 @@ fn run_attempts(
         info!(?attempt, level = plan.level, dropped = ?plan.dropped, "encoding");
         on_update(Update {
             fraction: fraction(Duration::ZERO, info.duration),
-            speed: None,
         });
 
         let outcome = encode::run(&engine.toolchain, &plan, control, &mut |progress| {
             on_update(Update {
                 fraction: fraction(progress.position, info.duration),
-                speed: progress.speed,
             });
         });
 

@@ -57,4 +57,6 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0050](0050-portable-and-open-source.md) | Portable, free and open source on GitHub, without the Store: a zip with FFmpeg, data beside the program, the classic File Explorer menu |
 | [0051](0051-efficiency-mode-and-any-card-temperature.md) | Windows' efficiency mode for the tools while the computer is in use or on battery; the temperature of Intel and AMD graphics cards from their driver |
 | [0052](0052-intel-and-amd-encoders.md) | Compressing on Intel (Quick Sync) and AMD graphics, after NVIDIA and before the processor, with tiers and test encodes as for NVENC |
-| [0053](0053-ready-for-github.md) | Ready for GitHub: no FFmpeg download, nothing left from the Store, `-Install` keeps the daily Gracil in one place |
+| [0053](0053-ready-for-github.md) | Ready for GitHub: no FFmpeg download, nothing left from the Store, `-Copy` keeps the daily Gracil in one place |
+| [0054](0054-wholly-portable.md) | Wholly portable: data only in Gracil's folder, a start with Windows that forgets itself, **Prepare to delete Gracil**, GPL-3.0-or-later with every library's license |
+| [0055](0055-natural-first-use.md) | Natural from the first use: folders can be dropped, an empty window with only where to drop, an honest done screen, a breathing "getting ready", Exit that counts every loss, a few keys |

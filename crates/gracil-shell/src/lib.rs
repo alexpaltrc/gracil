@@ -4,11 +4,15 @@
 //! shell. It does as little as it can: it reads the names of the selected files, counts the ones
 //! that look like videos or images and notes the folders, shows **Gracil (N)** with its commands
 //! (worded after the **Always** setting, ADR 0035), and on a click hands them to `gracil.exe` and
-//! returns. Gracil itself looks through folders. It never opens a file, never waits for Gracil, and holds no
-//! product logic.
+//! returns. Gracil itself looks through folders. It never opens a file, never waits for Gracil,
+//! and holds no product logic.
 //!
 //! This is one of the crates allowed to use `unsafe`, only to talk to Windows; each use says why it
 //! is sound.
+
+// MSVC's linker notes (LNK4104) that COM's `DllGetClassObject` and `DllCanUnloadNow` "should be
+// PRIVATE", which only keeps them out of the import library; nothing links against this DLL.
+#![allow(linker_messages)]
 
 mod selection;
 

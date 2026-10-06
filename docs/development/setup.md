@@ -19,7 +19,9 @@ Every commit must pass `scripts/check.ps1`.
 
 ## Running the app
 
-`cargo run -p gracil-ui` opens Gracil. It never opens a console window, even in development builds,
+`cargo run -p gracil-ui` opens Gracil. To compress, it needs the pinned FFmpeg build on `PATH`
+([FFmpeg](ffmpeg.md)); images also need `cjpegli.exe`, built once with `scripts/build-jpegli.ps1`.
+It never opens a console window, even in development builds,
 so what you test is what users see. Logs and crashes go to the `data\logs` folder beside the
 build, such as `target\debug\data\logs` (ADR 0050). A build in `target` keeps its own settings
 there and never touches File Explorer's menu or the start with Windows.

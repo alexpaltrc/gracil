@@ -44,8 +44,8 @@ impl JobControl {
         self.lock().cancelled
     }
 
-    /// Freezes the running FFmpeg where it is (spec §47). Nothing is lost; [`Self::resume`] carries
-    /// on from the same frame.
+    /// Freezes the running FFmpeg where it is (spec §47). Nothing is lost;
+    /// [`Self::resume`] carries on from the same frame.
     pub fn pause(&self, suspend: Suspend) -> io::Result<()> {
         let mut slot = self.lock();
         if slot.cancelled || slot.paused.is_some() {

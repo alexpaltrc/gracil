@@ -3,7 +3,7 @@
 **Status:** Accepted. Decided by the product owner (2026-10-03). Settles the "pending" note in
 `docs/development/versioning.md`.
 
-**Changed** by [ADR 0050](0050-portable-and-open-source.md) (2026-10-06): 1.0 is the first public
+**Changed** by [ADR 0050](0050-portable-and-open-source.md) (2026-10-05): 1.0 is the first public
 release on GitHub.
 
 **Context.** Before the first release the product owner wanted to consider a different-looking

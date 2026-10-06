@@ -197,7 +197,6 @@ pub fn compress_prepared(
     let report = |on_update: &mut dyn FnMut(Update), fraction: f64| {
         on_update(Update {
             fraction: Some(fraction),
-            speed: None,
         });
     };
     report(on_update, 0.0);
@@ -762,10 +761,11 @@ struct Scratch {
 impl Scratch {
     fn file(&mut self, name: &str) -> io::Result<PathBuf> {
         static COUNTER: AtomicU32 = AtomicU32::new(0);
-        let dir = std::env::temp_dir().join("Gracil");
-        fs::create_dir_all(&dir)?;
         let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let path = dir.join(format!("image-{:x}-{id:x}-{name}", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "gracil-image-{:x}-{id:x}-{name}",
+            std::process::id()
+        ));
         leftovers::record_temp(&path);
         self.files.push(path.clone());
         Ok(path)

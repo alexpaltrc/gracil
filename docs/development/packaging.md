@@ -19,7 +19,7 @@ This makes a release build and lays out `target\portable\Gracil`, then zips it a
 | `gracil_shell.dll` | File Explorer's menu ([ADR 0022](../decisions/0022-explorer-command.md)) |
 | `cjpegli.exe` | jpegli, which compresses every photo ([ADR 0034](../decisions/0034-image-standard.md)) |
 | `ffmpeg\` | `ffmpeg.exe` and `ffprobe.exe`, the pinned build ([FFmpeg](ffmpeg.md)) |
-| `licenses\` | FFmpeg's license and where its source is, the licenses of jpegli and the libraries built into it, and Gracil's own |
+| `licenses\` | Gracil's own license (GPL-3.0-or-later), FFmpeg's and where its source is, the licenses of jpegli and the libraries built into it, and those of the Rust libraries built into Gracil |
 
 FFmpeg is the build pinned in `packaging/ffmpeg.psd1`. Without `-FFmpeg <folder>`, the script uses
 the first folder on `PATH` whose `ffmpeg.exe` and `ffprobe.exe` have the pinned hashes. When
@@ -28,33 +28,40 @@ git and Visual Studio Build Tools with the C++ workload, CMake and Ninja.
 
 Nothing is signed, so Windows' SmartScreen may warn the first time the zip's Gracil is opened.
 
-## The Gracil in daily use
+## Maintainer's daily copy
 
-The Gracil used every day, also while developing, lives in `%LOCALAPPDATA%\Programs\Gracil`. Start
-it from its `gracil.exe` there (pinned to Start or the taskbar). To update it with the current
-code:
+The Gracil used every day, also while developing, lives in `Documents\Gracil`. Start it from its
+`gracil.exe` there (pinned to Start or the taskbar). To update it with the current code:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/portable.ps1 -Install
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/portable.ps1 -Copy
 ```
 
 This closes the Gracil running from that folder, with its helpers, and copies the new files over,
 keeping its `data` folder, so settings and unfinished lists stay. Then start `gracil.exe` again.
-`-InstallTo <folder>` puts it somewhere else. A development build run from `target` keeps its own
+`-CopyTo <folder>` puts it somewhere else. A development build run from `target` keeps its own
 `data` folder there and never touches the daily one's. On every start, a whole Gracil folder (with
 FFmpeg and the DLL beside the program) registers File Explorer's menu for the current user and
-starts with Windows; a development build in `target` leaves both as they are. On Windows 11 the
-menu is under **Show more options**. If File Explorer still shows an old menu, restart it (Task
-Manager → Windows Explorer → Restart).
+its start at the next sign-in (`RunOnce`); a development build in `target` leaves both as they
+are. On Windows 11 the menu is under **Show more options**. If File Explorer still shows an old
+menu, restart it (Task Manager → Windows Explorer → Restart).
 
-To remove Gracil, turn off **Show Gracil in File Explorer's menu** in its tray menu, exit, and
-delete the folder. Its start with Windows can be turned off in Settings → Apps → Startup.
+To remove Gracil, choose **Prepare to delete Gracil** in its tray menu and delete the folder it
+shows (ADR 0054).
 
 ## Where Gracil keeps its data
 
-In `data\` beside `gracil.exe`: `settings.txt`, `logs\`, `unfinished.txt`, `temporary\` and
-`shell\` (the copy of the menu's DLL that File Explorer loads). If that folder can't be written,
-`%LOCALAPPDATA%\Gracil` is used instead.
+In `data\` beside `gracil.exe`, and nowhere else: `settings.txt`, `logs\`, `unfinished.txt`,
+`temporary\` and `shell\` (the copy of the menu's DLL that File Explorer loads). If that folder
+can't be written, Gracil runs without saving anything. Images being compressed pass through
+short-lived `gracil-image-…` files in Windows' temporary folder.
+
+## Licenses
+
+`licenses\` in the zip holds Gracil's license (`LICENSE`, GPL-3.0-or-later), FFmpeg's with where
+its source is, jpegli's and its libraries', and `rust-libraries.txt`, written by
+`scripts/licenses.ps1` from `cargo metadata` with the license files of every Rust library built
+into `gracil.exe` and `gracil_shell.dll`.
 
 ## Versions
 

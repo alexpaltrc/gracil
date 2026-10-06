@@ -26,10 +26,11 @@ never to use it.
    package that was planned.
 3. **`docs/design/` is gone.** The icon's artwork stays in `assets/icons/`, drawn by
    `scripts/icons.ps1`; the retired palette and its presentation live on in Git's history only.
-4. **One Gracil in daily use.** `scripts/portable.ps1 -Install` builds the zip and copies it to
-   `%LOCALAPPDATA%\Programs\Gracil`, closing that Gracil first and keeping its `data` folder.
+4. **One Gracil in daily use.** `scripts/portable.ps1 -Copy` builds the zip and copies it to
+   `Documents\Gracil` (first `%LOCALAPPDATA%\Programs\Gracil`, until
+   [ADR 0054](0054-wholly-portable.md)), closing that Gracil first and keeping its `data` folder.
    That copy is the one the product owner runs every day, also while Gracil is being developed;
-   `-InstallTo <folder>` puts it elsewhere. Development builds in `target` keep their own data.
+   `-CopyTo <folder>` puts it elsewhere. Development builds in `target` keep their own data.
 5. **Whole-program optimization.** Release builds link with full LTO instead of thin: measured,
    `gracil.exe` goes from 13.8 MB to 13.3 MB, and the code can only get as fast or faster; only
    the release build takes longer. `panic = "abort"` was not taken: a panic in a worker thread

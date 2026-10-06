@@ -16,7 +16,7 @@ use gracil_windows::{Tray, TrayEvent, TrayMenu, TrayState};
 use iced::theme::{Mode, Palette};
 use iced::window::settings::PlatformSpecific;
 use iced::window::settings::platform::CornerPreference;
-use iced::{Event, Size, Subscription, Task, Theme, event, system, window};
+use iced::{Event, Size, Subscription, Task, Theme, event, keyboard, system, window};
 use tracing::{info, warn};
 
 use crate::logging;
@@ -93,8 +93,14 @@ pub struct Gracil {
     tray_shown: Option<(TrayState, String)>,
     /// Exit was chosen while work was in progress; the window asks before stopping it (§54.1).
     pub confirming_exit: bool,
-    /// Something went wrong while no window was open; the tray icon says so until one opens.
-    unseen_problem: bool,
+    /// Prepare to delete Gracil was chosen: on leaving, Gracil takes itself out of Windows and
+    /// shows its folder (ADR 0054). Keep working cancels it.
+    pub preparing_to_delete: bool,
+    /// Something went wrong while no window was open, with the file it happened to; the tray icon
+    /// says so until a window opens.
+    unseen_problem: Option<JobId>,
+    /// The file that went wrong unseen, which the mini-window shows first while it is open.
+    problem_in_mini: Option<JobId>,
     /// The mini-window next to the tray icon, while it is open (spec §55).
     mini: Option<window::Id>,
     /// Windows just shown but still out of sight, until they have drawn themselves, so they never
@@ -266,7 +272,22 @@ pub enum Message {
     ContinueUnfinished,
     /// Let the files left unfinished last time go.
     LetGoUnfinished,
+    /// A key that means something to Gracil was pressed in one of its windows.
+    Key(window::Id, Key),
+    /// The finished view's count of files that couldn't be compressed: the first of them is shown.
+    ShowProblem,
     Outside(Outside),
+}
+
+/// The few keys Gracil answers (ADR 0055): what the pointer can do, a little faster.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Key {
+    /// Esc: steps back, from a question, the mini-window, a picked file or the open list.
+    Back,
+    /// Space: pauses or resumes the work.
+    PauseResume,
+    /// Ctrl+O: chooses files to add.
+    ChooseFiles,
 }
 
 impl Gracil {
@@ -275,11 +296,13 @@ impl Gracil {
     pub fn boot() -> (Self, Task<Message>) {
         let text = Text::get(Language::detect());
         let settings = Settings::load();
-        place::settle(settings.explorer_menu);
+        place::settle(settings.place());
         let menu = TrayMenu {
             open: text.open_gracil.to_owned(),
             explorer_menu: text.explorer_menu.to_owned(),
             explorer_mini_window: text.explorer_mini_window.to_owned(),
+            start_with_windows: text.start_with_windows.to_owned(),
+            prepare_to_delete: text.prepare_to_delete.to_owned(),
             exit: text.exit.to_owned(),
         };
         let tray = Tray::start(menu, &text.tray_tip(TrayState::Idle), |event| {
@@ -290,6 +313,7 @@ impl Gracil {
         if let Some(tray) = &tray {
             tray.check_explorer_mini_window(settings.explorer_mini_window);
             tray.check_explorer_menu(settings.explorer_menu);
+            tray.check_start_with_windows(settings.start_with_windows);
         }
         // Read from Windows itself: Iced only learns the theme once a window exists, so its first
         // answer would come too late and the first window would fade from light (ADR 0015).
@@ -331,7 +355,9 @@ impl Gracil {
             tray,
             tray_shown: None,
             confirming_exit: false,
-            unseen_problem: false,
+            preparing_to_delete: false,
+            unseen_problem: None,
+            problem_in_mini: None,
             mini: None,
             revealing: HashMap::new(),
             settings,
@@ -358,7 +384,7 @@ impl Gracil {
 
     pub fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
-            event::listen_with(|event, _status, window| match event {
+            event::listen_with(|event, status, window| match event {
                 Event::Window(window::Event::FileHovered(_)) => Some(Message::FilesHovered(window)),
                 Event::Window(window::Event::FilesHoveredLeft) => {
                     Some(Message::FilesHoveredLeft(window))
@@ -368,6 +394,12 @@ impl Gracil {
                     Some(Message::CloseRequested(window))
                 }
                 Event::Window(window::Event::Rescaled(_)) => Some(Message::Rescaled(window)),
+                // Only keys no widget took.
+                Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
+                    if status == event::Status::Ignored =>
+                {
+                    key_for(&key, modifiers).map(|key| Message::Key(window, key))
+                }
                 _ => None,
             }),
             system::theme_changes().map(Message::ThemeChanged),
@@ -410,7 +442,7 @@ impl Gracil {
         self.keep_unfinished();
         // The work finished while Exit was being asked about: nothing is left to stop, so the
         // question goes away.
-        if self.confirming_exit && self.running.is_empty() && self.waiting_to_compress() == 0 {
+        if self.confirming_exit && self.nothing_to_lose() {
             self.confirming_exit = false;
         }
         if self.exiting && self.settled() {
@@ -439,7 +471,7 @@ impl Gracil {
             Some(_) if self.paused => TrayState::Paused,
             // Steps of 1/40 are plenty for a ring 16 pixels wide.
             Some(done) => TrayState::Processing((done * 40.0).floor() / 40.0),
-            None if self.unseen_problem => TrayState::Error,
+            None if self.unseen_problem.is_some() => TrayState::Error,
             None => TrayState::Idle,
         };
         // The tip shows whole percentages, so it follows the work more finely than the picture.
@@ -477,7 +509,27 @@ impl Gracil {
             }
             Message::FileDropped(path) => {
                 self.hovering = None;
-                self.add(vec![path])
+                // A folder brings in the videos and images inside it, as from File Explorer
+                // (ADR 0055).
+                if path.is_dir() {
+                    let stops = self.stops;
+                    self.gathering += 1;
+                    work::gather(vec![path], None)
+                        .map(move |found| Message::Found(stops, None, found))
+                } else {
+                    self.add(vec![path])
+                }
+            }
+            Message::Key(window, key) => self.on_key(window, key),
+            Message::ShowProblem => {
+                self.selected = self
+                    .queue
+                    .jobs()
+                    .iter()
+                    .find(|job| self.is_fault(job.id))
+                    .map(|job| job.id);
+                self.drawer_open = true;
+                Task::none()
             }
             Message::ChooseFiles => Task::perform(choose_files(self.text), Message::FilesChosen),
             Message::FilesChosen(paths) => self.add(paths),
@@ -497,9 +549,7 @@ impl Gracil {
             Message::Choose(id, choice) => self.choose(id, choice),
             Message::Always(always) => {
                 self.settings.always = always;
-                if let Err(error) = self.settings.save() {
-                    warn!(%error, "could not save the settings");
-                }
+                self.save_settings();
                 Task::none()
             }
             Message::ChooseAll(choice) => {
@@ -508,7 +558,7 @@ impl Gracil {
                     .jobs()
                     .iter()
                     .map(|job| job.id)
-                    .filter(|id| self.outcomes.get(id).is_some_and(Outcome::is_waiting))
+                    .filter(|&id| self.is_waiting(id))
                     .collect();
                 Task::batch(waiting.into_iter().map(|id| self.choose(id, choice)))
             }
@@ -567,31 +617,14 @@ impl Gracil {
                 Task::none()
             }
             Message::MainReady(id, handle) => {
-                if let Err(error) = gracil_windows::set_window_icon(handle) {
-                    warn!("could not set the window icon: {error}");
-                }
+                give_icon(handle);
                 self.reveal(id, handle)
             }
             Message::WindowReady(handle) => {
-                if let Err(error) = gracil_windows::set_window_icon(handle) {
-                    warn!("could not set the window icon: {error}");
-                }
+                give_icon(handle);
                 Task::none()
             }
-            Message::Frame(id) => {
-                let Some((_, frames, _)) = self.revealing.get_mut(&id) else {
-                    return Task::none();
-                };
-                *frames += 1;
-                match *frames {
-                    1 => after(SETTLE_AFTER_FIRST_FRAME, Message::Drawn(id)),
-                    FRAMES_BEFORE_REVEAL.. => {
-                        self.bring_into_view(id);
-                        Task::none()
-                    }
-                    _ => Task::none(),
-                }
-            }
+            Message::Frame(id) => self.on_frame(id),
             Message::Drawn(id) => {
                 self.bring_into_view(id);
                 Task::none()
@@ -616,6 +649,7 @@ impl Gracil {
                 if self.main == Some(id) {
                     self.main = None;
                     self.confirming_exit = false;
+                    self.preparing_to_delete = false;
                 }
                 self.revealing.remove(&id);
                 dismiss(id)
@@ -626,6 +660,7 @@ impl Gracil {
             }
             Message::KeepWorking => {
                 self.confirming_exit = false;
+                self.preparing_to_delete = false;
                 Task::none()
             }
             Message::OpenMain => self.show_main(),
@@ -653,25 +688,20 @@ impl Gracil {
             },
             Message::Outside(Outside::Tray(TrayEvent::Open)) => self.show_main(),
             Message::Outside(Outside::Tray(TrayEvent::ExplorerMenu)) => {
-                self.settings.explorer_menu = !self.settings.explorer_menu;
-                if let Some(tray) = &self.tray {
-                    tray.check_explorer_menu(self.settings.explorer_menu);
-                }
-                if let Err(error) = self.settings.save() {
-                    warn!(%error, "could not save the settings");
-                }
-                place::settle(self.settings.explorer_menu);
+                self.toggle_explorer_menu();
                 Task::none()
             }
             Message::Outside(Outside::Tray(TrayEvent::ExplorerMiniWindow)) => {
-                self.settings.explorer_mini_window = !self.settings.explorer_mini_window;
-                if let Some(tray) = &self.tray {
-                    tray.check_explorer_mini_window(self.settings.explorer_mini_window);
-                }
-                if let Err(error) = self.settings.save() {
-                    warn!(%error, "could not save the settings");
-                }
+                self.toggle_explorer_mini_window();
                 Task::none()
+            }
+            Message::Outside(Outside::Tray(TrayEvent::StartWithWindows)) => {
+                self.toggle_start_with_windows();
+                Task::none()
+            }
+            Message::Outside(Outside::Tray(TrayEvent::PrepareToDelete)) => {
+                self.preparing_to_delete = true;
+                self.ask_to_exit()
             }
             Message::Outside(Outside::Tray(TrayEvent::Exit)) => self.ask_to_exit(),
             Message::Outside(Outside::Tray(TrayEvent::Colors)) => {
@@ -681,11 +711,62 @@ impl Gracil {
         }
     }
 
+    /// Counts a drawn frame of a window waiting out of sight, and shows it once it has drawn
+    /// enough.
+    fn on_frame(&mut self, id: window::Id) -> Task<Message> {
+        let Some((_, frames, _)) = self.revealing.get_mut(&id) else {
+            return Task::none();
+        };
+        *frames += 1;
+        match *frames {
+            1 => after(SETTLE_AFTER_FIRST_FRAME, Message::Drawn(id)),
+            FRAMES_BEFORE_REVEAL.. => {
+                self.bring_into_view(id);
+                Task::none()
+            }
+            _ => Task::none(),
+        }
+    }
+
+    fn toggle_explorer_menu(&mut self) {
+        self.settings.explorer_menu = !self.settings.explorer_menu;
+        if let Some(tray) = &self.tray {
+            tray.check_explorer_menu(self.settings.explorer_menu);
+        }
+        self.save_settings();
+        place::settle(self.settings.place());
+    }
+
+    fn toggle_start_with_windows(&mut self) {
+        self.settings.start_with_windows = !self.settings.start_with_windows;
+        if let Some(tray) = &self.tray {
+            tray.check_start_with_windows(self.settings.start_with_windows);
+        }
+        self.save_settings();
+        place::settle(self.settings.place());
+    }
+
+    fn toggle_explorer_mini_window(&mut self) {
+        self.settings.explorer_mini_window = !self.settings.explorer_mini_window;
+        if let Some(tray) = &self.tray {
+            tray.check_explorer_mini_window(self.settings.explorer_mini_window);
+        }
+        self.save_settings();
+    }
+
+    fn save_settings(&self) {
+        if let Err(error) = self.settings.save() {
+            warn!(%error, "could not save the settings");
+        }
+    }
+
     /// Opens the mini-window next to the tray icon (spec §55). It opens hidden, is put in place,
     /// and only then shown, so it never appears somewhere else first.
     fn open_mini(&mut self) -> Task<Message> {
-        // What it shows includes whatever went wrong.
-        self.unseen_problem = false;
+        // It opens on whatever went wrong.
+        if let Some(id) = self.unseen_problem.take() {
+            self.problem_in_mini = Some(id);
+        }
         if let Some(id) = self.mini {
             return window::gain_focus(id);
         }
@@ -710,6 +791,7 @@ impl Gracil {
     }
 
     fn close_mini(&mut self) -> Task<Message> {
+        self.problem_in_mini = None;
         match self.mini.take() {
             Some(id) => {
                 self.revealing.remove(&id);
@@ -733,12 +815,61 @@ impl Gracil {
     /// Exit (spec §54.1): straight away when nothing is in progress; otherwise the window opens
     /// and says what would stop.
     fn ask_to_exit(&mut self) -> Task<Message> {
-        if self.running.is_empty() && self.waiting_to_compress() == 0 {
+        if self.nothing_to_lose() {
             self.exit_now();
             return Task::none();
         }
         self.confirming_exit = true;
         self.show_main()
+    }
+
+    /// Whether leaving now loses nothing: no file is being worked on or waiting its turn, and no
+    /// result waits for a choice (each would be let go, to be made again next time).
+    fn nothing_to_lose(&self) -> bool {
+        self.running.is_empty() && self.waiting_to_compress() == 0 && self.waiting_count() == 0
+    }
+
+    /// Answers a key (ADR 0055).
+    fn on_key(&mut self, window: window::Id, key: Key) -> Task<Message> {
+        let in_mini = self.is_mini(window);
+        match key {
+            Key::Back if self.confirming_exit && !in_mini => {
+                self.confirming_exit = false;
+                self.preparing_to_delete = false;
+                Task::none()
+            }
+            Key::Back if in_mini => self.close_mini(),
+            Key::Back => {
+                if self.selected.is_some() {
+                    self.selected = None;
+                } else {
+                    self.drawer_open = false;
+                }
+                Task::none()
+            }
+            Key::PauseResume if self.confirming_exit => Task::none(),
+            Key::PauseResume if self.paused => {
+                self.pause(false);
+                self.schedule()
+            }
+            Key::PauseResume => {
+                if !self.running.is_empty() {
+                    self.pause(true);
+                }
+                Task::none()
+            }
+            Key::ChooseFiles if self.confirming_exit => Task::none(),
+            Key::ChooseFiles => Task::perform(choose_files(self.text), Message::FilesChosen),
+        }
+    }
+
+    /// Whether `id` failed for a reason worth explaining: not merely already small.
+    fn is_fault(&self, id: JobId) -> bool {
+        matches!(
+            self.outcomes.get(&id),
+            Some(Outcome::Failed(failure))
+                if !matches!(failure, Failure::NotSmaller | Failure::AsSmallAsItGets)
+        )
     }
 
     /// The files not finished yet, to carry on with if Gracil closes now (ADR 0042): those still
@@ -1035,7 +1166,7 @@ impl Gracil {
                 .collect();
             for id in ids {
                 self.intents.insert(id, choice);
-                if self.outcomes.get(&id).is_some_and(Outcome::is_waiting) {
+                if self.is_waiting(id) {
                     tasks.push(self.choose(id, choice));
                 }
             }
@@ -1046,7 +1177,7 @@ impl Gracil {
     /// Opens the main window, or brings it forward if it is open already.
     fn show_main(&mut self) -> Task<Message> {
         // Whatever went wrong is in plain view now.
-        self.unseen_problem = false;
+        self.unseen_problem = None;
         if let Some(id) = self.main {
             return Task::batch([window::minimize(id, false), window::gain_focus(id)]);
         }
@@ -1112,6 +1243,9 @@ impl Gracil {
         }
         if let Some(tray) = &self.tray {
             tray.remove();
+        }
+        if self.preparing_to_delete {
+            place::prepare_to_delete();
         }
         let unchosen: Vec<PathBuf> = self
             .outcomes
@@ -1187,11 +1321,8 @@ impl Gracil {
     /// working on it or it waits for a choice (spec §32.1).
     pub fn way_back(&self) -> Option<&Job> {
         let picked = self.selected?;
-        self.current().filter(|job| {
-            job.id != picked
-                && (job.state.is_active()
-                    || self.outcomes.get(&job.id).is_some_and(Outcome::is_waiting))
-        })
+        self.current()
+            .filter(|job| job.id != picked && (job.state.is_active() || self.is_waiting(job.id)))
     }
 
     /// Every file in the list that came out smaller, added together, and how many there are.
@@ -1209,7 +1340,8 @@ impl Gracil {
     /// What the mini-window shows: the video being compressed, else the first result waiting for
     /// a choice, else what the big window shows.
     pub fn mini_job(&self) -> Option<&Job> {
-        self.working()
+        self.job(self.problem_in_mini)
+            .or_else(|| self.working())
             .or_else(|| self.job(self.summary.first_waiting_for_choice))
             .or_else(|| self.focused())
     }
@@ -1221,6 +1353,11 @@ impl Gracil {
 
     pub fn waiting_count(&self) -> usize {
         self.summary.waiting_for_choice
+    }
+
+    /// Whether the result of `id` is waiting for a choice.
+    pub fn is_waiting(&self, id: JobId) -> bool {
+        self.outcomes.get(&id).is_some_and(Outcome::is_waiting)
     }
 
     /// Whether a video can leave the list now: it is not running and not being put in place.
@@ -1310,7 +1447,7 @@ impl Gracil {
             Err(failure) => {
                 *placing = false;
                 *problem = Some(failure);
-                self.note_problem();
+                self.note_problem(id);
             }
         }
     }
@@ -1335,9 +1472,9 @@ impl Gracil {
     }
 
     /// Marks a problem the user hasn't seen, when no window is open.
-    fn note_problem(&mut self) {
+    fn note_problem(&mut self, id: JobId) {
         if self.main.is_none() && self.mini.is_none() {
-            self.unseen_problem = true;
+            self.unseen_problem = Some(id);
         }
     }
 
@@ -1474,7 +1611,7 @@ impl Gracil {
                         if !matches!(failure, Failure::NotSmaller | Failure::AsSmallAsItGets)
                 );
                 if fault {
-                    self.note_problem();
+                    self.note_problem(id);
                 }
                 self.outcomes.insert(id, outcome);
                 self.running.remove(&id);
@@ -1589,6 +1726,17 @@ impl Gracil {
     }
 }
 
+/// The key Gracil answers to `key` with `modifiers`, if any.
+fn key_for(key: &keyboard::Key, modifiers: keyboard::Modifiers) -> Option<Key> {
+    use keyboard::key::Named;
+    match key.as_ref() {
+        keyboard::Key::Named(Named::Escape) => Some(Key::Back),
+        keyboard::Key::Named(Named::Space) if modifiers.is_empty() => Some(Key::PauseResume),
+        keyboard::Key::Character("o" | "O") if modifiers.command() => Some(Key::ChooseFiles),
+        _ => None,
+    }
+}
+
 /// Folders and anything else that is not a file are ignored; images are known by their name, and
 /// FFprobe later decides what is video.
 fn files(paths: impl IntoIterator<Item = PathBuf>) -> impl Iterator<Item = PathBuf> {
@@ -1618,6 +1766,13 @@ async fn choose_files(text: &'static Text) -> Vec<PathBuf> {
 /// Slow at both ends, so the change of theme settles in rather than snapping.
 fn ease_in_out(t: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
+}
+
+/// Gives the window Gracil's icon; a window without it still works.
+fn give_icon(handle: u64) {
+    if let Err(error) = gracil_windows::set_window_icon(handle) {
+        warn!("could not set the window icon: {error}");
+    }
 }
 
 /// Delivers `message` after `delay`, waited out on a thread of its own so none of Iced's workers

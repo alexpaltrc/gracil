@@ -25,9 +25,9 @@ use tracing::{info, warn};
 use crate::capabilities::{Capabilities, VideoEncoder};
 use crate::encode::{self, EncodeOutcome, JobControl};
 use crate::plan::{self, Attempt, EncodePlan, StreamAction};
-use crate::probe::{MediaInfo, file_url};
+use crate::probe::{MediaInfo, Rate, file_url};
 use crate::share;
-use crate::standard::{self, Shape};
+use crate::standard;
 use crate::toolchain::Toolchain;
 
 /// Length of one sample.
@@ -76,7 +76,7 @@ pub fn find_level(
     control: &JobControl,
 ) -> Found {
     let encoder = plan.attempt.encoder;
-    let Some((index, shape)) = plan.main_video() else {
+    let Some((index, rate)) = plan.main_video() else {
         return Found::Fallback;
     };
     let shortest = match encoder {
@@ -94,7 +94,7 @@ pub fn find_level(
         toolchain,
         input: &plan.input,
         stream: index,
-        shape,
+        rate,
         attempt: plan.attempt,
         capabilities: &plan.capabilities,
         starts: sample_starts(duration),
@@ -142,17 +142,8 @@ fn choose(search: &mut Search, sizes: Option<Sizes>) -> Result<Found, Halt> {
         info!(level, "chose a quality level");
         return Ok(Found::Level { encoder, level });
     };
-    if let Some(level) = chosen {
-        let predicted = sizes.predicted(&search.measure(level)?);
-        if sizes.worth_it(predicted) {
-            info!(
-                level,
-                ?predicted,
-                original = sizes.original,
-                "chose a quality level"
-            );
-            return Ok(Found::Level { encoder, level });
-        }
+    if let Some(found) = if_worth_it(search, sizes, chosen, "chose a quality level")? {
+        return Ok(found);
     }
     info!(
         original = sizes.original,
@@ -166,20 +157,30 @@ fn choose(search: &mut Search, sizes: Option<Sizes>) -> Result<Found, Halt> {
         None,
         &never,
     )?;
-    if let Some(level) = again {
-        let predicted = sizes.predicted(&search.measure(level)?);
-        if sizes.worth_it(predicted) {
-            info!(
-                level,
-                ?predicted,
-                original = sizes.original,
-                "chose a level for compressing again"
-            );
-            return Ok(Found::Level { encoder, level });
-        }
+    if let Some(found) = if_worth_it(search, sizes, again, "chose a level for compressing again")? {
+        return Ok(found);
     }
     info!(original = sizes.original, "already as small as it gets");
     Ok(Found::AsSmallAsItGets)
+}
+
+/// `level`, if its predicted size is worth it.
+fn if_worth_it(
+    search: &mut Search,
+    sizes: Sizes,
+    level: Option<u8>,
+    chose: &str,
+) -> Result<Option<Found>, Halt> {
+    let Some(level) = level else {
+        return Ok(None);
+    };
+    let predicted = sizes.predicted(&search.measure(level)?);
+    if !sizes.worth_it(predicted) {
+        return Ok(None);
+    }
+    info!(level, ?predicted, original = sizes.original, "{chose}");
+    let encoder = search.attempt.encoder;
+    Ok(Some(Found::Level { encoder, level }))
 }
 
 /// The original's size, and what the result's size is judged against.
@@ -290,7 +291,8 @@ struct Search<'a> {
     toolchain: &'a Toolchain,
     input: &'a Path,
     stream: u32,
-    shape: Shape,
+    /// The frame rate the video leaves with; `None` keeps the source's.
+    rate: Option<Rate>,
     attempt: Attempt,
     capabilities: &'a Capabilities,
     starts: Vec<Duration>,
@@ -394,7 +396,7 @@ impl<'a> Search<'a> {
 
         // The source, changed in size and rate as the real encode will be, feeds both the
         // encoder and the reference.
-        let mut changes = plan::video_filters(self.shape, on_gpu, encoder, self.capabilities);
+        let mut changes = plan::video_filters(self.rate, on_gpu, encoder, self.capabilities);
         let format = if on_gpu {
             String::new()
         } else {

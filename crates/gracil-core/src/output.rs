@@ -46,13 +46,15 @@ pub fn save_as_new(temp: &Path, source: &Path, extension: &OsStr) -> io::Result<
 /// Windows layer; a parameter here so the rules below stay testable.
 pub type Swap = fn(original: &Path, replacement: &Path, backup: &Path) -> io::Result<()>;
 
-/// Puts the validated `temp` file in place of `source` (spec §38–§39, §42). Returns the final path.
+/// Puts the validated `temp` file in place of `source` (spec §38–§39, §42). Returns the final
+/// path.
 ///
 /// The original is never destroyed before the compressed file is in place, and a failure at any
 /// step leaves it recoverable: it is either untouched or moved back.
 ///
 /// - Same format: the file is swapped in place and keeps its name and creation date, so it feels
-///   like the same video, compressed. Its modified date becomes the moment it was replaced (ADR 0010).
+///   like the same video, compressed. Its modified date becomes the moment it was replaced
+///   (ADR 0010).
 /// - Changed format (`Clip.mov` becomes MP4): `Clip.mp4` is created first, never over an existing
 ///   file, and only then is `Clip.mov` deleted.
 pub fn replace_original(

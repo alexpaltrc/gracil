@@ -28,6 +28,8 @@ use windows_sys::Win32::System::Performance::{
     PdhCloseQuery, PdhCollectQueryData, PdhGetFormattedCounterValue, PdhOpenQueryW,
 };
 
+use crate::wide;
+
 /// One graphics card, as read just now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GraphicsHeat {
@@ -110,7 +112,7 @@ struct Nvml {
 
 impl Nvml {
     fn load() -> Option<Self> {
-        let name: Vec<u16> = "nvml.dll".encode_utf16().chain([0]).collect();
+        let name = wide("nvml.dll");
         // SAFETY: the name is a NUL-terminated UTF-16 buffer that outlives the call; the file
         // handle must be null; System32 only, so no other copy can be picked up.
         #[allow(unsafe_code)]
@@ -280,7 +282,7 @@ struct Counter {
 
 impl Counter {
     fn open(path: &str) -> Option<Self> {
-        let path: Vec<u16> = path.encode_utf16().chain([0]).collect();
+        let path = wide(path);
         let mut query = ptr::null_mut();
         // SAFETY: a null data source means this computer, live; `query` outlives the call.
         #[allow(unsafe_code)]

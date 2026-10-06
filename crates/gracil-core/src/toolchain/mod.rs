@@ -99,26 +99,19 @@ pub struct Resolved {
 /// The name of Gracil's data folder beside `gracil.exe`.
 pub const DATA_FOLDER: &str = "data";
 
-/// Gracil's data folder (ADR 0050): `data` beside `gracil.exe`, so the folder Gracil came in
-/// carries its settings, logs and temporary notes with it. Where that can't be written (a
-/// read-only drive, or a folder only an administrator can change), `%LOCALAPPDATA%\Gracil`.
+/// Gracil's data folder (ADR 0050, ADR 0054): `data` beside `gracil.exe`, always, so the folder
+/// Gracil came in carries its settings, logs and temporary notes with it and deleting it leaves
+/// nothing behind. Where that can't be written (a read-only drive, or a folder only an
+/// administrator can change), there is none: Gracil still compresses, without remembering
+/// anything.
 pub fn default_private_dir() -> Option<PathBuf> {
     static DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
     DIR.get_or_init(|| {
         own_folder()
             .map(|folder| folder.join(DATA_FOLDER))
             .filter(|dir| writable(dir))
-            .or_else(local_app_data)
     })
     .clone()
-}
-
-/// The data folder of the Gracil in `folder`, for code that doesn't run as `gracil.exe` (File
-/// Explorer's menu): its `data` folder when Gracil made one, `%LOCALAPPDATA%\Gracil` otherwise.
-pub fn private_dir_of(folder: &Path) -> Option<PathBuf> {
-    Some(folder.join(DATA_FOLDER))
-        .filter(|dir| dir.is_dir())
-        .or_else(local_app_data)
 }
 
 /// The folder holding the running executable.
@@ -127,10 +120,6 @@ pub fn own_folder() -> Option<PathBuf> {
         .ok()?
         .parent()
         .map(Path::to_path_buf)
-}
-
-fn local_app_data() -> Option<PathBuf> {
-    std::env::var_os("LOCALAPPDATA").map(|dir| PathBuf::from(dir).join("Gracil"))
 }
 
 /// Whether Gracil can keep files in `dir`, creating it if needed.

@@ -25,7 +25,7 @@ pub use icon::{set_icon_theme, set_window_icon};
 pub use instance::{claim, forward, is_running, serve};
 pub use integration::{
     EXPLORER_CLSID, Places, add_to_explorer, explorer_menu, explorer_places, remove_from_explorer,
-    start_with_windows,
+    start_with_windows, stop_starting_with_windows,
 };
 pub use lifetime::{end_children_with_this_process, use_efficiency_mode, use_processors};
 pub use numbers::{NumberSettings, number_settings};
@@ -55,7 +55,11 @@ use windows_sys::Win32::Storage::FileSystem::{
 /// swapping, the original is moved to `backup`; the caller deletes it once satisfied, or moves it
 /// back if this fails after the original was moved away.
 pub fn replace_file(original: &Path, replacement: &Path, backup: &Path) -> io::Result<()> {
-    let (original, replacement, backup) = (wide(original), wide(replacement), wide(backup));
+    let (original, replacement, backup) = (
+        wide_path(original),
+        wide_path(replacement),
+        wide_path(backup),
+    );
     let flags =
         REPLACEFILE_WRITE_THROUGH | REPLACEFILE_IGNORE_MERGE_ERRORS | REPLACEFILE_IGNORE_ACL_ERRORS;
     // SAFETY: the three names are NUL-terminated UTF-16 buffers that outlive the call, and the
@@ -88,8 +92,13 @@ pub fn display_language_is_spanish() -> bool {
     language & PRIMARY_LANGUAGE_MASK == LANG_SPANISH
 }
 
+/// `text` as Windows expects it: UTF-16, NUL-terminated.
+fn wide(text: &str) -> Vec<u16> {
+    text.encode_utf16().chain(iter::once(0)).collect()
+}
+
 /// A path as Windows expects it: UTF-16, NUL-terminated, with the long-path prefix when needed.
-fn wide(path: &Path) -> Vec<u16> {
+fn wide_path(path: &Path) -> Vec<u16> {
     const MAX_PATH: usize = 260;
     const VERBATIM: &str = r"\\?\";
     let text = path.as_os_str();
@@ -159,7 +168,7 @@ mod tests {
     fn long_paths_get_the_verbatim_prefix() {
         let long = PathBuf::from(format!(r"C:\{}\Clip.mp4", "a".repeat(300)));
         let short = PathBuf::from(r"C:\Videos\Clip.mp4");
-        let starts = |path: &Path| String::from_utf16_lossy(&wide(path)).starts_with(r"\\?\");
+        let starts = |path: &Path| String::from_utf16_lossy(&wide_path(path)).starts_with(r"\\?\");
         assert!(starts(&long));
         assert!(!starts(&short));
     }

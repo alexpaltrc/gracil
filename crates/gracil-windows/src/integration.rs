@@ -3,17 +3,20 @@
 //! `HKEY_CURRENT_USER`, so nothing needs an administrator and nothing reaches other accounts.
 //!
 //! Gracil writes the keys again each time it starts, so a folder that was moved or updated keeps
-//! working. Windows' own startup settings keep their say: turning Gracil off there is stored
-//! apart from the value written here, so writing it again never turns it back on.
+//! working. Its start with Windows is a `RunOnce` value (ADR 0054): Windows deletes it as it runs
+//! it, so once Gracil's folder is gone nothing of it stays.
 
 use std::io;
 use std::path::{Path, PathBuf};
 use std::ptr;
 
 use windows_sys::Win32::System::Registry::{
-    HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ, RegDeleteTreeW, RegGetValueW, RegSetKeyValueW,
+    HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ, RegDeleteKeyValueW, RegDeleteTreeW, RegGetValueW,
+    RegSetKeyValueW,
 };
 use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
+
+use crate::wide;
 
 /// The class of Gracil's Explorer menu, `gracil_shell.dll`. The shell crate checks it uses the
 /// same value.
@@ -24,7 +27,8 @@ const VERB_KEYS: [&str; 2] = [
     r"Software\Classes\*\shell\Gracil",
     r"Software\Classes\Directory\shell\Gracil",
 ];
-const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+/// Run once, at the next sign-in, and forgotten by Windows as it runs.
+const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\RunOnce";
 const RUN_VALUE: &str = "Gracil";
 /// Values kept beside the class, telling the menu where its Gracil is.
 const PROGRAM_VALUE: &str = "Program";
@@ -93,10 +97,24 @@ pub fn explorer_menu() -> Option<PathBuf> {
     get(&format!(r"{}\InprocServer32", class_key()), "").map(PathBuf::from)
 }
 
-/// Starts `program` with Windows, in the tray (ADR 0024).
+/// Starts `program` with Windows at the next sign-in, in the tray (ADR 0024, ADR 0054).
 pub fn start_with_windows(program: &Path) -> io::Result<()> {
     let command = format!("\"{}\" --startup", program.display());
     set(RUN_KEY, Some(RUN_VALUE), &command)
+}
+
+/// Takes Gracil out of starting with Windows.
+pub fn stop_starting_with_windows() -> io::Result<()> {
+    const ERROR_FILE_NOT_FOUND: u32 = 2;
+    let key = wide(RUN_KEY);
+    let name = wide(RUN_VALUE);
+    // SAFETY: the key and value names are NUL-terminated UTF-16 buffers that outlive the call.
+    #[allow(unsafe_code)]
+    let status = unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, key.as_ptr(), name.as_ptr()) };
+    if status == ERROR_FILE_NOT_FOUND {
+        return Ok(());
+    }
+    result(status)
 }
 
 /// Sets a text value, creating the key as needed. `None` is the key's default value.
@@ -180,8 +198,4 @@ fn result(status: u32) -> io::Result<()> {
     } else {
         Err(io::Error::from_raw_os_error(status as i32))
     }
-}
-
-fn wide(text: &str) -> Vec<u16> {
-    text.encode_utf16().chain(Some(0)).collect()
 }

@@ -74,13 +74,15 @@ pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     if !state.offered.is_empty() {
         content = content.push(offer(state));
     }
+    // An empty window shows only where to drop; what to do with finished files comes up with
+    // the first file (ADR 0055).
     if !state.queue.is_empty() {
         content = content.push(footer(state));
+        if state.drawer_open {
+            content = content.push(drawer(state));
+        }
+        content = content.push(always(state));
     }
-    if state.drawer_open && !state.queue.is_empty() {
-        content = content.push(drawer(state));
-    }
-    content = content.push(always(state));
     container(content).padding(space::M).into()
 }
 
@@ -95,9 +97,12 @@ fn offer(state: &Gracil) -> Element<'_, Message> {
             button(text(state.text.carry_on).size(size::CAPTION))
                 .style(style::quiet_button)
                 .on_press(Message::ContinueUnfinished),
-            button(text("×").size(size::CAPTION))
-                .style(style::quiet_button)
-                .on_press(Message::LetGoUnfinished),
+            hint(
+                button(text("×").size(size::CAPTION))
+                    .style(style::quiet_button)
+                    .on_press(Message::LetGoUnfinished),
+                state.text.forget_unfinished,
+            ),
         ]
         .spacing(space::S)
         .align_y(Center),
@@ -123,9 +128,12 @@ fn always(state: &Gracil) -> Element<'_, Message> {
     });
     container(
         row![
-            text(state.text.always)
-                .size(size::CAPTION)
-                .style(style::muted),
+            hint(
+                text(state.text.always)
+                    .size(size::CAPTION)
+                    .style(style::muted),
+                state.text.always_tip,
+            ),
             pill,
         ]
         .spacing(space::S)
@@ -165,15 +173,33 @@ fn focus(state: &Gracil, hovering: bool) -> Element<'_, Message> {
 fn finished_view<'a>(state: &'a Gracil, finished: &Finished) -> Element<'a, Message> {
     let done = Done {
         headline: state.text.headline(finished),
+        went_well: finished.compressed > 0,
     };
+    let mut how = row![].spacing(space::S).align_y(Center);
+    let summary = state.text.summary(finished);
+    if !summary.is_empty() {
+        how = how.push(text(summary).size(size::BODY).style(style::muted));
+    }
+    // What failed leads to those files, with the reason under each.
+    if finished.failed > 0 {
+        how = how.push(
+            button(
+                row![
+                    text(state.text.failed(finished.failed)).size(size::BODY),
+                    text("!").size(size::BODY).style(style::notice),
+                ]
+                .spacing(space::XS)
+                .align_y(Center),
+            )
+            .style(style::quiet_button)
+            .on_press(Message::ShowProblem),
+        );
+    }
     column![
         Canvas::new(done)
             .width(Fill)
             .height(dial::SIZE + done::AMOUNT_ROOM),
-        text(state.text.summary(finished))
-            .size(size::BODY)
-            .style(style::muted)
-            .align_x(Center),
+        how,
         // The way to a new start: back to the empty window, ready for the next files.
         container(
             button(text(state.text.clear_list).size(size::BODY))
@@ -196,13 +222,23 @@ fn dial(state: &Gracil, job: &Job) -> Dial {
         .selected
         .is_some_and(|picked| state.current().is_some_and(|current| current.id != picked));
     let list = state.list_progress().filter(|_| !picked_another);
+    let fraction = list.map_or(job.fraction, |list| Some(list.fraction));
+    let preparing = match job.state {
+        JobState::Preparing => true,
+        JobState::Pending | JobState::Prepared => matches!(state.engine, EngineState::Starting),
+        _ => false,
+    };
     Dial {
         shows: list.map_or(Shows::File(job.id), |list| Shows::List(list.round)),
-        fraction: list.map_or(job.fraction, |list| Some(list.fraction)),
+        fraction,
         paused: state.paused,
         // Pause and resume act on every file being worked on (ADR 0040); only putting a result
         // in place can't be held.
         can_pause: job.state != JobState::Finalizing,
+        can_stop: true,
+        // Before the ring starts filling, its middle breathes, so a long first moment never
+        // looks stuck (ADR 0055).
+        getting_ready: preparing && fraction.is_none_or(|fraction| fraction <= 0.0),
     }
 }
 
@@ -221,7 +257,7 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
                 .into(),
             match job.state {
                 JobState::Compressing | JobState::Preparing => {
-                    Status::plain(format!("{:.0}%", list.fraction * 100.0))
+                    Status::plain(percent(list.fraction))
                 }
                 _ => status(state, job),
             },
@@ -252,10 +288,6 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
             if let Some(change) = format_change(job, extension) {
                 details = details.push(caption(change));
             }
-        }
-        Some(Outcome::Failed(Failure::NotSmaller)) => {
-            // Shown turned off, so it is clear there was nothing worth keeping (spec §40.1).
-            details = details.push(choices(state, job, false));
         }
         Some(Outcome::Placed {
             choice,
@@ -334,7 +366,7 @@ fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         _ => {}
     }
     // Results that finish while another video compresses come up here, one by one, after it.
-    let shown_waiting = state.outcomes.get(&job.id).is_some_and(Outcome::is_waiting);
+    let shown_waiting = state.is_waiting(job.id);
     let mut later = Vec::new();
     match state.waiting_count() - usize::from(shown_waiting) {
         0 => {}
@@ -349,11 +381,12 @@ fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
     }
     let mut line = row![].spacing(space::M).align_y(Center);
     if state.shows_dial(job) {
-        line = line.push(
-            Canvas::new(dial(state, job))
-                .width(dial::SMALL)
-                .height(dial::SMALL),
-        );
+        // Stopping is for the big window, where it is clear what stops (spec §55).
+        let ring = Dial {
+            can_stop: false,
+            ..dial(state, job)
+        };
+        line = line.push(Canvas::new(ring).width(dial::SMALL).height(dial::SMALL));
     }
     line.push(details).into()
 }
@@ -361,11 +394,18 @@ fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
 /// Exit asked while work is in progress: what would stop, in so many words, and the two ways out
 /// (spec §54.1). Shown in the window itself, never as a dialog (spec §2.3).
 fn exit_question(state: &Gracil) -> Element<'_, Message> {
-    let explanation = state
-        .text
-        .exit_explanation(state.being_worked_on(), state.waiting_to_compress());
+    let explanation = state.text.exit_explanation(
+        state.being_worked_on(),
+        state.waiting_to_compress(),
+        state.waiting_count(),
+    );
+    let question = if state.preparing_to_delete {
+        state.text.prepare_question
+    } else {
+        state.text.exit_question
+    };
     column![
-        text(state.text.exit_question).size(size::TITLE),
+        text(question).size(size::TITLE),
         text(explanation)
             .size(size::BODY)
             .style(style::muted)
@@ -454,6 +494,11 @@ fn format_change(job: &Job, output: &OsStr) -> Option<String> {
     ))
 }
 
+/// How far along, in whole percent, rounded down: 100% only once it is truly done.
+fn percent(fraction: f64) -> String {
+    format!("{}%", (fraction.clamp(0.0, 1.0) * 100.0).floor())
+}
+
 fn caption(label: String) -> Element<'static, Message> {
     text(label)
         .size(size::CAPTION)
@@ -486,13 +531,13 @@ fn status(state: &Gracil, job: &Job) -> Status {
             EngineState::Starting => Status::plain(state.text.getting_ready),
             EngineState::Ready(_) => Status::plain(state.text.waiting),
             EngineState::Unavailable => Status {
-                label: state.text.waiting.into(),
+                label: state.text.cannot_start.into(),
                 notice: Some(state.text.ffmpeg_missing),
             },
         },
         JobState::Preparing => Status::plain(state.text.getting_ready),
         JobState::Compressing => match job.fraction {
-            Some(fraction) => Status::plain(format!("{:.0}%", fraction * 100.0)),
+            Some(fraction) => Status::plain(percent(fraction)),
             None => Status::plain(state.text.compressing),
         },
         JobState::Paused => Status::plain(state.text.paused),
@@ -507,13 +552,12 @@ fn status(state: &Gracil, job: &Job) -> Status {
                 Some(Outcome::Placed { sizes, .. }) => {
                     Status::plain(state.text.smaller(sizes.smaller_by()))
                 }
-                Some(Outcome::Failed(Failure::NotSmaller)) => Status {
-                    label: state.text.not_smaller.into(),
-                    notice: Some(state.text.failure(Failure::NotSmaller)),
-                },
-                Some(Outcome::Failed(Failure::AsSmallAsItGets)) => Status {
+                // Either way the file is left as it was, in the same words (ADR 0055).
+                Some(Outcome::Failed(
+                    failure @ (Failure::NotSmaller | Failure::AsSmallAsItGets),
+                )) => Status {
                     label: state.text.already_compressed.into(),
-                    notice: Some(state.text.failure(Failure::AsSmallAsItGets)),
+                    notice: Some(state.text.failure(*failure)),
                 },
                 Some(Outcome::Failed(failure)) => Status {
                     label: state.text.not_compressed.into(),
@@ -586,17 +630,21 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
     };
     // The summary takes what room is left after "+", and wraps onto a second line rather than
     // pushing "+" out of the window.
-    let add = tooltip(
+    let add = hint(
         button(text("+").size(size::TITLE).line_height(1.0))
             .style(style::quiet_button)
             .on_press(Message::ChooseFiles),
-        container(text(state.text.add_files).size(size::CAPTION)).padding(space::S),
-        tooltip::Position::Top,
-    )
-    .style(style::tooltip)
-    .gap(space::XS);
+        state.text.add_files,
+    );
+    // Once all is done, the big window already says how it went; the line below only opens the
+    // list.
+    let line = if state.finished().is_some() && state.selected.is_none() {
+        toggle.to_owned()
+    } else {
+        format!("{summary}  ·  {toggle}")
+    };
     row![
-        button(text(format!("{summary}  ·  {toggle}")).size(size::CAPTION))
+        button(text(line).size(size::CAPTION))
             .style(style::quiet_button)
             .width(Fill)
             .on_press(Message::ToggleDrawer),
@@ -695,9 +743,14 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
 
 /// A small "!" that explains itself on hover (spec §2.3).
 fn notice(explanation: &'static str) -> Element<'static, Message> {
+    hint(text("!").size(size::BODY).style(style::notice), explanation)
+}
+
+/// `content`, saying a few words about itself on hover.
+fn hint<'a>(content: impl Into<Element<'a, Message>>, words: &'static str) -> Element<'a, Message> {
     tooltip(
-        text("!").size(size::BODY).style(style::notice),
-        container(text(explanation).size(size::CAPTION))
+        content,
+        container(text(words).size(size::CAPTION))
             .padding(space::S)
             .max_width(TOOLTIP_WIDTH),
         tooltip::Position::Top,

@@ -1,7 +1,7 @@
 //! Reading FFmpeg's `-progress` output.
 //!
 //! FFmpeg writes blocks of `key=value` lines, each closed by `progress=continue` or
-//! `progress=end`. Only position and speed matter to Gracil.
+//! `progress=end`. Only the position matters to Gracil.
 
 use std::time::Duration;
 
@@ -9,17 +9,12 @@ use std::time::Duration;
 pub struct Progress {
     /// How far into the source the encode has reached.
     pub position: Duration,
-    /// Encoding speed relative to real time (`2.0` = twice as fast as playback).
-    pub speed: Option<f64>,
-    /// The last block FFmpeg writes.
-    pub finished: bool,
 }
 
 /// Accumulates lines and yields a [`Progress`] at the end of every block.
 #[derive(Debug, Default)]
 pub struct ProgressParser {
     position: Option<Duration>,
-    speed: Option<f64>,
 }
 
 impl ProgressParser {
@@ -35,18 +30,8 @@ impl ProgressParser {
                 }
                 None
             }
-            "speed" => {
-                self.speed = value
-                    .trim_end_matches('x')
-                    .parse::<f64>()
-                    .ok()
-                    .filter(|s| s.is_finite() && *s > 0.0);
-                None
-            }
             "progress" => Some(Progress {
                 position: self.position.unwrap_or_default(),
-                speed: self.speed,
-                finished: value == "end",
             }),
             _ => None,
         }
@@ -86,13 +71,8 @@ progress=end
 ");
         assert_eq!(updates.len(), 3);
         assert_eq!(updates[0].position, Duration::ZERO);
-        assert_eq!(updates[0].speed, None);
         assert_eq!(updates[1].position, Duration::from_secs(2));
-        assert_eq!(updates[1].speed, Some(3.5));
-        assert!(!updates[1].finished);
         assert_eq!(updates[2].position, Duration::from_millis(4500));
-        assert_eq!(updates[2].speed, Some(3.61));
-        assert!(updates[2].finished);
     }
 
     #[test]

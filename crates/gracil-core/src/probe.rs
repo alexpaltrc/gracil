@@ -31,9 +31,6 @@ pub struct Stream {
     /// Cover art stored as a one-frame video stream.
     pub attached_pic: bool,
     pub channels: Option<u32>,
-    /// Picture size as stored, before any rotation.
-    pub width: Option<u32>,
-    pub height: Option<u32>,
     /// Average frames per second.
     pub frame_rate: Option<Rate>,
     /// Bits per second, when the file records it.
@@ -147,8 +144,6 @@ struct RawStream {
     #[serde(default)]
     codec_name: String,
     channels: Option<u32>,
-    width: Option<u32>,
-    height: Option<u32>,
     #[serde(default)]
     avg_frame_rate: String,
     #[serde(default)]
@@ -176,8 +171,6 @@ fn parse(json: &[u8]) -> Result<MediaInfo, ProbeError> {
             attached_pic: s.disposition.get("attached_pic") == Some(&1),
             codec: s.codec_name,
             channels: s.channels,
-            width: s.width.filter(|&w| w > 0),
-            height: s.height.filter(|&h| h > 0),
             frame_rate: Rate::parse(&s.avg_frame_rate).or_else(|| Rate::parse(&s.r_frame_rate)),
             bit_rate: s.bit_rate.and_then(|b| b.parse().ok()).filter(|&b| b > 0),
             undecodable: false,
@@ -218,7 +211,6 @@ mod tests {
         assert_eq!(info.streams.len(), 4);
         assert_eq!(info.streams[1].channels, Some(2));
         let video = &info.streams[0];
-        assert_eq!((video.width, video.height), (Some(3840), Some(2160)));
         assert_eq!(
             video.frame_rate,
             Some(Rate {
@@ -228,7 +220,6 @@ mod tests {
         );
         assert_eq!(info.streams[1].frame_rate, None);
         assert_eq!(info.streams[1].bit_rate, Some(128_000));
-        assert_eq!(info.streams[3].width, None);
         assert_eq!(info.streams[2].kind, StreamKind::Data);
         assert_eq!(info.streams[2].codec, "");
         assert!(info.streams[3].attached_pic);

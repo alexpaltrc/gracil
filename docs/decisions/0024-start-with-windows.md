@@ -3,8 +3,10 @@
 **Status:** Accepted. Requested by the product owner (2026-10-03), as spec §53 and §81 foresaw
 ("unless requested later"). Changes §53 for Gracil's own process; still no Windows service.
 
-**Changed** by [ADR 0050](0050-portable-and-open-source.md) (2026-10-06): Gracil starts with
-Windows through the current user's `Run` key, written again on every start.
+**Changed** by [ADR 0050](0050-portable-and-open-source.md) (2026-10-05): Gracil starts with
+Windows through the current user's `Run` key, written again on every start. **Changed** by
+[ADR 0054](0054-wholly-portable.md): the `RunOnce` key instead, so a deleted folder leaves nothing,
+and a **Start with Windows** setting in the tray menu replaces items 1 and 3.
 
 **Context.** Gracil lives in the tray (spec §54.1). Started with the session, it is ready the
 moment a video is dropped on the mini-window or sent from File Explorer, with its marble always

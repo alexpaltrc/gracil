@@ -82,12 +82,15 @@ the two images, about 80 means no difference at normal viewing, 70 is "high qual
      nothing from libjxl or JPEG XL is used. Run as a separate, hidden program, like FFmpeg.
      `cjpegli` opens files with the C library's narrow functions, so the build script gives it a
      manifest that makes its code page UTF-8: names in any language, emoji included, work.
-   - PNG: `oxipng` (MIT) and `exoquant` (MIT), linked into Gracil. GPL quantizers such as
-     libimagequant/pngquant are not used.
+   - PNG: `oxipng` (MIT) and `exoquant` (MIT), linked into Gracil. libimagequant (pngquant's
+     quantizer) was measured once Gracil became GPL ([0054](0054-wholly-portable.md)): faster,
+     and its palettes scored higher at the same number of colors, but it never made a file
+     smaller, and was larger on the one image where the palette mattered, so exoquant stays.
    - Credits and license texts for jpegli and what is built into it (libjpeg-turbo and the IJG
      notice, Highway, libpng, zlib, skcms, Little CMS) ship in the zip's `licenses\` folder as
-     `cjpegli-licenses.txt`, as FFmpeg's do. Those of oxipng, exoquant, `image` and
-     `ssimulacra2` are to join them (in progress).
+     `cjpegli-licenses.txt`, as FFmpeg's do. Those of oxipng, exoquant, `image`,
+     `ssimulacra2` and every other Rust library built into Gracil ship as
+     `rust-libraries.txt`, written by `scripts/licenses.ps1` ([0054](0054-wholly-portable.md)).
 10. **Metadata** (spec §41, best effort, never a reason to reject): the date taken, camera data
     and location (EXIF), descriptions and captions (XMP, IPTC), the orientation and the color
     profile are carried over. jpegli keeps the color profile but not EXIF, XMP or IPTC, so Gracil

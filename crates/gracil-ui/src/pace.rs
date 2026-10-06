@@ -58,9 +58,9 @@ impl Room {
     }
 
     /// How many images may compress at once: an eighth of the processor while the person is
-    /// using the computer, it runs warm or it saves energy, a quarter while it is idle, one fewer while a video
-    /// takes the processor, and always at least one. Each image's tools use several threads of
-    /// their own.
+    /// using the computer, it runs warm or it saves energy, a quarter while it is idle, one fewer
+    /// while a video takes the processor, and always at least one. Each image's tools use several
+    /// threads of their own.
     pub fn images_at_once(self) -> usize {
         let share = if self.idle && !self.warm && !self.saving_energy {
             self.threads / 4

@@ -47,13 +47,15 @@ smaller video is already in place.
 
 ## Can I move Gracil's folder?
 
-Yes. Gracil keeps its settings and its diary in a `data` folder next to `gracil.exe`, so they move
-with it. Open Gracil once from its new place and File Explorer's menu and the start with Windows
-follow it.
+Yes. Gracil keeps everything it needs, its settings and its diary included, in its own folder, so
+they move with it. Open Gracil once from its new place and File Explorer's menu and the start with
+Windows follow it.
 
 ## How do I remove Gracil?
 
-In the menu of its marble next to the clock, turn off **Show Gracil in File Explorer's menu**,
-choose **Exit**, and delete Gracil's folder. To stop it starting with Windows too, turn it off in
-**Settings → Apps → Startup**. Apart from that switched-off entry, nothing is left on your
-computer.
+Delete its folder. Gracil keeps nothing anywhere else. To leave Windows exactly as it was, first
+choose **Prepare to delete Gracil** in the menu of its marble next to the clock: it takes Gracil
+out of File Explorer's menu and out of starting with Windows, closes Gracil and shows you its
+folder, ready to delete. If you delete the
+folder without doing that, nothing breaks: the menu simply stops showing Gracil, and Windows
+forgets the start the next time you sign in.

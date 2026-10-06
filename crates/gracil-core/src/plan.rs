@@ -10,9 +10,9 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::capabilities::{Capabilities, VideoEncoder};
-use crate::probe::{MediaInfo, Stream, StreamKind, file_url};
+use crate::probe::{MediaInfo, Rate, Stream, StreamKind, file_url};
 use crate::share;
-use crate::standard::{self, Shape};
+use crate::standard;
 
 /// Every compressed video is an MP4, whatever it was before (ADR 0012).
 ///
@@ -85,10 +85,13 @@ pub fn attempts(capabilities: Capabilities) -> Vec<Attempt> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StreamAction {
-    EncodeVideo(Shape),
+    /// With the frame rate it leaves with; `None` keeps the source's.
+    EncodeVideo(Option<Rate>),
     Copy,
     ToMovText,
-    ToAac { kbps: u32 },
+    ToAac {
+        kbps: u32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,9 +161,9 @@ impl EncodePlan {
     }
 
     /// The first video that is encoded, with what happens to its frame rate.
-    pub fn main_video(&self) -> Option<(u32, Shape)> {
+    pub fn main_video(&self) -> Option<(u32, Option<Rate>)> {
         self.streams.iter().find_map(|s| match s.action {
-            StreamAction::EncodeVideo(shape) => Some((s.source_index, shape)),
+            StreamAction::EncodeVideo(rate) => Some((s.source_index, rate)),
             _ => None,
         })
     }
@@ -211,9 +214,9 @@ impl EncodePlan {
             args.push(value.into());
         };
         match action {
-            StreamAction::EncodeVideo(shape) => {
+            StreamAction::EncodeVideo(rate) => {
                 let (encoder, capabilities) = (self.attempt.encoder, &self.capabilities);
-                let filters = video_filters(shape, self.attempt.hw_decode, encoder, capabilities);
+                let filters = video_filters(rate, self.attempt.hw_decode, encoder, capabilities);
                 if !filters.is_empty() {
                     option(args, "filter", &filters.join(","));
                 }
@@ -232,13 +235,13 @@ impl EncodePlan {
 /// Frame rate and pixel format for one encoded video, as FFmpeg filters in order.
 /// `gpu_frames` means the frames are still on the GPU, where NVENC reads them as they are.
 pub(crate) fn video_filters(
-    shape: Shape,
+    rate: Option<Rate>,
     gpu_frames: bool,
     encoder: VideoEncoder,
     capabilities: &Capabilities,
 ) -> Vec<String> {
     let mut filters = Vec::new();
-    if let Some(rate) = shape.rate {
+    if let Some(rate) = rate {
         filters.push(format!("fps={}/{}", rate.num, rate.den));
     }
     if !gpu_frames {
@@ -288,7 +291,7 @@ fn stream_action(stream: &Stream, preservation: Preservation) -> Option<StreamAc
     };
     match stream.kind {
         StreamKind::Video if !stream.attached_pic => {
-            Some(StreamAction::EncodeVideo(Shape::of(stream)))
+            Some(StreamAction::EncodeVideo(standard::output_rate(stream)))
         }
         StreamKind::Audio if essential || standard::audio_is_heavy(stream) => Some(to_aac()),
         StreamKind::Audio if mp4_can_copy_audio(codec) => Some(StreamAction::Copy),
@@ -307,11 +310,10 @@ fn stream_action(stream: &Stream, preservation: Preservation) -> Option<StreamAc
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::probe::Rate;
     use crate::standard::HardwareLevel;
     use StreamAction::*;
 
-    const SAME: StreamAction = EncodeVideo(Shape { rate: None });
+    const SAME: StreamAction = EncodeVideo(None);
 
     fn stream(index: u32, kind: StreamKind, codec: &str) -> Stream {
         Stream {
@@ -434,8 +436,6 @@ mod tests {
     #[test]
     fn large_fast_videos_keep_their_size_and_slow_down() {
         let mut source = stream(0, StreamKind::Video, "h264");
-        source.width = Some(3840);
-        source.height = Some(2160);
         source.frame_rate = Some(Rate { num: 60, den: 1 });
         let info = info(vec![source]);
 

@@ -3,6 +3,10 @@
 **Status:** Accepted, built (2026-10-04). Asked for by the product owner after compressing a
 folder of more than 15,000 files (spec §77.3).
 
+**Changed** by [ADR 0055](0055-natural-first-use.md) (2026-10-05): the green middle and check mark
+appear only when something became smaller; otherwise the big line says why nothing was, and
+failed files are counted apart, leading to them.
+
 **Context.** When the last file was finished, the main window simply kept showing that file. After
 a long list nothing said that Gracil had finished, nor how the list went as a whole.
 

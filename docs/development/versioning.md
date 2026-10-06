@@ -5,10 +5,10 @@
 The version lives in one place: `[workspace.package] version` in the root `Cargo.toml`. Every
 crate inherits it.
 
-- During development: `X.Y.Z-dev` (the project starts at `0.0.1-dev`).
+- During development: `X.Y.Z-dev` (the first public version is developed as `1.0.0-dev`).
 - Release: change to `X.Y.Z`, update `CHANGELOG.md`, commit, tag `vX.Y.Z`, build the zip with
   `scripts/portable.ps1` and attach it to the GitHub release for that tag.
-- Right after the release, change to the next `-dev` version (`0.0.2-dev`) in its own commit.
+- Right after the release, change to the next `-dev` version (`1.0.1-dev`) in its own commit.
 
 Published tags are never moved or deleted.
 

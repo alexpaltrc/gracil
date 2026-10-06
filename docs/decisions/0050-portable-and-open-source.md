@@ -1,6 +1,6 @@
 # 0050 — Portable, free and open source, without the Store
 
-**Status:** Accepted, built (2026-10-06). Decided by the product owner. Supersedes ADR 0005
+**Status:** Accepted, built (2026-10-05). Decided by the product owner. Supersedes ADR 0005
 (MSIX packaging), ADR 0023 (package build) and ADR 0026 (icon tile), all three since removed
 ([0053](0053-ready-for-github.md)), the package parts of [0022](0022-explorer-command.md) and
 [0024](0024-start-with-windows.md), and the Store part of [0027](0027-version-scheme.md); replaces
@@ -24,7 +24,8 @@ patent pools ask for nothing in practice.
 2. **Data beside the program.** Settings, logs, unfinished files and temporary files live in
    `data\` next to `gracil.exe`, so the folder can be moved or carried on a USB drive. When that
    folder can't be written (a read-only drive, or a folder only an administrator can change),
-   `%LOCALAPPDATA%\Gracil` is used instead.
+   `%LOCALAPPDATA%\Gracil` was used instead, until [ADR 0054](0054-wholly-portable.md) removed
+   that: Gracil then runs without saving anything.
 3. **FFmpeg comes in the zip**: the BtbN `win64-gpl` build Gracil was already tested with, pinned
    by hash in `packaging/ffmpeg.psd1`, with its license and a pointer to its source in
    `licenses\`. Gracil looks for FFmpeg beside itself first, then, while developing, on `PATH`.

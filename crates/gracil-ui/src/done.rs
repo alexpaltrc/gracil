@@ -27,8 +27,11 @@ const ENTRANCE: Duration = Duration::from_millis(1100);
 const CHECK: [(f32, f32); 3] = [(-0.36, 0.02), (-0.1, 0.28), (0.38, -0.24)];
 
 pub struct Done {
-    /// What the big line says: how much room was saved, or that all is done.
+    /// What the big line says: how much room was saved, or why nothing was.
     pub headline: String,
+    /// Whether the list went well: the green middle and the check mark. When files failed and
+    /// none came out smaller, the ring stays without them.
+    pub went_well: bool,
 }
 
 #[derive(Default)]
@@ -71,6 +74,11 @@ impl canvas::Program<Message> for Done {
         let (ring, ring_width, middle) = dial::ring(ring_bounds);
         let center = Point::new(bounds.width / 2.0, dial::SIZE / 2.0);
         let [disc, check, amount] = stages(state.progress);
+        let (disc, check) = if self.went_well {
+            (disc, check)
+        } else {
+            (0.0, 0.0)
+        };
 
         // The ring the marble filled, whole.
         frame.stroke(
@@ -81,10 +89,12 @@ impl canvas::Program<Message> for Done {
         );
 
         // The middle fills with green, growing out from its centre.
-        frame.fill(
-            &Path::circle(center, middle * (0.6 + 0.4 * disc)),
-            palette.success.scale_alpha(disc),
-        );
+        if disc > 0.0 {
+            frame.fill(
+                &Path::circle(center, middle * (0.6 + 0.4 * disc)),
+                palette.success.scale_alpha(disc),
+            );
+        }
 
         // The check mark draws itself from its short stroke to its long one.
         if check > 0.0 {

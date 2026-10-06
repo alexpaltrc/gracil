@@ -1,10 +1,11 @@
 //! Gracil's icon in the notification area, next to the clock (spec §54, §54.1, ADR 0020).
 //!
 //! The icon lives on a thread of its own with a hidden window that receives the taskbar's
-//! messages: a click shows or hides the mini-window, the right-click menu offers Open, the
-//! File Explorer setting and Exit. The icon follows the taskbar between light and dark, passes on
-//! changes to Windows' colors, and comes back if File Explorer restarts. Gracil tells it what to
-//! show with [`Tray::show`]; it never polls.
+//! messages: a click shows or hides the mini-window; the right-click menu offers Open, the
+//! settings (starting with Windows, File Explorer's menu, the mini-window), Prepare to delete
+//! and Exit. The icon follows the taskbar between light and dark, passes on changes to Windows'
+//! colors, and comes back if File Explorer restarts. Gracil tells it what to show with
+//! [`Tray::show`]; it never polls.
 
 mod picture;
 
@@ -30,6 +31,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WM_CONTEXTMENU, WM_NULL, WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPED,
 };
 
+use crate::wide;
+
 /// What the icon shows. It is driven by Gracil's work, never by a timer (spec §54).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TrayState {
@@ -54,6 +57,10 @@ pub enum TrayEvent {
     ExplorerMenu,
     /// The menu's File Explorer setting was clicked, to turn it the other way.
     ExplorerMiniWindow,
+    /// The menu's start with Windows setting was clicked, to turn it the other way.
+    StartWithWindows,
+    /// Prepare to delete Gracil, in the icon's menu: out of Windows, then exit.
+    PrepareToDelete,
     /// Exit in the icon's menu.
     Exit,
     /// Windows' colors changed: light or dark, or the accent color.
@@ -67,6 +74,10 @@ pub struct TrayMenu {
     pub explorer_menu: String,
     /// The setting for showing the mini-window when compressing from File Explorer.
     pub explorer_mini_window: String,
+    /// The setting for Gracil starting with Windows.
+    pub start_with_windows: String,
+    /// Taking Gracil out of Windows before its folder is deleted.
+    pub prepare_to_delete: String,
     pub exit: String,
 }
 
@@ -86,12 +97,16 @@ const OPEN: usize = 1;
 const EXIT: usize = 2;
 const EXPLORER_MINI_WINDOW: usize = 3;
 const EXPLORER_MENU: usize = 4;
+const START_WITH_WINDOWS: usize = 5;
+const PREPARE_TO_DELETE: usize = 6;
 
 /// Everything the icon's window needs, shared with the rest of Gracil.
 struct Shared {
     open: Vec<u16>,
     explorer_menu: Vec<u16>,
     explorer_mini_window: Vec<u16>,
+    start_with_windows: Vec<u16>,
+    prepare_to_delete: Vec<u16>,
     exit: Vec<u16>,
     on_event: Box<dyn Fn(TrayEvent) + Send + Sync>,
     current: Mutex<Current>,
@@ -111,6 +126,8 @@ struct Current {
     explorer_menu: bool,
     /// Whether the menu shows the File Explorer setting as on.
     explorer_mini_window: bool,
+    /// Whether the menu shows starting with Windows as on.
+    start_with_windows: bool,
 }
 
 static SHARED: OnceLock<Shared> = OnceLock::new();
@@ -129,6 +146,8 @@ impl Tray {
             open: wide(&menu.open),
             explorer_menu: wide(&menu.explorer_menu),
             explorer_mini_window: wide(&menu.explorer_mini_window),
+            start_with_windows: wide(&menu.start_with_windows),
+            prepare_to_delete: wide(&menu.prepare_to_delete),
             exit: wide(&menu.exit),
             on_event: Box::new(on_event),
             current: Mutex::new(Current {
@@ -140,6 +159,7 @@ impl Tray {
                 light_taskbar: crate::theme::light_taskbar(),
                 explorer_menu: false,
                 explorer_mini_window: false,
+                start_with_windows: false,
             }),
         };
         if SHARED.set(shared).is_err() {
@@ -176,6 +196,13 @@ impl Tray {
     pub fn check_explorer_menu(&self, on: bool) {
         if let Some(shared) = SHARED.get() {
             lock(shared).explorer_menu = on;
+        }
+    }
+
+    /// Whether the menu shows starting with Windows as on.
+    pub fn check_start_with_windows(&self, on: bool) {
+        if let Some(shared) = SHARED.get() {
+            lock(shared).start_with_windows = on;
         }
     }
 
@@ -350,12 +377,13 @@ fn show_menu(window: HWND, x: i32, y: i32) {
     let Some(shared) = SHARED.get() else {
         return;
     };
-    let (menu_check, explorer_check) = {
+    let (menu_check, explorer_check, start_check) = {
         let current = lock(shared);
         let check = |on: bool| if on { MF_CHECKED } else { 0 };
         (
             check(current.explorer_menu),
             check(current.explorer_mini_window),
+            check(current.start_with_windows),
         )
     };
     // SAFETY: the menu is created, used and destroyed here; the labels are NUL-terminated UTF-16
@@ -368,6 +396,13 @@ fn show_menu(window: HWND, x: i32, y: i32) {
             return;
         }
         AppendMenuW(menu, MF_STRING, OPEN, shared.open.as_ptr());
+        AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
+        AppendMenuW(
+            menu,
+            MF_STRING | start_check,
+            START_WITH_WINDOWS,
+            shared.start_with_windows.as_ptr(),
+        );
         AppendMenuW(
             menu,
             MF_STRING | menu_check,
@@ -381,6 +416,12 @@ fn show_menu(window: HWND, x: i32, y: i32) {
             shared.explorer_mini_window.as_ptr(),
         );
         AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
+        AppendMenuW(
+            menu,
+            MF_STRING,
+            PREPARE_TO_DELETE,
+            shared.prepare_to_delete.as_ptr(),
+        );
         AppendMenuW(menu, MF_STRING, EXIT, shared.exit.as_ptr());
         SetMenuDefaultItem(menu, OPEN as u32, 0);
         SetForegroundWindow(window);
@@ -401,6 +442,8 @@ fn show_menu(window: HWND, x: i32, y: i32) {
         OPEN => notify(TrayEvent::Open),
         EXPLORER_MENU => notify(TrayEvent::ExplorerMenu),
         EXPLORER_MINI_WINDOW => notify(TrayEvent::ExplorerMiniWindow),
+        START_WITH_WINDOWS => notify(TrayEvent::StartWithWindows),
+        PREPARE_TO_DELETE => notify(TrayEvent::PrepareToDelete),
         EXIT => notify(TrayEvent::Exit),
         _ => {}
     }
@@ -525,8 +568,4 @@ fn lock(shared: &Shared) -> MutexGuard<'_, Current> {
         .current
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-fn wide(text: &str) -> Vec<u16> {
-    text.encode_utf16().chain([0]).collect()
 }

@@ -4,7 +4,7 @@ Gracil is one Rust process (`gracil.exe`) that owns a job scheduler and drives e
 / `ffprobe.exe` processes, plus a tiny COM DLL loaded by File Explorer that only forwards requests.
 
 ```
- File Explorer ──(IExplorerCommand, gracil-shell.dll)──┐
+ File Explorer ──(IExplorerCommand, gracil_shell.dll)──┐
                                                        │ named pipe (paths + action)
  2nd launch of gracil.exe ─────────────────────────────┤
                                                        ▼
@@ -14,7 +14,7 @@ Gracil is one Rust process (`gracil.exe`) that owns a job scheduler and drives e
  │ gracil-core      jobs, scheduler, probe, encode, finalize    │
  └───────────────────────────────┬─────────────────────────────┘
                                  │ std::process::Command (no shell)
-                      ffmpeg.exe / ffprobe.exe (found on the PC, or installed privately)
+                      ffmpeg.exe / ffprobe.exe (in the zip beside gracil.exe)
 ```
 
 ## Crates
@@ -22,9 +22,9 @@ Gracil is one Rust process (`gracil.exe`) that owns a job scheduler and drives e
 | Crate | Kind | Responsibility | Introduced |
 |---|---|---|---|
 | `gracil-core` | lib | Job state model, output naming, FFprobe inspection, capability detection, FFmpeg argument construction, progress parsing, scheduler, output validation. No UI dependency. | M0 |
-| `gracil-windows` | lib | Everything that needs `windows-rs`: single-instance mutex, named-pipe IPC, process suspend/resume, `ReplaceFileW`, timestamps, tray, taskbar geometry. The only crate (besides the shell DLL) allowed `unsafe`. | M4/M5 |
+| `gracil-windows` | lib | Everything that needs Windows itself (`windows-sys`): single-instance mutex, named-pipe IPC, process suspend/resume, `ReplaceFileW`, timestamps, tray, taskbar geometry. The only crate (besides the shell DLL) allowed `unsafe`. | M4/M5 |
 | `gracil-ui` | bin `gracil` | Iced + WGPU application: main window (Focus + Drawer), mini-window, settings, wiring core ↔ Windows layer. | M2 |
-| `gracil-shell` | cdylib | `gracil_shell.dll`, the `IExplorerCommand` COM server for the Windows 11 context menu, built with the `windows` crate's `#[implement]` (ADR 0022). Depends only on `gracil-core` (the video extension list) and `gracil-windows`; counts videos and forwards them. | M7 |
+| `gracil-shell` | cdylib | `gracil_shell.dll`, the `IExplorerCommand` COM server for File Explorer's classic menu (under **Show more options** on Windows 11), built with the `windows` crate's `#[implement]` (ADR 0022). Depends only on `gracil-core` (which files are videos or images) and `gracil-windows`; counts the files and forwards them. | M7 |
 
 Crates are created when they get real content, not ahead of time.
 
@@ -119,7 +119,9 @@ forwards the paths over the pipe when Gracil is running, or starts Gracil with a
 fit on its command line and forwards the rest (ADR 0022). It starts the `gracil.exe` recorded in its
 registration (ADR 0050), or the one beside the DLL.
 
-**Starting with Windows.** The current user's `Run` key starts `gracil.exe --startup` at sign-in.
+**Starting with Windows.** The current user's `RunOnce` key starts `gracil.exe --startup` at the
+next sign-in; Windows deletes the value as it runs it, and every start writes it again while
+`start_with_windows` is on, so a deleted folder leaves nothing behind (ADR 0054).
 That request opens nothing, and marks the app `resident`: it stays in the tray for the session
 instead of leaving when background work is done (ADR 0024).
 
@@ -133,8 +135,8 @@ removed if it points at this folder. A development build in `target` leaves Wind
 
 ## Data on disk
 
-All in `data\` beside `gracil.exe`, or `%LOCALAPPDATA%\Gracil` when that can't be written
-(`toolchain::default_private_dir`):
+All in `data\` beside `gracil.exe`, and nowhere else; when that can't be written there is none
+and nothing is saved (`toolchain::default_private_dir`, ADR 0054):
 
 - Settings: `settings.txt`, one `name=value` per line.
 - Logs: `logs\`, one plain-text file per day, the last seven kept.

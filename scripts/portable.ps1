@@ -3,17 +3,17 @@
 #   scripts/portable.ps1                       release build + folder in target\portable\Gracil
 #                                               + target\portable\Gracil-<version>-x64.zip
 #   scripts/portable.ps1 -FFmpeg <folder>      take ffmpeg.exe and ffprobe.exe from <folder>
-#   scripts/portable.ps1 -Install              ...and copy it to %LOCALAPPDATA%\Programs\Gracil, the
+#   scripts/portable.ps1 -Copy                 ...and copy it to Documents\Gracil, the
 #                                               Gracil in daily use, closing it first
-#   scripts/portable.ps1 -InstallTo <folder>   ...or to another folder
+#   scripts/portable.ps1 -CopyTo <folder>      ...or to another folder
 #
 # FFmpeg is the pinned build in packaging\ffmpeg.psd1; without -FFmpeg, the first folder on PATH
 # holding executables with the pinned hashes is used. Exit codes are checked explicitly, as in
 # check.ps1.
 param(
     [string]$FFmpeg,
-    [switch]$Install,
-    [string]$InstallTo
+    [switch]$Copy,
+    [string]$CopyTo
 )
 
 $root = Split-Path $PSScriptRoot -Parent
@@ -100,9 +100,10 @@ $notices = @(
     "==== $($_[0]) ====`r`n`r`n" + (Get-Content -LiteralPath (Join-Path $jpegli $_[1]) -Raw)
 }
 [System.IO.File]::WriteAllText((Join-Path $licenses 'cjpegli-licenses.txt'), ($notices -join "`r`n`r`n"), $utf8)
-if (Test-Path -LiteralPath (Join-Path $root 'LICENSE')) {
-    Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $licenses 'gracil-license.txt')
-}
+Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $licenses 'gracil-license.txt')
+# The Rust libraries built into gracil.exe and gracil_shell.dll.
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'licenses.ps1') -Out (Join-Path $licenses 'rust-libraries.txt')
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $zip = Join-Path $portable "Gracil-$version-x64.zip"
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
@@ -112,17 +113,19 @@ if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "Gracil $version ready in $layout and $zip"
 
-if ($Install -and -not $InstallTo) { $InstallTo = Join-Path $env:LOCALAPPDATA 'Programs\Gracil' }
-if ($InstallTo) {
+if ($Copy -and -not $CopyTo) {
+    $CopyTo = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Gracil'
+}
+if ($CopyTo) {
     # The running Gracil and its helpers hold their files; they are closed before copying.
     Get-Process gracil, ffmpeg, ffprobe, cjpegli -ErrorAction SilentlyContinue |
-        Where-Object { $_.Path -and $_.Path.StartsWith($InstallTo, [System.StringComparison]::OrdinalIgnoreCase) } |
+        Where-Object { $_.Path -and $_.Path.StartsWith($CopyTo, [System.StringComparison]::OrdinalIgnoreCase) } |
         Stop-Process -Force
     Wait-Process -Name gracil -Timeout 15 -ErrorAction SilentlyContinue
-    New-Item -ItemType Directory -Force -Path $InstallTo | Out-Null
+    New-Item -ItemType Directory -Force -Path $CopyTo | Out-Null
     # Everything but the data folder, which keeps the settings and logs.
     Get-ChildItem -LiteralPath $layout | ForEach-Object {
-        Copy-Item -LiteralPath $_.FullName -Destination $InstallTo -Recurse -Force
+        Copy-Item -LiteralPath $_.FullName -Destination $CopyTo -Recurse -Force
     }
-    Write-Host "Gracil $version copied to $InstallTo"
+    Write-Host "Gracil $version copied to $CopyTo"
 }

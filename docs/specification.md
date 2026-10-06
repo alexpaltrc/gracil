@@ -178,6 +178,9 @@ Versions begin at `0.0.1`. The active development version always carries the `-d
 Immediately after beginning work on the next version, change the development version to
 `0.0.2-dev`. Then `0.0.2`, `v0.0.2`, `0.0.3-dev`, and so on.
 
+*Update (ADR 0027, ADR 0050):* the first public release on GitHub is `1.0.0`, developed as
+`1.0.0-dev` and tagged `v1.0.0`; after it, `1.0.1-dev`, and so on.
+
 Keep the version synchronized wherever practical: Cargo workspace/package metadata, application
 metadata, the name of the portable zip, About information when eventually implemented, release
 scripts.
@@ -520,6 +523,10 @@ saves a copy. Following §2.3, there is no error dialog. The save actions are tu
 video and a small "!" sits beside them; hovering it explains that the file could not be made
 smaller than the original, so it is not saved. The original is never touched.
 
+*Update (ADR 0055):* such a file is labelled **Already compressed**, like a file that was already
+about as small as it gets; the "!" says which. Replace and Save copy are not shown for it, since
+there is nothing to choose.
+
 # 41. Metadata preservation
 
 Preserve source metadata as completely as the output format allows: container/global metadata,
@@ -588,6 +595,11 @@ The empty state is immediately understandable: **Drop videos here**. Avoid techn
 terminal-like presentation, giant settings pages, dense tables, excessive borders, unnecessary
 navigation, advanced encoder controls and permanent diagnostic information.
 
+*Update (ADR 0055):* the empty window says **Drop videos or images here** and shows nothing else
+but a way to choose files; the list's line and the **Always** pill come up with the first file.
+Folders can be dropped too. **Esc** steps back, **Space** pauses and resumes, **Ctrl+O** chooses
+files.
+
 # 50. Design system
 
 Build reusable visual primitives and design tokens (spacing, corner radius, typography hierarchy,
@@ -620,10 +632,9 @@ background work and all jobs are finished, no window must remain visible and no 
 exists to stay alive, allow it to exit cleanly. Do not add "Launch at startup" unless requested
 later.
 
-*Update (ADR 0024):* requested. The installed Gracil starts with Windows, always, and stays in the
-tray for the session; there is no setting for it in Gracil, and people turn it off with Windows'
-own startup settings. Still no Windows service, and a Gracil started only for File Explorer's work
-still exits when done.
+*Update (ADR 0024, ADR 0054):* requested. Gracil starts with Windows and stays in the tray for
+the session; **Start with Windows** in the tray menu turns it off. Still no Windows service, and a
+Gracil started only for File Explorer's work still exits when done.
 
 # 54. System tray
 
@@ -653,6 +664,9 @@ Consequences for other sections:
 - Section 53 still applies to processes started only for background work from File Explorer: if
   no window was ever opened and all work has finished, Gracil may exit on its own.
 
+*Update (ADR 0055):* Exit also asks when finished results wait for a choice, and says they are
+let go and will be compressed again next time.
+
 # 55. Tray mini-window
 
 A compact tray-associated mini-window. Eventually: see the current operation, basic progress,
@@ -664,6 +678,10 @@ assuming the taskbar is bottom-right. Support multiple monitors correctly.
 with the same **Replace** and **Save copy** choices (§37.1), so opening the main window is never
 required. It shows the running video first; results that wait meanwhile are counted, then offered
 one at a time.
+
+*Update (ADR 0055):* the mini-window's dial pauses and resumes but has no stop; stopping is in the
+main window. When the tray icon turned red while no window was open, the mini-window opens on the
+file that went wrong.
 
 # 56. Explorer-triggered mini-window
 
@@ -735,14 +753,18 @@ instances.
 
 Gracil is portable (ADR 0050). It ships as a zip holding Gracil, the File Explorer menu, jpegli,
 FFmpeg and FFprobe, and their licenses, built by `scripts/portable.ps1`. It keeps its data in a
-`data` folder beside itself. Removing Gracil is deleting its folder. It is free and open source,
-published on GitHub, outside the Microsoft Store.
+`data` folder beside itself and nowhere else; without a writable one it runs without saving
+anything (ADR 0054). Removing Gracil is deleting its folder: its start with Windows uses
+`RunOnce`, which Windows forgets by itself once the folder is gone, and **Remove Gracil from
+Windows** in the tray menu takes away File Explorer's menu first. It is free and open source
+(GPL-3.0-or-later), published on GitHub, outside the Microsoft Store.
 
 # 66. Settings philosophy
 
 Settings stay intentionally small. Currently required: **Show mini-window when compressing from
-File Explorer** (default ON). Do not add GPU/CPU/codec selection, bitrate, FFmpeg arguments,
-thread count or advanced encoder configuration.
+File Explorer** (default ON). In the tray menu too: **Show Gracil in File Explorer's menu** (ADR
+0050) and **Start with Windows** (ADR 0054), both default ON. Do not add GPU/CPU/codec
+selection, bitrate, FFmpeg arguments, thread count or advanced encoder configuration.
 
 *Update (ADR 0025):* a second setting, requested by the product owner: **Always (Replace / ○ /
 Save a copy)** in the main window. The middle, the default, asks after each video as in §37.1; an
@@ -1026,7 +1048,7 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
 - **Free and open source, outside the Store.** *Decided by the product owner.* Gracil can't stay
   in the Microsoft Store, even for free, so it is published on GitHub as a portable zip with
   FFmpeg inside, keeping its data beside itself, with Gracil in File Explorer's classic menu.
-  *Built 2026-10-06 (ADR 0050).*
+  *Built 2026-10-05 (ADR 0050).*
 - **Cooler while in use, and any graphics card.** The tools run in Windows' efficiency mode
   while the person works or the computer is on battery, and the temperature of Intel and AMD
   cards is read from their driver and held like an NVIDIA card's. *Built 2026-10-05 (ADR 0051).*
@@ -1034,7 +1056,17 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   the processor, each checked with a tiny test compression. *Built 2026-10-05 (ADR 0052).*
 - **Ready for GitHub.** *Asked by the product owner.* Everything left from the Store and anything
   no longer needed is removed, FFmpeg is never downloaded, and one Gracil in daily use is kept
-  in `%LOCALAPPDATA%\Programs\Gracil`. *Built 2026-10-05 (ADR 0053).*
+  in one place. *Built 2026-10-05 (ADR 0053).*
+- **Wholly portable.** *Asked by the product owner.* Everything in Gracil's own folder and
+  nowhere else; its start with Windows forgets itself once the folder is gone; **Start with
+  Windows** and **Prepare to delete Gracil** in the tray menu; GPL-3.0-or-later, with the
+  licenses of every Rust library in the zip. *Built 2026-10-05 (ADR 0054).*
+- **Natural from the first use.** *Asked by the product owner* before the first release: someone
+  opening Gracil for the first time knows what to do without thinking, nothing is out of place
+  or extra, nothing looks stuck or says something untrue. Folders can be dropped, the empty
+  window shows only where to drop, the done screen is honest when nothing was compressed,
+  getting ready breathes, Exit counts every loss, and a few keys work. *Built 2026-10-05 (ADR
+  0055).*
 
 # 78. Temporary UI decisions
 

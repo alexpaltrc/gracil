@@ -31,6 +31,8 @@ use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
 use windows_sys::Win32::System::Threading::{CreateMutexW, GetCurrentProcessId, OpenMutexW};
 use windows_sys::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow};
 
+use crate::wide;
+
 /// The mutex's name. `Local\` scopes it to the user's session.
 const MUTEX: &str = r"Local\Gracil.SingleInstance";
 
@@ -226,10 +228,6 @@ fn last_error() -> u32 {
     unsafe {
         GetLastError()
     }
-}
-
-fn wide(text: &str) -> Vec<u16> {
-    text.encode_utf16().chain([0]).collect()
 }
 
 #[cfg(test)]

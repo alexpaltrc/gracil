@@ -31,20 +31,9 @@ pub fn save_as_new_candidate(source: &Path, attempt: u32) -> PathBuf {
     source.with_file_name(name)
 }
 
-/// The first candidate for which `exists` returns false, or `None` if every candidate is taken.
-pub fn first_free_save_as_new_path(
-    source: &Path,
-    mut exists: impl FnMut(&Path) -> bool,
-) -> Option<PathBuf> {
-    (1..=u32::MAX)
-        .map(|attempt| save_as_new_candidate(source, attempt))
-        .find(|candidate| !exists(candidate))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
 
     fn name_of(path: &Path) -> &str {
         path.file_name().and_then(|n| n.to_str()).unwrap()
@@ -93,37 +82,5 @@ mod tests {
     fn numbered_candidates_go_before_extension() {
         let out = save_as_new_candidate(Path::new(r"C:\V\Vacation.mp4"), 3);
         assert_eq!(name_of(&out), "Gracil-Vacation (3).mp4");
-    }
-
-    #[test]
-    fn first_free_skips_taken_names() {
-        let source = Path::new(r"C:\V\Vacation.mp4");
-        let taken: HashSet<PathBuf> = [
-            PathBuf::from(r"C:\V\Gracil-Vacation.mp4"),
-            PathBuf::from(r"C:\V\Gracil-Vacation (2).mp4"),
-        ]
-        .into();
-        let out = first_free_save_as_new_path(source, |p| taken.contains(p));
-        assert_eq!(out, Some(PathBuf::from(r"C:\V\Gracil-Vacation (3).mp4")));
-    }
-
-    #[test]
-    fn first_free_uses_plain_name_when_available() {
-        let source = Path::new(r"C:\V\Vacation.mp4");
-        let out = first_free_save_as_new_path(source, |_| false);
-        assert_eq!(out, Some(PathBuf::from(r"C:\V\Gracil-Vacation.mp4")));
-    }
-
-    #[test]
-    fn first_free_against_real_directory() {
-        let dir = std::env::temp_dir().join(format!("gracil-naming-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let source = dir.join("Mi cumpleaños 🎂.mp4");
-        std::fs::write(dir.join("Gracil-Mi cumpleaños 🎂.mp4"), b"").unwrap();
-
-        let out = first_free_save_as_new_path(&source, Path::exists);
-
-        std::fs::remove_dir_all(&dir).unwrap();
-        assert_eq!(out, Some(dir.join("Gracil-Mi cumpleaños 🎂 (2).mp4")));
     }
 }

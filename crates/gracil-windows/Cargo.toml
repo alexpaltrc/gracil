@@ -1,10 +1,11 @@
 [package]
 name = "gracil-windows"
-description = "Everything Gracil needs from Windows itself. The only library allowed to use unsafe."
+description = "Everything Gracil needs from Windows itself. One of the two crates allowed to use unsafe, with the menu DLL."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 windows-sys.workspace = true

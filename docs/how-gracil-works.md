@@ -16,8 +16,9 @@ anywhere.
 Gracil is also open source: its code is public on GitHub for anyone to read. There is nothing to
 install. Gracil comes as a zip; unpack it wherever you like, even on a USB drive, and open
 `gracil.exe`. Everything it needs comes inside, and it keeps its settings and its diary in a `data`
-folder next to itself, so they go wherever the folder goes. To remove Gracil, delete its folder
-(see [Questions and answers](faq.md)).
+folder next to itself, and nowhere else, so they go wherever the folder goes. If Gracil is on a
+drive it can't write to, it still compresses, it just doesn't remember your settings. To remove
+Gracil, delete its folder (see [Questions and answers](faq.md)).
 
 ## English and Spanish
 
@@ -48,10 +49,11 @@ tile, in black on a light taskbar and in white on a dark one.
 
 ## Adding videos and images
 
-Drop videos or images onto the window, or choose them with **or choose files**. You can add more
-at any time, even while Gracil is working: drop them, or click the **+** at the bottom right of
-the window. The kinds of files Gracil takes are listed under "One format: MP4" (videos) and
-"Images" (photos and pictures) below.
+Drop videos or images onto the window, or choose them with **or choose files**. A folder can be
+dropped too: Gracil takes the videos and images inside it. You can add more at any time, even
+while Gracil is working: drop them, or click the **+** at the bottom right of the window. The
+kinds of files Gracil takes are listed under "One format: MP4" (videos) and "Images" (photos and
+pictures) below.
 
 - Gracil works on several files at once, each kind in the order you added them. Every file goes
   through two steps: first Gracil gets it ready, then it compresses it. While one video
@@ -63,7 +65,8 @@ the window. The kinds of files Gracil takes are listed under "One format: MP4" (
 - The file shown large is the video being compressed, or, with only images, the first image being
   compressed. It sits inside a ring: a marble rolls clockwise from the top as the work advances,
   filling an invisible circle with color behind it, and when it gets back to the top the file is
-  done. The percentage is written just below.
+  done. The percentage is written just below. While Gracil gets a list ready, before the marble
+  starts moving, the middle of the marble slowly fades and returns, so you know it is working.
 - The middle of the ring holds the controls. Its top part is **pause** (II); click it and it turns
   into **play** (▶), which resumes. Its bottom part is **stop** (■). Pause acts on every file
   being worked on, all together; while paused, nothing new starts. Stop stops the whole list at
@@ -74,6 +77,8 @@ the window. The kinds of files Gracil takes are listed under "One format: MP4" (
 - Pausing freezes the work exactly where it is, and Gracil stops using the processor and
   graphics card. Resuming carries on from the same point; nothing is lost or started over. You
   can also stop while paused.
+- A few keys work too, if you like them: **Space** pauses and resumes, **Esc** steps back (closes
+  the list, or the small window next to the clock), and **Ctrl+O** chooses files.
 - **View files**, under it, shows every video and image you added and how each one went: how much
   smaller it became, where it went (for example **−35% · Replaced**), or why it couldn't be
   compressed. With two or more done, a line at its top adds them all up, for example **In all:
@@ -90,43 +95,45 @@ the window. The kinds of files Gracil takes are listed under "One format: MP4" (
 - When the whole list is done (nothing left waiting, being compressed or waiting for your choice),
   the window says so clearly: the ring stays full, its middle fills with green and a check mark
   draws itself, and just below, in large letters, how much room the list saved, for example
-  **130 MB smaller** (or **All done** if nothing came out smaller). Under it, a quiet line says how
-  the list went, for example **22 files compressed · 4 were already compressed**, and how many
-  couldn't be compressed, if any. Below that, **Clear the list** takes you back to the empty
-  window, ready for your next files. Pick a file in **View files** to look at it; add more files
-  and Gracil gets back to work.
+  **130 MB smaller**. If nothing came out smaller, there is no check mark, and the large line says
+  **Nothing to make smaller** (every file was already compressed) or **Nothing was compressed**
+  (something went wrong). Under it, a quiet line says how the list went, for example **22 files
+  compressed · 4 were already compressed**. Files that couldn't be compressed are counted apart,
+  with a **!**: click it and the list opens on the first of them, with what happened. Below that,
+  **Clear the list** takes you back to the empty window, ready for your next files. Pick a file in
+  **View files** to look at it; add more files and Gracil gets back to work.
 - The **×** beside a file takes it off the list, and **Clear** empties the list. Neither touches
   your original.
 - You can always compress a video again, even one already on the list: if the list is done with
   it (it was replaced, saved, couldn't be compressed or was stopped), it starts again as new.
   Adding a video that is still waiting, being compressed or waiting for your choice does nothing.
-  A folder dropped on the window is ignored for now; to compress a whole folder, right-click it
-  in File Explorer (see below).
 
 ## Replace, or keep a copy
 
-When a video is done, Gracil shows how much smaller it became, its size before and after (for
+When a file is done, Gracil shows how much smaller it became, its size before and after (for
 example **120 MB → 78 MB**), and two buttons:
 
-- **Replace** puts the smaller video in place of the original. It keeps the same name and the
-  date it was created, so it still looks like the same video in your folders. Its "date modified"
+- **Replace** puts the smaller file in place of the original. It keeps the same name and the
+  date it was created, so it still looks like the same file in your folders. Its "date modified"
   becomes the moment you replaced it.
-- **Save copy** keeps your original and saves the smaller video next to it (see "Saving a copy"
+- **Save copy** keeps your original and saves the smaller file next to it (see "Saving a copy"
   below).
 
-You decide after seeing the result, so you never trade your original for a video that didn't
-shrink. With several videos done, **View files** offers **Replace all** and **Save all copies**.
+You decide after seeing the result, so you never trade your original for a file that didn't
+shrink. With several files done, **View files** offers **Replace all** and **Save all as copies**.
 
-If you always answer the same way, use the line at the foot of the window: **Always**, followed
-by **Replace**, a small circle and **Save a copy**. Pick **Replace** or **Save a copy** and Gracil
-does that with every video that finishes from then on, without asking. On the circle in the
-middle, the setting is off and Gracil asks each time; that is how it starts. Videos already waiting for you
-keep waiting, and if Gracil can't do what you picked for a video (for example replacing would
-overwrite another file), that video waits for you with a **!** that explains why. When you
+If you always answer the same way, use the line at the foot of the window, which appears once you
+add files: **Always**, followed by **Replace**, a small circle and **Save copy** (point at
+**Always** for a reminder of what it does). Pick **Replace** or **Save copy** and Gracil does that
+with every file that finishes from then on, without asking. On the circle in the middle, the
+setting is off and Gracil asks each time; that is how it starts. Files already waiting for you
+keep waiting, and if Gracil can't do what you picked for a file (for example replacing would
+overwrite another file), that file waits for you with a **!** that explains why. When you
 compress from File Explorer, the command you clicked decides instead.
 
-A finished video waits until you choose. If you take it off the list or exit Gracil without
-choosing, the smaller version is deleted and your original stays exactly as it was.
+A finished file waits until you choose. If you take it off the list, the smaller version is
+deleted and your original stays exactly as it was. If you exit Gracil first, Gracil asks before
+leaving, and the file is compressed again the next time you carry on.
 
 Every compressed video is an MP4 (see "One format: MP4" below). When that gives it a new name,
 Gracil shows it under the buttons before you choose: `IMG_0042.MOV → IMG_0042.mp4`. Replacing
@@ -137,7 +144,7 @@ Good to know: because the name changes, other apps that remembered the old file 
 video editing project, or a playlist) won't find it under its old name. If that matters for a
 video, choose **Save copy** instead; your original stays exactly where it was.
 
-When something goes wrong, there's no message box. A small **!** appears beside the video; point
+When something goes wrong, there's no message box. A small **!** appears beside the file; point
 at it to read what happened.
 
 ## FFmpeg, the engine underneath
@@ -150,8 +157,8 @@ FFmpeg comes inside Gracil's zip, in its `ffmpeg` folder, so there is nothing to
 never uses the internet. Its license and where to find its source code are in the `licenses`
 folder.
 
-If that folder is ever removed or damaged, Gracil can't compress videos and says so with a quiet
-line: download Gracil again from GitHub and it works as before. Gracil never downloads anything
+If that folder is ever removed or damaged, Gracil can't compress videos: they show **Can't
+start**, with a **!** that says so. Download Gracil again from GitHub and it works as before. Gracil never downloads anything
 by itself.
 
 ## Choosing the fastest way to compress
@@ -407,8 +414,9 @@ Gracil never writes over your video while it works.
   in the middle of replacing a video, it puts your original back. Gracil keeps a note of each
   temporary file it makes and only ever removes those, never a file just because its name looks
   similar. Files on a drive that isn't connected are tidied once it is.
-- If the compressed video isn't smaller than the original, Gracil doesn't keep it. Its buttons
-  are shown turned off, and a small "!" explains why when you point at it.
+- If the compressed file isn't smaller than the original, Gracil doesn't keep it. It shows
+  **Already compressed**, with no buttons, since there is nothing to choose, and a small "!"
+  explains why when you point at it.
 
 ## Saving a copy
 
@@ -462,10 +470,18 @@ Explorer's menu** in the menu of its marble next to the clock; turn it on again 
 ## Starting with Windows
 
 Gracil starts by itself when you sign in to Windows, and waits quietly next to the clock, with no
-window, until you give it videos. There is nothing to set in Gracil. If you'd rather it didn't
-start with Windows, turn it off where Windows lists the apps that start with it: **Settings →
-Apps → Startup**, or the **Startup apps** page of Task Manager. Gracil respects that and never
-turns it back on; you can still open `gracil.exe` from its folder whenever you like.
+window, until you give it videos. If you'd rather it didn't, untick **Start with Windows** in the
+menu of its marble next to the clock; you can still open `gracil.exe` from its folder whenever
+you like. Gracil isn't listed in Windows' own startup settings: it asks Windows to start it just
+once, at the next sign-in, and asks again each time it runs. That way, once its folder is
+deleted, Windows forgets it by itself.
+
+## Removing Gracil
+
+**Prepare to delete Gracil**, in the menu of its marble next to the clock, takes Gracil out of
+File Explorer's menu and out of starting with Windows, closes it and shows you its folder in
+File Explorer. Delete that folder, and nothing of Gracil is left. Opening Gracil again instead
+puts both back.
 
 ## Closing Gracil
 
@@ -477,35 +493,40 @@ tells you how things are going:
   is, for the whole list when there is more than one file;
 - two bars: the compression is paused;
 - a marble in the warning color (orange-brown on a light taskbar, yellow on a dark one): something
-  went wrong while the window was closed. Open Gracil to see
-  what; the marble turns back to normal.
+  went wrong while the window was closed. Click it and the small window opens on the file that
+  went wrong; the marble turns back to normal.
 
-Pointing at the marble says the same in words. Right-click it for **Open Gracil** and **Exit**.
+Pointing at the marble says the same in words. Right-click it for its menu: **Open Gracil**; then
+the three settings, **Start with Windows**, **Show Gracil in File Explorer's menu** and **Show
+mini-window when compressing from File Explorer**; then **Prepare to delete Gracil** and **Exit**.
 
 Click the marble and a small window opens right next to it, wherever your taskbar is. It shows
-the video being compressed and how far along it is; click its circle to pause or carry on, just
-like in the big window. When a video is done, it shows how much smaller it became with
-**Replace** and **Save copy**, so you can choose right there without opening the big window
-(unless **Always** already chose for you). If more videos finish while another is compressing,
-it says how many are ready and shows them one by one when the work is done. It also tells you how
-many videos are waiting and, once one is placed, where it went. You can drop more videos on it.
+the file being compressed and how far along it is; click the middle of its circle to pause or
+carry on (stopping is only in the big window, where it is clear what stops). When a file is done,
+it shows how much smaller it became with **Replace** and **Save copy**, so you can choose right
+there without opening the big window (unless **Always** already chose for you). If more files
+finish while another is compressing, it says how many are ready to save and shows them one by
+one when the work is done. It also tells you how many files are left and, once one is placed,
+where it went. You can drop more files or folders on it.
 It stays open while you do other things; close it with its **×** or by clicking the marble
 again, and use **Open Gracil** in it to get the big window.
 
 When you compress from File Explorer, this small window opens by itself so you can see the
 work happen. If you'd rather it didn't, right-click the marble and untick **Show mini-window when
-compressing from File Explorer**. Gracil remembers your choice, and it never changes how videos
+compressing from File Explorer**. Gracil remembers your choice, and it never changes how files
 are compressed.
 
-**Exit** is how you quit Gracil. If nothing is compressing or waiting, Gracil quits straight away.
-Otherwise it first asks, and tells you exactly what will happen: the video being compressed stops
-and its original stays exactly as it was, and videos still waiting are kept for next time (see
-below). Choose **Keep working** to carry on. If the work finishes while you decide, the question
-goes away. Gracil quits within a few seconds, even if a file it was working on is on a slow network
-or cloud drive; only a video being put in its place is always finished first.
+**Exit** is how you quit Gracil. If nothing is compressing, waiting or waiting for your choice,
+Gracil quits straight away. Otherwise it first asks, and tells you exactly what will happen: the
+file being compressed stops and its original stays exactly as it was, files still waiting are
+kept for next time, and finished files you haven't chosen for are let go, to be compressed again
+next time (see below). Choose **Keep working**, or press **Esc**, to carry on. If the work
+finishes while you decide, the question goes away. Gracil quits within a few seconds, even if a
+file it was working on is on a slow network or cloud drive; only a file being put in its place is
+always finished first.
 
-When Gracil quits, finished videos you didn't choose for are deleted; their originals stay as
-they were.
+When Gracil quits, finished files you didn't choose for are deleted; their originals stay as
+they were, and they are on the list to carry on with.
 
 ## Carrying on after closing
 

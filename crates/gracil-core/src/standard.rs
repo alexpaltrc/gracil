@@ -154,27 +154,14 @@ pub fn pixel_format(ten_bit: bool, encoder: VideoEncoder) -> &'static str {
     }
 }
 
-/// The frame rate a video leaves with. `None` keeps the source's. Its picture size is always kept
-/// (ADR 0033).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Shape {
-    pub rate: Option<Rate>,
-}
-
 /// Sources averaging more frames per second than this are brought down to 30; it leaves 29.97
 /// and slightly irregular 30 fps phone videos alone.
 const MAX_RATE: f64 = 30.5;
 
-impl Shape {
-    pub fn of(stream: &Stream) -> Self {
-        Self {
-            rate: stream.frame_rate.and_then(slower_rate),
-        }
-    }
-
-    pub fn is_unchanged(self) -> bool {
-        self == Self::default()
-    }
+/// The frame rate a video leaves with. `None` keeps the source's. Its picture size is always kept
+/// (ADR 0033).
+pub fn output_rate(stream: &Stream) -> Option<Rate> {
+    stream.frame_rate.and_then(slower_rate)
 }
 
 /// 30 fps, or 29.97 for the NTSC family (59.94, 119.88) so the timing stays regular.
@@ -214,12 +201,10 @@ mod tests {
     use super::*;
     use crate::probe::StreamKind;
 
-    fn video(width: u32, height: u32, num: u32, den: u32) -> Stream {
+    fn video(num: u32, den: u32) -> Stream {
         Stream {
             kind: StreamKind::Video,
             codec: "h264".into(),
-            width: Some(width),
-            height: Some(height),
             frame_rate: Some(Rate { num, den }),
             ..Stream::default()
         }
@@ -245,21 +230,17 @@ mod tests {
             ((3018, 100), None),
         ];
         for ((num, den), expected) in cases {
-            assert_eq!(
-                Shape::of(&video(1280, 720, num, den)).rate,
-                expected,
-                "{num}/{den}"
-            );
+            assert_eq!(output_rate(&video(num, den)), expected, "{num}/{den}");
         }
     }
 
     #[test]
-    fn unknown_size_and_rate_stay() {
+    fn an_unknown_rate_stays() {
         let stream = Stream {
             kind: StreamKind::Video,
             ..Stream::default()
         };
-        assert!(Shape::of(&stream).is_unchanged());
+        assert_eq!(output_rate(&stream), None);
     }
 
     #[test]

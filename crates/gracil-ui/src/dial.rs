@@ -1,5 +1,6 @@
 //! The dial: a marble that fills an invisible circle clockwise as the video compresses, with the
-//! controls in its middle (ADR 0038). The top of the middle pauses and resumes; the bottom stops.
+//! controls in its middle (ADR 0038). The top of the middle pauses and resumes; the bottom stops,
+//! unless the dial is one that can't stop: then its whole middle pauses and resumes.
 //!
 //! It animates itself: every value eases towards what the app says, and the dial only asks for
 //! new frames while something is still moving (spec §51).
@@ -31,6 +32,11 @@ const DIVIDER: f32 = 0.404;
 const FILL_EASE: f32 = 0.28;
 const SYMBOL_EASE: f32 = 0.05;
 const HOVER_EASE: f32 = 0.07;
+/// How long the marble takes to breathe in and out while Gracil gets ready, in seconds.
+const BREATH: f32 = 1.6;
+/// How faint the marble's middle gets at the bottom of a breath.
+const BREATH_DEPTH: f32 = 0.45;
+const BREATH_EASE: f32 = 0.3;
 
 /// What the ring stands for. When it changes, the ring shows the new one as it is, without
 /// sweeping from the old one.
@@ -47,8 +53,13 @@ pub struct Dial {
     /// How much is done, when known.
     pub fraction: Option<f64>,
     pub paused: bool,
-    /// Pause is offered only once FFmpeg is compressing.
+    /// Pause is offered for every file being worked on, except while a result is put in place.
     pub can_pause: bool,
+    /// Whether the bottom of the middle stops. The mini-window's dial only pauses (spec §55).
+    pub can_stop: bool,
+    /// Gracil is getting ready and nothing has filled yet: the marble breathes softly, so the
+    /// wait never looks stuck (ADR 0055).
+    pub getting_ready: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +79,9 @@ pub struct State {
     hover_bottom: f32,
     pressed: Option<Part>,
     last_frame: Option<Instant>,
+    /// How much the marble breathes, from 0 (steady) to 1, and where in its breath it is.
+    breathing: f32,
+    breath: f32,
 }
 
 impl Dial {
@@ -82,7 +96,7 @@ impl Dial {
     fn enabled(&self, part: Part) -> bool {
         match part {
             Part::PauseResume => self.paused || self.can_pause,
-            Part::Stop => true,
+            Part::Stop => self.can_stop,
         }
     }
 
@@ -94,7 +108,7 @@ impl Dial {
         if position.distance(center) > radius {
             return None;
         }
-        let part = if position.y > center.y + DIVIDER * radius {
+        let part = if self.can_stop && position.y > center.y + DIVIDER * radius {
             Part::Stop
         } else {
             Part::PauseResume
@@ -110,12 +124,13 @@ impl Dial {
         }
     }
 
-    fn targets(&self, hovered: Option<Part>) -> [f32; 4] {
+    fn targets(&self, hovered: Option<Part>) -> [f32; 5] {
         [
             self.target_fill(),
             self.target_play(),
             f32::from(hovered == Some(Part::PauseResume)),
             f32::from(hovered == Some(Part::Stop)),
+            f32::from(self.getting_ready && !self.paused),
         ]
     }
 }
@@ -158,18 +173,31 @@ impl canvas::Program<Message> for Dial {
                 let elapsed = state
                     .last_frame
                     .map_or(0.0, |last| now.duration_since(last).as_secs_f32().min(0.1));
-                let [fill, play, top, bottom] = self.targets(hovered);
+                let [fill, play, top, bottom, breathing] = self.targets(hovered);
                 state.fill = approach(state.fill, fill, elapsed, FILL_EASE);
                 state.play = approach(state.play, play, elapsed, SYMBOL_EASE);
                 state.hover_top = approach(state.hover_top, top, elapsed, HOVER_EASE);
                 state.hover_bottom = approach(state.hover_bottom, bottom, elapsed, HOVER_EASE);
+                state.breathing = approach(state.breathing, breathing, elapsed, BREATH_EASE);
+                state.breath = if state.breathing > 0.0 {
+                    (state.breath + elapsed / BREATH).fract()
+                } else {
+                    0.0
+                };
                 state.last_frame = Some(*now);
             }
             _ => {}
         }
 
-        let current = [state.fill, state.play, state.hover_top, state.hover_bottom];
-        if current == self.targets(hovered) {
+        let current = [
+            state.fill,
+            state.play,
+            state.hover_top,
+            state.hover_bottom,
+            state.breathing,
+        ];
+        // A breath never settles, so the dial keeps drawing while it breathes.
+        if current == self.targets(hovered) && state.breathing == 0.0 {
             state.last_frame = None;
             None
         } else {
@@ -226,20 +254,30 @@ impl canvas::Program<Message> for Dial {
                 .with_width(1.0)
                 .with_color(palette.text.scale_alpha(0.12)),
         );
-        frame.fill(&Path::circle(marble, marble_radius * 0.55), tokens.accent);
+        let breath = 0.5 - 0.5 * (TAU * state.breath).cos();
+        frame.fill(
+            &Path::circle(marble, marble_radius * 0.55),
+            tokens
+                .accent
+                .scale_alpha(1.0 - BREATH_DEPTH * state.breathing * breath),
+        );
 
         // The middle: two buttons that light up softly under the pointer.
         let divider_y = center.y + DIVIDER * radius;
         let below = (DIVIDER).asin();
-        let top = Path::new(|path| {
-            path.arc(canvas::path::Arc {
-                center,
-                radius,
-                start_angle: (PI - below).into(),
-                end_angle: (TAU + below).into(),
-            });
-            path.close();
-        });
+        let top = if self.can_stop {
+            Path::new(|path| {
+                path.arc(canvas::path::Arc {
+                    center,
+                    radius,
+                    start_angle: (PI - below).into(),
+                    end_angle: (TAU + below).into(),
+                });
+                path.close();
+            })
+        } else {
+            Path::circle(center, radius)
+        };
         let bottom = Path::new(|path| {
             path.arc(canvas::path::Arc {
                 center,
@@ -262,7 +300,11 @@ impl canvas::Program<Message> for Dial {
 
         // Pause turns into play by moving the corners of its two bars into the triangle.
         let size = radius * 0.46;
-        let icon = Point::new(center.x, center.y - radius * 0.2);
+        let icon = if self.can_stop {
+            Point::new(center.x, center.y - radius * 0.2)
+        } else {
+            center
+        };
         let color = symbol(state.hover_top, self.enabled(Part::PauseResume));
         for (pause, play) in pause_play_shapes() {
             let corners: Vec<Point> = pause
@@ -286,6 +328,10 @@ impl canvas::Program<Message> for Dial {
                 }),
                 color,
             );
+        }
+
+        if !self.can_stop {
+            return vec![frame.into_geometry()];
         }
 
         // Stop sits in the middle of the bottom button.
@@ -422,6 +468,8 @@ mod tests {
             fraction: Some(0.5),
             paused,
             can_pause,
+            can_stop: true,
+            getting_ready: false,
         }
     }
 
@@ -457,6 +505,22 @@ mod tests {
         assert_eq!(
             preparing.part_at(bounds, at(middle, middle + radius * 0.8)),
             Some(Part::Stop)
+        );
+    }
+
+    #[test]
+    fn a_dial_that_cannot_stop_pauses_from_its_whole_middle() {
+        let bounds = Rectangle::new(Point::ORIGIN, Size::new(SIZE, SIZE));
+        let at = |x: f32, y: f32| mouse::Cursor::Available(Point::new(x, y));
+        let middle = SIZE / 2.0;
+        let radius = middle_radius(bounds.size());
+        let mini = Dial {
+            can_stop: false,
+            ..dial(false, true)
+        };
+        assert_eq!(
+            mini.part_at(bounds, at(middle, middle + radius * 0.8)),
+            Some(Part::PauseResume)
         );
     }
 }

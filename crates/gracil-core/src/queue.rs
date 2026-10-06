@@ -96,13 +96,6 @@ impl Queue {
         self.jobs.iter().find(|job| job.state.is_active())
     }
 
-    pub fn pending_count(&self) -> usize {
-        self.jobs
-            .iter()
-            .filter(|job| job.state == JobState::Pending)
-            .count()
-    }
-
     /// How many files of `kind` are in a state `test` accepts.
     pub fn count(&self, kind: Kind, test: impl Fn(JobState) -> bool) -> usize {
         self.jobs
@@ -231,7 +224,10 @@ mod tests {
         assert_eq!(queue.get(image).unwrap().file_name(), "b.jpg");
         let next = queue.start_preparing(Kind::Video).unwrap();
         assert_eq!(next.file_name(), "c.mp4");
-        assert_eq!(queue.pending_count(), 1);
+        assert_eq!(
+            queue.count(Kind::Image, |state| state == JobState::Pending),
+            1
+        );
         assert_eq!(queue.count(Kind::Video, JobState::is_active), 2);
     }
 
