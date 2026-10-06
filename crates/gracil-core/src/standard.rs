@@ -17,10 +17,12 @@ pub const AGAIN_SCORE: f64 = 90.0;
 /// original (ADR 0029).
 pub const WORTH_IT: f64 = 0.8;
 
-/// The levels searched (CQ for NVENC, CRF for x265), from best quality to smallest file.
+/// The levels searched (CQ for NVENC, ICQ for Quick Sync, QP for AMF, CRF for x265), from best
+/// quality to smallest file.
 pub fn levels(encoder: VideoEncoder) -> RangeInclusive<u8> {
     match encoder {
-        VideoEncoder::Nvenc => 24..=38,
+        VideoEncoder::Nvenc | VideoEncoder::Amf => 24..=38,
+        VideoEncoder::Qsv => 20..=36,
         VideoEncoder::X265 => 20..=34,
     }
 }
@@ -28,7 +30,8 @@ pub fn levels(encoder: VideoEncoder) -> RangeInclusive<u8> {
 /// The levels searched for a video that is already compressed: further towards small files.
 pub fn again_levels(encoder: VideoEncoder) -> RangeInclusive<u8> {
     match encoder {
-        VideoEncoder::Nvenc => 24..=42,
+        VideoEncoder::Nvenc | VideoEncoder::Amf => 24..=42,
+        VideoEncoder::Qsv => 20..=40,
         VideoEncoder::X265 => 20..=38,
     }
 }
@@ -36,31 +39,46 @@ pub fn again_levels(encoder: VideoEncoder) -> RangeInclusive<u8> {
 /// The level used when no measurement is possible: the settings Gracil started with.
 pub fn fallback_level(encoder: VideoEncoder) -> u8 {
     match encoder {
-        VideoEncoder::Nvenc => 27,
+        VideoEncoder::Nvenc | VideoEncoder::Amf => 27,
+        VideoEncoder::Qsv => 24,
         VideoEncoder::X265 => 26,
     }
 }
 
-/// How much of the NVENC feature set this GPU and driver accept. Detected once, best first.
+/// The options that set `encoder`'s quality `level`. AMF has no constant-quality mode for HEVC, so
+/// it gets a constant quantizer, which the quality search turns into the same thing (ADR 0052).
+pub fn level_options(encoder: VideoEncoder, level: u8) -> Vec<(&'static str, String)> {
+    let level = level.to_string();
+    match encoder {
+        VideoEncoder::Nvenc => vec![("cq", level)],
+        VideoEncoder::Qsv => vec![("global_quality", level)],
+        VideoEncoder::Amf => vec![("qp_i", level.clone()), ("qp_p", level)],
+        VideoEncoder::X265 => vec![("crf", level)],
+    }
+}
+
+/// How much of a graphics card encoder's feature set this card and driver accept (ADR 0028,
+/// ADR 0052). Detected once, best first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum NvencLevel {
-    /// 10-bit with lookahead, B-frame references and multipass. No adaptive quantization: it made
-    /// files larger at the same measured quality (ADR 0029).
+pub enum HardwareLevel {
+    /// 10-bit with the encoder's look-ahead and smarter frame choices where it has them. No
+    /// adaptive quantization on NVENC: it made files larger at the same measured quality
+    /// (ADR 0029).
     Full,
-    /// 10-bit with lookahead and multipass.
+    /// 10-bit, with NVENC's lookahead and multipass.
     Basic,
     /// The original reference settings, 8-bit.
     #[default]
     Legacy,
 }
 
-impl NvencLevel {
+impl HardwareLevel {
     pub const BEST_FIRST: [Self; 3] = [Self::Full, Self::Basic, Self::Legacy];
 
-    /// Encoder options, without the quality level.
-    pub fn options(self) -> &'static [(&'static str, &'static str)] {
-        match self {
-            Self::Full => &[
+    /// `encoder`'s options, without the quality level. Empty for x265, which isn't on the card.
+    pub fn options(self, encoder: VideoEncoder) -> &'static [(&'static str, &'static str)] {
+        match (encoder, self) {
+            (VideoEncoder::Nvenc, Self::Full) => &[
                 ("preset", "p7"),
                 ("tune", "hq"),
                 ("rc", "vbr"),
@@ -72,7 +90,7 @@ impl NvencLevel {
                 ("b_ref_mode", "middle"),
                 ("multipass", "fullres"),
             ],
-            Self::Basic => &[
+            (VideoEncoder::Nvenc, Self::Basic) => &[
                 ("preset", "p7"),
                 ("tune", "hq"),
                 ("rc", "vbr"),
@@ -82,7 +100,35 @@ impl NvencLevel {
                 ("rc-lookahead", "32"),
                 ("multipass", "fullres"),
             ],
-            Self::Legacy => &[("preset", "p6"), ("tune", "hq"), ("rc", "vbr"), ("b", "0")],
+            (VideoEncoder::Nvenc, Self::Legacy) => {
+                &[("preset", "p6"), ("tune", "hq"), ("rc", "vbr"), ("b", "0")]
+            }
+            // `global_quality` without a bitrate is Intel's constant quality (ICQ); look-ahead
+            // needs the extended rate control.
+            (VideoEncoder::Qsv, Self::Full) => &[
+                ("preset", "veryslow"),
+                ("profile", "main10"),
+                ("extbrc", "1"),
+                ("look_ahead_depth", "40"),
+                ("b_strategy", "1"),
+                ("adaptive_i", "1"),
+                ("adaptive_b", "1"),
+            ],
+            (VideoEncoder::Qsv, Self::Basic) => &[("preset", "veryslow"), ("profile", "main10")],
+            (VideoEncoder::Qsv, Self::Legacy) => &[("preset", "slow")],
+            (VideoEncoder::Amf, Self::Full | Self::Basic) => &[
+                ("usage", "transcoding"),
+                ("quality", "quality"),
+                ("rc", "cqp"),
+                ("profile", "main10"),
+                ("bitdepth", "10"),
+            ],
+            (VideoEncoder::Amf, Self::Legacy) => &[
+                ("usage", "transcoding"),
+                ("quality", "quality"),
+                ("rc", "cqp"),
+            ],
+            (VideoEncoder::X265, _) => &[],
         }
     }
 
@@ -103,7 +149,7 @@ pub fn x265_options(threads: usize) -> [(&'static str, String); 2] {
 pub fn pixel_format(ten_bit: bool, encoder: VideoEncoder) -> &'static str {
     match (ten_bit, encoder) {
         (false, _) => "yuv420p",
-        (true, VideoEncoder::Nvenc) => "p010le",
+        (true, VideoEncoder::Nvenc | VideoEncoder::Qsv | VideoEncoder::Amf) => "p010le",
         (true, VideoEncoder::X265) => "yuv420p10le",
     }
 }

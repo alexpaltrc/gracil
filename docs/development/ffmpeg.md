@@ -55,18 +55,23 @@ license texts.
 
 Detected once per process (`Capabilities::detect`):
 
-- **NVENC**: `hevc_nvenc` is listed *and* a three-frame test encode succeeds. A listed encoder
-  says nothing about the GPU or the driver.
-- **NVENC tier** (`standard::NvencLevel`, ADR 0028): the test encode is run with each tier's
-  options, best first, and the first that succeeds is used. `Full` is 10-bit with lookahead,
-  B-frame references and multipass; `Basic` drops the B-frame settings; `Legacy` is the original
-  8-bit p6 setting. No tier uses adaptive quantization or the temporal filter (ADR 0029).
+- **Card encoder** (ADR 0052): `hevc_nvenc`, then `hevc_qsv`, then `hevc_amf`; the first that is
+  listed *and* passes a three-frame test encode is used. A listed encoder says nothing about the
+  card or the driver. The test feeds the same pixel format and a quality level as real encodes.
+- **Tier** (`standard::HardwareLevel`, ADR 0028, ADR 0052): the test encode is run with each
+  tier's options, best first, and the first that succeeds is used. For NVENC, `Full` is 10-bit
+  with lookahead, B-frame references and multipass; `Basic` drops the B-frame settings; `Legacy`
+  is the original 8-bit p6 setting. No tier uses adaptive quantization or the temporal filter (ADR 0029).
 - **CUDA decoding**: NVENC works and `-hwaccels` lists `cuda`.
 - **Filters**: `-filters` lists `libvmaf` (the quality search); the essentials build has it.
   `libvmaf_cuda` with `scale_cuda` and `hwupload_cuda` (VMAF on the GPU, ADR 0030) is used when
   present; no public Windows build has it.
 - **x265 10-bit**: `-h encoder=libx265` lists `yuv420p10le`.
-- Without NVENC, `libx265` on the CPU does the encoding.
+- Quick Sync tiers: `Full` is 10-bit `veryslow` with `extbrc 1`, `look_ahead_depth 40` and
+  adaptive frame types; `Basic` is 10-bit `veryslow`; `Legacy` is 8-bit `slow`. AMF: `Full` and
+  `Basic` are 10-bit (`profile main10`, `bitdepth 10`), `usage transcoding`, `quality quality`,
+  `rc cqp`; `Legacy` is the same in 8-bit.
+- Without a card encoder, `libx265` on the CPU does the encoding.
 
 ## One compression
 
@@ -80,7 +85,8 @@ Detected once per process (`Capabilities::detect`):
 | 3 | NVENC | software | video + AAC audio |
 | 4 | x265 | software | video + AAC audio |
 
-Without NVENC it is x265 with all streams, then x265 essential. A failed attempt moves on to the
+With Quick Sync or AMF it is the card (software decoding) with all streams, then essential, then
+x265 essential. Without a card encoder it is x265 with all streams, then x265 essential. A failed attempt moves on to the
 next one only if it used CUDA or got nowhere. A failure partway through a software decode means
 the source is damaged at that point, and the next attempt would stop there too.
 
@@ -89,21 +95,24 @@ source within 1% or one second.
 
 ### Settings (ADR 0028)
 
-- NVENC: `hevc_nvenc` with the detected tier's options (`standard::NvencLevel::options`) and
+- NVENC: `hevc_nvenc` with the detected tier's options (`standard::HardwareLevel::options`) and
   `-cq <level>`. With `Full`:
   `-preset p7 -tune hq -rc vbr -b 0 -profile main10 -highbitdepth 1 -rc-lookahead 32 -bf 4
   -b_ref_mode middle -multipass fullres`.
+- Quick Sync: `hevc_qsv` with the tier's options and `-global_quality <level>` (ICQ).
+- AMF: `hevc_amf` with the tier's options and `-qp_i <level> -qp_p <level>`: HEVC AMF has no
+  constant-quality mode without a bitrate, so a constant quantizer is searched instead.
 - x265: `-preset medium -x265-params log-level=error -crf <level>`, 10-bit when supported.
 - HEVC is tagged `hvc1` so Apple devices and Windows players accept it.
 - **Size and frame rate** (`standard::Shape`): the picture size is never changed (ADR 0033). An
   average above 30.5 fps becomes 30, or 30000/1001 for the NTSC family; slower videos are left as
   they are. Filters go per stream (`-filter:<out>`): `fps`, then, on CPU frames only,
-  `format=p010le`/`yuv420p10le`/`yuv420p`. GPU frames need no format filter; `-highbitdepth 1` handles 10-bit.
+  `format=p010le` (any card)/`yuv420p10le`/`yuv420p`. GPU frames need no format filter; `-highbitdepth 1` handles 10-bit.
 
 ### Quality search (`search.rs`)
 
 Before the first attempt, Gracil looks for the highest level (smallest file) whose VMAF reaches
-95: NVENC CQ 24–38, x265 CRF 20–34. Between a level that reaches the target and one that misses
+95: NVENC CQ and AMF QP 24–38, Quick Sync ICQ 20–36, x265 CRF 20–34. Between a level that reaches the target and one that misses
 it, the next guess is on a straight line through their scores; with only a level that reaches it,
 the search steps past it by the score it has to spare (about a point per level); otherwise it
 halves what is left. Each step encodes 4 s samples, one per 15 s of video up to four, centred in
@@ -137,7 +146,7 @@ misses 95 is already predicted above 80%.
 
 **Already compressed (ADR 0033).** Otherwise the video was already compressed, and compressing it
 again is allowed to lose a little: the search continues for the highest level reaching VMAF 90
-(NVENC CQ 24–42, x265 CRF 20–38), at the video's own size. That level is used if predicted at most
+(NVENC CQ and AMF QP 24–42, Quick Sync ICQ 20–40, x265 CRF 20–38), at the video's own size. That level is used if predicted at most
 80% of the original; if not, nothing is encoded and `find_level` returns `Found::AsSmallAsItGets`.
 
 The search is skipped (fixed level: CQ 27, CRF 26) for videos under 6 s, of unknown length, under

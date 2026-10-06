@@ -80,7 +80,7 @@ pub fn find_level(
         return Found::Fallback;
     };
     let shortest = match encoder {
-        VideoEncoder::Nvenc => SHORTEST,
+        VideoEncoder::Nvenc | VideoEncoder::Qsv | VideoEncoder::Amf => SHORTEST,
         VideoEncoder::X265 => SHORTEST_X265,
     };
     let Some(duration) = info.duration.filter(|d| *d >= shortest) else {

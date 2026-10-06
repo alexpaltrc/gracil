@@ -136,9 +136,11 @@ Gracil is still being built, but you can already compress videos and images with
 - Compressed videos keep their recording date, orientation, chapters, subtitles, audio languages
   and cover art. The few things an MP4 can't hold, such as subtitles that are pictures rather
   than text, are left out, and the video is still kept.
-- With a recent NVIDIA graphics card, Gracil uses it to compress much faster, with the card's
-  quality features that make videos smaller without making them look worse. Without one, it uses
-  the processor.
+- With a graphics card that can compress video, Gracil uses it to compress much faster, with the
+  card's quality features that make videos smaller without making them look worse. That can be a
+  recent NVIDIA card, Intel graphics (including the graphics built into most Intel processors) or
+  AMD graphics. Gracil checks with a tiny test which one works, and without one it uses the
+  processor.
 - Each video gets its own amount of compression. Gracil first tries a few short moments of the
   video and picks the strongest compression that still looks the same as the original, so easy
   videos come out much smaller and demanding ones keep their detail. This takes a few seconds

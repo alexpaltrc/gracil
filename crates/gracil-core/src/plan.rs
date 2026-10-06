@@ -73,6 +73,12 @@ pub fn attempts(capabilities: Capabilities) -> Vec<Attempt> {
             ]);
             list
         }
+        // Quick Sync and AMF read frames decoded by the processor (ADR 0052).
+        card @ (VideoEncoder::Qsv | VideoEncoder::Amf) => vec![
+            attempt(card, false, Full),
+            attempt(card, false, Essential),
+            attempt(X265, false, Essential),
+        ],
         X265 => vec![attempt(X265, false, Full), attempt(X265, false, Essential)],
     }
 }
@@ -103,7 +109,7 @@ pub struct EncodePlan {
     pub keep_apple_metadata: bool,
     /// What the encoders support on this computer.
     pub capabilities: Capabilities,
-    /// CQ for NVENC, CRF for x265.
+    /// CQ for NVENC, ICQ for Quick Sync, QP for AMF, CRF for x265.
     pub level: u8,
 }
 
@@ -252,22 +258,21 @@ pub(crate) fn video_codec_args(
     level: u8,
     out: usize,
 ) -> Vec<OsString> {
-    let (codec, options, level_name): (_, Vec<(&str, String)>, _) = match encoder {
-        VideoEncoder::Nvenc => {
-            let options = capabilities.nvenc.options();
-            let options = options.iter().map(|&(n, v)| (n, v.to_owned())).collect();
-            ("hevc_nvenc", options, "cq")
-        }
-        VideoEncoder::X265 => {
-            let options = standard::x265_options(share::threads_for_one()).into();
-            ("libx265", options, "crf")
-        }
+    let options: Vec<(&str, String)> = match encoder {
+        VideoEncoder::X265 => standard::x265_options(share::threads_for_one()).into(),
+        _ => capabilities
+            .hardware
+            .options(encoder)
+            .iter()
+            .map(|&(n, v)| (n, v.to_owned()))
+            .collect(),
     };
     // `hvc1` is the HEVC tag Apple devices and Windows players expect.
-    [("c", codec.to_owned())]
+    [("c", encoder.name().to_owned())]
         .into_iter()
         .chain(options)
-        .chain([(level_name, level.to_string()), ("tag", "hvc1".to_owned())])
+        .chain(standard::level_options(encoder, level))
+        .chain([("tag", "hvc1".to_owned())])
         .flat_map(|(name, value)| [format!("-{name}:{out}").into(), value.into()])
         .collect()
 }
@@ -303,7 +308,7 @@ fn stream_action(stream: &Stream, preservation: Preservation) -> Option<StreamAc
 mod tests {
     use super::*;
     use crate::probe::Rate;
-    use crate::standard::NvencLevel;
+    use crate::standard::HardwareLevel;
     use StreamAction::*;
 
     const SAME: StreamAction = EncodeVideo(Shape { rate: None });
@@ -340,11 +345,11 @@ mod tests {
         }
     }
 
-    fn capabilities(nvenc: NvencLevel) -> Capabilities {
+    fn capabilities(nvenc: HardwareLevel) -> Capabilities {
         Capabilities {
             encoder: VideoEncoder::Nvenc,
             cuda_decode: true,
-            nvenc,
+            hardware: nvenc,
             x265_10bit: true,
             vmaf: true,
             vmaf_cuda: false,
@@ -357,7 +362,7 @@ mod tests {
             Path::new(r"C:\in\a.part"),
             info,
             attempt,
-            capabilities(NvencLevel::Full),
+            capabilities(HardwareLevel::Full),
             standard::fallback_level(attempt.encoder),
         )
     }
@@ -418,7 +423,7 @@ mod tests {
     fn older_gpus_get_the_reference_settings() {
         let info = info(vec![stream(0, StreamKind::Video, "h264")]);
         let mut plan = plan(&info, nvenc_full());
-        plan.capabilities = capabilities(NvencLevel::Legacy);
+        plan.capabilities = capabilities(HardwareLevel::Legacy);
         plan.level = 31;
         let args = joined(&plan);
         assert!(args.contains(
@@ -456,6 +461,32 @@ mod tests {
         assert!(args.contains("-map 0:1 -map 0:2 -map_metadata 0 -map_chapters 0"));
         assert!(args.contains("-map_metadata:s:0 0:s:1 -map_metadata:s:1 0:s:2"));
         assert!(!args.contains("0:0"));
+    }
+
+    #[test]
+    fn intel_and_amd_cards_get_their_own_settings() {
+        let info = info(vec![stream(0, StreamKind::Video, "h264")]);
+        let on = |encoder| Attempt {
+            encoder,
+            hw_decode: false,
+            preservation: Preservation::Full,
+        };
+
+        let intel = joined(&plan(&info, on(VideoEncoder::Qsv)));
+        assert!(intel.contains(
+            "-filter:0 format=p010le -c:0 hevc_qsv -preset:0 veryslow -profile:0 main10 \
+             -extbrc:0 1 -look_ahead_depth:0 40 -b_strategy:0 1 -adaptive_i:0 1 \
+             -adaptive_b:0 1 -global_quality:0 24 -tag:0 hvc1"
+        ));
+
+        let amd = joined(&plan(&info, on(VideoEncoder::Amf)));
+        assert!(amd.contains(
+            "-filter:0 format=p010le -c:0 hevc_amf -usage:0 transcoding -quality:0 quality \
+             -rc:0 cqp -profile:0 main10 -bitdepth:0 10 -qp_i:0 27 -qp_p:0 27 -tag:0 hvc1"
+        ));
+        for args in [intel, amd] {
+            assert!(!args.contains("hwaccel"));
+        }
     }
 
     #[test]
@@ -593,7 +624,7 @@ mod tests {
             Path::new(r"C:\日本語\out.part"),
             &info,
             nvenc_full(),
-            capabilities(NvencLevel::Full),
+            capabilities(HardwareLevel::Full),
             27,
         );
         let args = plan.args();
@@ -604,7 +635,7 @@ mod tests {
 
     #[test]
     fn attempt_order_with_full_nvidia_support() {
-        let caps = capabilities(NvencLevel::Full);
+        let caps = capabilities(HardwareLevel::Full);
         let list = attempts(caps);
         assert_eq!(list.len(), 4);
         assert_eq!(list[0], nvenc_full());
@@ -618,7 +649,7 @@ mod tests {
         let caps = Capabilities {
             encoder: VideoEncoder::X265,
             cuda_decode: false,
-            ..capabilities(NvencLevel::Legacy)
+            ..capabilities(HardwareLevel::Legacy)
         };
         let list = attempts(caps);
         assert!(
@@ -626,5 +657,21 @@ mod tests {
                 .all(|a| a.encoder == VideoEncoder::X265 && !a.hw_decode)
         );
         assert_eq!(list.len(), 2);
+    }
+
+    #[test]
+    fn intel_and_amd_cards_fall_back_to_the_processor() {
+        for encoder in [VideoEncoder::Qsv, VideoEncoder::Amf] {
+            let caps = Capabilities {
+                encoder,
+                cuda_decode: false,
+                ..capabilities(HardwareLevel::Full)
+            };
+            let list = attempts(caps);
+            assert!(list.iter().all(|a| !a.hw_decode));
+            assert_eq!(list.len(), 3);
+            assert_eq!(list[0].encoder, encoder);
+            assert_eq!(list[2].encoder, VideoEncoder::X265);
+        }
     }
 }

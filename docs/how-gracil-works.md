@@ -159,8 +159,10 @@ the expected file.
 When Gracil starts, it checks what your computer can do. It does more than ask whether a feature
 exists: it runs a tiny test compression to be sure.
 
-- **With a recent NVIDIA graphics card**, the card does the work. That is usually many times
-  faster than the processor, and the computer stays responsive.
+- **With a graphics card that can compress video**, the card does the work: a recent NVIDIA
+  card, an Intel one (including the graphics built into most Intel processors) or an AMD one. That
+  is usually many times faster than the processor, and the computer stays responsive. If a
+  computer has more than one, NVIDIA comes first, then Intel, then AMD.
 - **Without one**, Gracil uses the processor. It is slower but just as good.
 
 You never choose between these. Gracil picks the best one available. The test also tells Gracil

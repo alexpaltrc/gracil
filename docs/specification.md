@@ -1072,6 +1072,8 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
 - **Cooler while in use, and any graphics card.** The tools run in Windows' efficiency mode
   while the person works or the computer is on battery, and the temperature of Intel and AMD
   cards is read from their driver and held like an NVIDIA card's. *Built 2026-10-05 (ADR 0051).*
+- **Intel and AMD graphics compress too.** *Asked by the product owner.* After NVIDIA and before
+  the processor, each checked with a tiny test compression. *Built 2026-10-05 (ADR 0052).*
 
 # 78. Temporary UI decisions
 

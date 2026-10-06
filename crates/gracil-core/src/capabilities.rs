@@ -1,8 +1,8 @@
 //! What this computer and FFmpeg build can actually do (spec §22, §25).
 //!
-//! FFmpeg is the authority: an encoder counts only if FFmpeg lists it, and NVENC counts only if a
-//! tiny real encode succeeds, because a listed `hevc_nvenc` says nothing about the GPU or driver.
-//! Detection takes well under a second and runs once per process.
+//! FFmpeg is the authority: an encoder counts only if FFmpeg lists it, and a graphics card encoder
+//! (NVENC, Quick Sync, AMF) counts only if a tiny real encode succeeds, because a listed one says
+//! nothing about the card or driver. Detection takes about a second and runs once per process.
 
 use std::collections::HashSet;
 use std::io;
@@ -11,7 +11,7 @@ use std::process::Stdio;
 use tracing::info;
 
 use crate::probe::{MediaInfo, StreamKind};
-use crate::standard::NvencLevel;
+use crate::standard::{self, HardwareLevel};
 use crate::toolchain::Toolchain;
 
 /// Encoder names reported by `ffmpeg -encoders`.
@@ -97,8 +97,33 @@ impl Decoders {
 pub enum VideoEncoder {
     /// NVIDIA hardware HEVC encoder.
     Nvenc,
+    /// Intel Quick Sync hardware HEVC encoder (ADR 0052).
+    Qsv,
+    /// AMD hardware HEVC encoder (ADR 0052).
+    Amf,
     /// CPU HEVC encoder; always available because the toolchain is required to have it.
     X265,
+}
+
+impl VideoEncoder {
+    /// Graphics card encoders, in the order they are tried: a computer with an NVIDIA card next to
+    /// Intel graphics uses the NVIDIA card.
+    pub const ON_THE_CARD: [Self; 3] = [Self::Nvenc, Self::Qsv, Self::Amf];
+
+    /// FFmpeg's name for this encoder.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Nvenc => "hevc_nvenc",
+            Self::Qsv => "hevc_qsv",
+            Self::Amf => "hevc_amf",
+            Self::X265 => "libx265",
+        }
+    }
+
+    /// Whether this encoder runs on the graphics card rather than the processor.
+    pub fn on_the_card(self) -> bool {
+        self != Self::X265
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,8 +131,9 @@ pub struct Capabilities {
     pub encoder: VideoEncoder,
     /// NVDEC decoding through CUDA. Only used together with NVENC.
     pub cuda_decode: bool,
-    /// The NVENC settings this GPU and driver accept (ADR 0028); `Legacy` without NVENC.
-    pub nvenc: NvencLevel,
+    /// The settings this card and driver accept for `encoder` (ADR 0028, ADR 0052); `Legacy` for
+    /// x265.
+    pub hardware: HardwareLevel,
     /// x265 can encode 10-bit video.
     pub x265_10bit: bool,
     /// VMAF, to measure each video's quality level.
@@ -119,15 +145,18 @@ pub struct Capabilities {
 
 impl Capabilities {
     pub fn detect(toolchain: &Toolchain, encoders: &Encoders) -> Self {
-        let nvenc = encoders
-            .contains("hevc_nvenc")
-            .then(|| {
-                NvencLevel::BEST_FIRST
+        let on_the_card = VideoEncoder::ON_THE_CARD
+            .into_iter()
+            .filter(|encoder| encoders.contains(encoder.name()))
+            .find_map(|encoder| {
+                HardwareLevel::BEST_FIRST
                     .into_iter()
-                    .find(|&level| nvenc_works(toolchain, level))
-            })
-            .flatten();
-        let cuda_decode = nvenc.is_some()
+                    .find(|&level| card_encodes(toolchain, encoder, level))
+                    .map(|level| (encoder, level))
+            });
+        let (encoder, hardware) =
+            on_the_card.unwrap_or((VideoEncoder::X265, HardwareLevel::Legacy));
+        let cuda_decode = encoder == VideoEncoder::Nvenc
             && capture(toolchain, &["-hide_banner", "-hwaccels"])
                 .is_ok_and(|listing| listing.lines().any(|line| line.trim() == "cuda"));
         let filters = capture(toolchain, &["-hide_banner", "-filters"]).unwrap_or_default();
@@ -135,13 +164,9 @@ impl Capabilities {
             .is_ok_and(|help| help.contains("yuv420p10le"));
 
         let capabilities = Self {
-            encoder: if nvenc.is_some() {
-                VideoEncoder::Nvenc
-            } else {
-                VideoEncoder::X265
-            },
+            encoder,
             cuda_decode,
-            nvenc: nvenc.unwrap_or_default(),
+            hardware,
             x265_10bit,
             vmaf: lists_filter(&filters, "libvmaf"),
             vmaf_cuda: cuda_decode
@@ -156,21 +181,32 @@ impl Capabilities {
     /// Whether `encoder` will write 10-bit video here.
     pub fn ten_bit(&self, encoder: VideoEncoder) -> bool {
         match encoder {
-            VideoEncoder::Nvenc => self.nvenc.ten_bit(),
             VideoEncoder::X265 => self.x265_10bit,
+            _ => self.hardware.ten_bit(),
         }
     }
 }
 
-/// Encodes three frames of a synthetic image with NVENC and `level`'s settings. Fails without a
-/// capable GPU and driver, or when they do not accept those settings.
-fn nvenc_works(toolchain: &Toolchain, level: NvencLevel) -> bool {
+/// Encodes three frames of a synthetic image with `encoder` and `level`'s settings, fed the way
+/// Gracil feeds it. Fails without a capable card and driver, or when they don't accept those
+/// settings: a listed encoder says nothing about the card.
+fn card_encodes(toolchain: &Toolchain, encoder: VideoEncoder, level: HardwareLevel) -> bool {
     let mut command = toolchain.ffmpeg();
     command
         .args(["-hide_banner", "-v", "error", "-f", "lavfi", "-i"])
         .arg("color=c=black:s=256x256:r=30")
-        .args(["-frames:v", "3", "-c:v", "hevc_nvenc"]);
-    for (name, value) in level.options() {
+        .args(["-frames:v", "3", "-vf"])
+        .arg(format!(
+            "format={}",
+            standard::pixel_format(level.ten_bit(), encoder)
+        ))
+        .args(["-c:v", encoder.name()]);
+    let level_options = standard::level_options(encoder, standard::fallback_level(encoder));
+    let options = level
+        .options(encoder)
+        .iter()
+        .map(|&(n, v)| (n, v.to_owned()));
+    for (name, value) in options.chain(level_options) {
         command.arg(format!("-{name}:v")).arg(value);
     }
     let status = command
@@ -179,7 +215,13 @@ fn nvenc_works(toolchain: &Toolchain, level: NvencLevel) -> bool {
         .stderr(Stdio::null())
         .status();
     let works = status.as_ref().is_ok_and(|s| s.success());
-    info!(works, ?level, ?status, "NVENC test encode");
+    info!(
+        works,
+        ?encoder,
+        ?level,
+        ?status,
+        "graphics card test encode"
+    );
     works
 }
 

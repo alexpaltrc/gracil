@@ -2,7 +2,7 @@
 
 Gracil is a small Windows 11 app that compresses videos and images. Drop them in, and Gracil makes
 them smaller while keeping them looking the same. It picks the best way to compress on your computer
-automatically: your NVIDIA graphics card when it can, your processor otherwise.
+automatically: your graphics card when it can (NVIDIA, Intel or AMD), your processor otherwise.
 
 Gracil is free, open source and private. It needs no account, no installer and no internet
 connection: unpack the zip anywhere, even on a USB drive, and open `gracil.exe`.

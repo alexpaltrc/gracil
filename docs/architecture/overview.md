@@ -49,14 +49,16 @@ beside it and the `libx265` encoder; otherwise Gracil's private copy; otherwise 
 build, verify it and install it privately (ADR 0008).
 
 **Choosing how to encode.** Capabilities are detected once per process: `ffmpeg -encoders` must
-list `hevc_nvenc`, then a sub-second test encode must succeed; the richest NVENC settings tier
-that passes is kept. Before encoding, `gracil_core::search` measures short samples with VMAF to
+list a card encoder (`hevc_nvenc`, then `hevc_qsv`, then `hevc_amf`), then a sub-second test encode
+must succeed; the first encoder that passes is used, with its richest settings tier that passes
+(ADR 0052). Before encoding, `gracil_core::search` measures short samples with VMAF to
 pick the video's quality level and predict its size (ADR 0028, ADR 0029); a video already
 compressed too hard to shrink that way is searched again at a slightly lower quality target (ADR
 0033). `gracil_core::standard` decides frame rate (to 30) and audio conversion; the picture size
 is never changed. Each job then walks a ladder of attempts, from fastest to most forgiving: NVENC with
 CUDA decoding → NVENC with software decoding → NVENC keeping only essential streams → `libx265`
-keeping only essential streams (without NVENC: `libx265` full, then essential). See [`../development/ffmpeg.md`](../development/ffmpeg.md).
+keeping only essential streams (Quick Sync and AMF: the card with software decoding, full then
+essential, then `libx265` essential; without a card: `libx265` full, then essential). See [`../development/ffmpeg.md`](../development/ffmpeg.md).
 
 **The window.** `gracil-ui` is an Iced daemon. `app` holds the state and reacts to messages,
 `view` draws Focus + Drawer from that state alone (`dial` draws the progress ring and its
