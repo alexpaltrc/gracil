@@ -103,8 +103,9 @@ if (Test-Path -LiteralPath (Join-Path $root 'LICENSE')) {
 
 $zip = Join-Path $portable "Gracil-$version-x64.zip"
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
-# Windows' own tar writes the zip, with the Gracil folder at its top.
-& tar.exe -a -c -f $zip -C $portable Gracil
+# Windows' own tar writes the zip, with the Gracil folder at its top; named in full, since Git's
+# tar may come first on the PATH and can't read Windows paths.
+& (Join-Path $env:SystemRoot 'System32\tar.exe') -a -c -f $zip -C $portable Gracil
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "Gracil $version ready in $layout and $zip"
 
