@@ -1,11 +1,12 @@
 //! Clicks one of the menu's commands the way File Explorer would, without File Explorer:
 //! loads the built `gracil_shell.dll` (next to `gracil.exe`), asks it for the menu, and invokes
-//! the command on the given files.
+//! one of its commands (everything, only videos or only images) on the given files. What happens
+//! to them follows the **Always** setting, as from File Explorer.
 //!
 //! ```text
 //! cargo build -p gracil-ui -p gracil-shell
-//! cargo run -p gracil-shell --example invoke -- save-copy C:\Videos\a.mp4 C:\Videos\b.mov
-//! cargo run -p gracil-shell --example invoke -- replace C:\Videos\Holidays
+//! cargo run -p gracil-shell --example invoke -- all C:\Videos\a.mp4 C:\Photos\b.jpg
+//! cargo run -p gracil-shell --example invoke -- videos C:\Videos\Holidays
 //! ```
 //!
 //! Set `GRACIL_SHELL_DLL` to another build of the DLL, such as the one in `target\portable\Gracil`.
@@ -33,10 +34,11 @@ type GetClassObject =
 
 fn main() {
     let mut arguments = std::env::args().skip(1);
-    let action = arguments.next().expect("replace or save-copy");
-    let index = match action.as_str() {
-        "replace" => 0,
-        "save-copy" => 1,
+    let scope = arguments.next().expect("all, videos or images");
+    let index = match scope.as_str() {
+        "all" => 0,
+        "videos" => 1,
+        "images" => 2,
         other => panic!("unknown command {other}"),
     };
     // A folder stands for everything in it, for selections too long for this command line.
@@ -89,7 +91,7 @@ fn main() {
         let title = menu.GetTitle(&items).unwrap();
         println!("menu: {}", title.to_string().unwrap());
         CoTaskMemFree(Some(title.0 as *const c_void));
-        let mut commands = [None, None];
+        let mut commands = [None, None, None];
         menu.EnumSubCommands()
             .unwrap()
             .Next(&mut commands, None)

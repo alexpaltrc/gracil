@@ -86,8 +86,8 @@ pictures) below.
   example **12 files left · 1.2 GB smaller · View files**. The count goes down as each file
   finishes, until none are left. Only what is still on the list counts:
   taking files off it, or **Clear**, takes them out of the total.
-  The list opens and closes at once, even with tens of thousands of files: Gracil only draws the
-  rows you can see.
+  The list unfolds gently from under that line and folds away when closed, quickly even with
+  tens of thousands of files: Gracil only draws the rows you can see.
 - Click a file in **View files** to show it large; it stays lit in the list while it shows. To go
   back to the work, click it again, close **View files**, or click the quiet line under it that
   names the file being compressed and how far along it is (‹ name · 42%). That line appears
@@ -157,9 +157,9 @@ FFmpeg comes inside Gracil's zip, in its `ffmpeg` folder, so there is nothing to
 never uses the internet. Its license and where to find its source code are in the `licenses`
 folder.
 
-If that folder is ever removed or damaged, Gracil can't compress videos: they show **Can't
-start**, with a **!** that says so. Download Gracil again from GitHub and it works as before. Gracil never downloads anything
-by itself.
+If that folder is ever removed or damaged, Gracil can't compress videos: they show **Can't start**,
+with a **!** that says so. Download Gracil again from GitHub and it works as before. Gracil never
+downloads anything by itself.
 
 ## Choosing the fastest way to compress
 
@@ -381,15 +381,16 @@ makes them smaller, and you choose **Replace** or **Save copy**.
 - **How long:** a phone photo takes under a second; a large PNG a few seconds.
 - **With videos.** Images and videos share one list. Images compress a few at a time on the
   processor while a video compresses on the graphics card.
-- **The circle for the whole list.** With more than one file, the whole circle stands for the
-  whole list: it is split into equal parts, one per file, and the marble crosses one part per
-  file, moving along as the files being compressed advance. Above it, instead of a file's name,
-  it says how many files it holds, for example **Compressing 24 files**, and the percentage below
-  it is the whole list's. Adding files while Gracil works makes the parts smaller, so the marble
-  moves back a little. While folders are still being looked through, it never reaches the top:
-  more files may still come, and it only closes the circle at the real end of the list. The marble next to the clock follows the same circle. If you pick another
-  file in **View files** to look at while Gracil works, its circle shows just that file. When the
-  whole list is done, the next file you add starts a fresh circle.
+- **The circle for the whole list.** With more than one file, the whole circle stands for the whole
+  list: it is split into equal parts, one per file, and the marble crosses one part per file, moving
+  along as the files being compressed advance. Above it, instead of a file's name, it says how many
+  files it holds, for example **Compressing 24 files**, and the percentage below it is the whole
+  list's. Adding files while Gracil works makes the parts smaller, so the marble moves back a
+  little. While folders are still being looked through, it never reaches the top: more files may
+  still come, and it only closes the circle at the real end of the list. The marble next to the
+  clock follows the same circle. If you pick another file in **View files** to look at while Gracil
+  works, its circle shows just that file. When the whole list is done, the next file you add starts
+  a fresh circle.
 
 ## Your original is safe
 
@@ -446,8 +447,8 @@ of Gracil's window:
 
 For a folder, all three are there and end in *in this folder*: Gracil compresses every video and
 image inside it, subfolders included. *… videos* leaves the images alone and *… images* leaves the
-videos alone. For files, you see the command that fits what you picked: only videos, only images,
-or all three when you picked both.
+videos alone. For files, you see the command that fits what you picked: only videos, only images, or
+all three when you picked both.
 
 Gracil looks through a folder in the background, so its window keeps responding even when the
 folder is large or lives on a network or cloud drive (OneDrive, Filen, a NAS…). Files join the

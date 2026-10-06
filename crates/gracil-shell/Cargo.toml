@@ -18,5 +18,9 @@ gracil-windows.workspace = true
 windows.workspace = true
 windows-core.workspace = true
 
+[dev-dependencies]
+# The `menu` example reads the right-click menu the way File Explorer builds it.
+windows = { workspace = true, features = ["Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }
+
 [lints]
 workspace = true

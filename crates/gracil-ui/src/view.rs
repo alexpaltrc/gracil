@@ -13,6 +13,7 @@ use crate::app::{EngineState, Finished, Gracil, Message};
 use crate::dial::{self, Dial, Shows};
 use crate::done::{self, Done};
 use crate::pill::pill;
+use crate::reveal::reveal;
 use crate::style::{self, size, space};
 use crate::work::{Choice, Failure, Outcome};
 
@@ -78,8 +79,12 @@ pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     // the first file (ADR 0055).
     if !state.queue.is_empty() {
         content = content.push(footer(state));
-        if state.drawer_open {
-            content = content.push(drawer(state));
+        if state.drawer_open || state.drawer_folding {
+            content = content.push(reveal(
+                drawer(state),
+                state.drawer_open,
+                Message::DrawerFolded,
+            ));
         }
         content = content.push(always(state));
     }

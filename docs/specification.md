@@ -1067,6 +1067,9 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   window shows only where to drop, the done screen is honest when nothing was compressed,
   getting ready breathes, Exit counts every loss, and a few keys work. *Built 2026-10-05 (ADR
   0055).*
+- **The list unfolds.** *Asked by the product owner.* **View files** unfolds and folds away
+  instead of appearing at once, as gently as the rest of Gracil moves. *Built 2026-10-06 (ADR
+  0056).*
 
 # 78. Temporary UI decisions
 

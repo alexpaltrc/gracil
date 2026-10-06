@@ -14,6 +14,7 @@ mod pace;
 mod pill;
 mod place;
 mod request;
+mod reveal;
 mod settings;
 mod style;
 mod text;

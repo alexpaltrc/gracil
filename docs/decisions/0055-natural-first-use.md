@@ -57,5 +57,6 @@ through every screen found a few places that fell short:
 
 - No new settings and no new dependencies. The breathing marble asks for frames only while it
   breathes (spec §51).
-- The drawer still opens without an animation: animating its height means measuring its rows
-  ahead of time, more risk than it is worth before the first release. To revisit.
+- The drawer still opened without an animation: animating its height seemed to mean measuring
+  its rows ahead of time. **Built** by [0056](0056-the-list-unfolds.md), which needed no such
+  measuring.

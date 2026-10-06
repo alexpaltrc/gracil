@@ -38,6 +38,8 @@ pub struct Gracil {
     /// The window files are being dragged over, if any.
     pub hovering: Option<window::Id>,
     pub drawer_open: bool,
+    /// The list was closed and is still folding away (ADR 0056).
+    pub drawer_folding: bool,
     /// How far down the list is scrolled and how tall its visible part is, so only the rows in
     /// sight are built (spec §77.3).
     pub drawer_scroll: DrawerScroll,
@@ -240,6 +242,8 @@ pub enum Message {
     Remove(JobId),
     Clear,
     ToggleDrawer,
+    /// The list finished folding away after being closed.
+    DrawerFolded,
     DrawerScrolled(DrawerScroll),
     ThemeChanged(Mode),
     ThemeFrame(Instant),
@@ -327,6 +331,7 @@ impl Gracil {
             engine: EngineState::Starting,
             hovering: None,
             drawer_open: false,
+            drawer_folding: false,
             drawer_scroll: DrawerScroll::default(),
             selected: None,
             last_placed: None,
@@ -590,18 +595,26 @@ impl Gracil {
                     self.remove(id);
                 }
                 if self.queue.is_empty() {
+                    // The empty window has no list to fold away.
                     self.drawer_open = false;
+                    self.drawer_folding = false;
                 }
                 Task::none()
             }
             Message::ToggleDrawer => {
-                self.drawer_open = !self.drawer_open;
-                // A list opened again starts at the top.
-                self.drawer_scroll = DrawerScroll::default();
-                // Closing the list puts away what was picked in it, too.
-                if !self.drawer_open {
+                if self.drawer_open {
+                    // Closing the list puts away what was picked in it, too.
                     self.selected = None;
+                    self.close_drawer();
+                } else {
+                    self.drawer_open = true;
+                    // A list opened again starts at the top.
+                    self.drawer_scroll = DrawerScroll::default();
                 }
+                Task::none()
+            }
+            Message::DrawerFolded => {
+                self.drawer_folding = false;
                 Task::none()
             }
             Message::DrawerScrolled(scroll) => {
@@ -843,7 +856,7 @@ impl Gracil {
                 if self.selected.is_some() {
                     self.selected = None;
                 } else {
-                    self.drawer_open = false;
+                    self.close_drawer();
                 }
                 Task::none()
             }
@@ -860,6 +873,14 @@ impl Gracil {
             }
             Key::ChooseFiles if self.confirming_exit => Task::none(),
             Key::ChooseFiles => Task::perform(choose_files(self.text), Message::FilesChosen),
+        }
+    }
+
+    /// Closes the list, which folds away before it leaves the window (ADR 0056).
+    fn close_drawer(&mut self) {
+        if self.drawer_open {
+            self.drawer_open = false;
+            self.drawer_folding = true;
         }
     }
 

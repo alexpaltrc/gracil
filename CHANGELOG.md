@@ -101,19 +101,19 @@ with it.
   compressed: they are left exactly as they are, and a small "!" says why.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
   advances, filling an invisible circle with color behind it. The middle of the ring holds the
-  controls, as symbols instead of words: the top part pauses (II) and turns into play (▶) to
-  resume, and the bottom part stops (■). Pause acts on everything being worked on at once. While
-  Gracil gets ready, before the marble starts moving, the marble's middle gently fades and returns,
-  so you can tell it is working. Pausing frees up your computer while keeping the work done so
-  far; resuming carries on from the same point. **View files**, which opens at once even with
-  thousands of files, shows every other video and image, how much smaller each one became and
-  where it went, for example **−35% · Replaced**. With two or more done, it adds them all up, for
-  example **In all: 3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says how much
-  room they freed. That line also says how many files are left, counting down to none as they
-  finish, for example **12 files left**. Click a file to show it large; click it again, close
-  **View files**, or click the small line naming the file being compressed to go back to the
-  ring. Take a file off the list with **×** or **Clear**. A video can always be compressed again,
-  even right after replacing it, without clearing the list first.
+  controls, as symbols instead of words: the top part pauses (II) and turns into play (▶) to resume,
+  and the bottom part stops (■). Pause acts on everything being worked on at once. While Gracil gets
+  ready, before the marble starts moving, the marble's middle gently fades and returns, so you can
+  tell it is working. Pausing frees up your computer while keeping the work done so far; resuming
+  carries on from the same point. **View files**, which unfolds gently and quickly even with
+  thousands of files, shows every other video and image, how much smaller each one became and where
+  it went, for example **−35% · Replaced**. With two or more done, it adds them all up, for example
+  **In all: 3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says how much room they
+  freed. That line also says how many files are left, counting down to none as they finish, for
+  example **12 files left**. Click a file to show it large; click it again, close **View files**, or
+  click the small line naming the file being compressed to go back to the ring. Take a file off the
+  list with **×** or **Clear**. A video can always be compressed again, even right after replacing
+  it, without clearing the list first.
 - A few keys work too, if you like them: **Space** pauses and resumes, **Esc** steps back, and
   **Ctrl+O** chooses files.
 - With more than one file, the ring stands for the whole list, with one equal part per file. Above
