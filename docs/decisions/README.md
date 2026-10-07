@@ -66,3 +66,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0059](0059-keyboard-reaches-everything.md) | The keyboard reaches every control: Tab moves a ring, Enter or Space presses, arrows move **Always** |
 | [0060](0060-reasons-in-sight.md) | Reasons are written out under the file shown large; the middle of **Always** says **Ask** |
 | [0061](0061-windows-accessibility-settings.md) | Gracil follows Windows' **Animation effects** and **contrast themes**; text on the accent is white or black, whichever reads better |
+| [0062](0062-compressing-documents.md) | *Proposed:* compressing documents (Word, Excel, PowerPoint, OpenDocument, PDF) by making the pictures inside them smaller, nothing else changed |
