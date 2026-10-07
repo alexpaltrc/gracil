@@ -37,7 +37,7 @@ impl Gracil {
             && plan::attempts(engine.capabilities)
                 .first()
                 .is_some_and(|attempt| attempt.encoder == VideoEncoder::X265);
-        let room = pace::Room::now(video_on_processor, self.breath.warm);
+        let room = pace::Room::now(video_on_processor, self.breath);
         let at_once = room.images_at_once();
         let mut memory = room.memory_for_images();
         let mut images = self.queue.count(Kind::Image, compressing);

@@ -45,15 +45,16 @@ pub struct Room {
 }
 
 impl Room {
-    /// Looks at the computer now.
-    pub fn now(video_on_processor: bool, warm: bool) -> Self {
+    /// Looks at the computer now. Whether it is idle, warm or saving energy comes from the last
+    /// breath, read at most a second ago.
+    pub fn now(video_on_processor: bool, breath: Breath) -> Self {
         Self {
             threads: share::processor_threads(),
-            idle: gracil_windows::idle_for().is_some_and(|idle| idle >= IDLE_AFTER),
+            idle: breath.idle,
             video_on_processor,
             free_memory: gracil_windows::free_memory(),
-            warm,
-            saving_energy: gracil_windows::saving_energy(),
+            warm: breath.warm,
+            saving_energy: breath.saving_energy,
         }
     }
 
@@ -212,6 +213,10 @@ pub struct Breath {
     pub warm: bool,
     /// Resting: everything being worked on is frozen for a moment.
     pub resting: bool,
+    /// The person isn't using the computer.
+    pub idle: bool,
+    /// The computer runs on its battery, or Windows is saving energy (ADR 0049).
+    pub saving_energy: bool,
 }
 
 /// Reads the computer's warmth every breath on a thread of its own, for as long as Gracil runs.
@@ -283,17 +288,23 @@ pub fn watch(changed: impl Fn(Breath) + Send + 'static) {
                     tell(Breath {
                         warm: true,
                         resting: true,
+                        idle,
+                        saving_energy,
                     });
                     std::thread::sleep(rest);
                     tell(Breath {
                         warm: true,
                         resting: false,
+                        idle,
+                        saving_energy,
                     });
                     std::thread::sleep(BREATH - rest);
                 } else {
                     tell(Breath {
                         warm: work < 1.0,
                         resting: false,
+                        idle,
+                        saving_energy,
                     });
                     std::thread::sleep(BREATH);
                 }

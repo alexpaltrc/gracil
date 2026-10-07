@@ -299,6 +299,8 @@ impl Gracil {
             breath: Breath {
                 warm: false,
                 resting: false,
+                idle: false,
+                saving_energy: false,
             },
             held: false,
             main: None,
