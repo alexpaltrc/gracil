@@ -188,7 +188,8 @@ fn focus(state: &Gracil, hovering: bool) -> Element<'_, Message> {
 fn finished_view<'a>(state: &'a Gracil, finished: &Finished) -> Element<'a, Message> {
     let done = Done {
         headline: state.text.headline(finished),
-        went_well: finished.compressed > 0,
+        // Files left unfinished, by Stop or last time, mean the list isn't all done: no check.
+        went_well: finished.compressed > 0 && state.offered.is_empty(),
     };
     let mut how = row![].spacing(space::S).align_y(Center);
     let summary = state.text.summary(finished);
@@ -253,6 +254,7 @@ fn dial(state: &Gracil, job: &Job) -> Dial {
         // in place can't be held.
         can_pause: job.state != JobState::Finalizing,
         can_stop: true,
+        stop_word: state.text.stop_all,
         // Before the ring starts filling, its middle breathes, so a long first moment never
         // looks stuck (ADR 0055).
         getting_ready: preparing && fraction.is_none_or(|fraction| fraction <= 0.0),

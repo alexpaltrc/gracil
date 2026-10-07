@@ -30,7 +30,7 @@ pub struct Done {
     /// What the big line says: how much room was saved, or why nothing was.
     pub headline: String,
     /// Whether the list went well: the green middle and the check mark. When files failed and
-    /// none came out smaller, the ring stays without them.
+    /// none came out smaller, or files were left unfinished, the ring stays without them.
     pub went_well: bool,
 }
 

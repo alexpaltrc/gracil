@@ -68,12 +68,12 @@ pictures) below.
   done. The percentage is written just below. While Gracil gets a list ready, before the marble
   starts moving, the middle of the marble slowly fades and returns, so you know it is working.
 - The middle of the ring holds the controls. Its top part is **pause** (II); click it and it turns
-  into **play** (▶), which resumes. Its bottom part is **stop** (■). Pause acts on every file
-  being worked on, all together; while paused, nothing new starts. Stop stops the whole list at
-  once: files being compressed stop and their originals stay as they were, and every file not
-  done yet leaves the list and is kept on a quiet line with **Continue**, so you can carry on
-  whenever you like (see "Carrying on after closing"). Stop answers straight away, even on a slow
-  network or cloud drive.
+  into **play** (▶), which resumes. Its bottom part is **stop** (■); point at it and the square
+  turns into the words **Stop all**. Pause acts on every file being worked on, all together; while
+  paused, nothing new starts. Stop stops the whole list at once: files being compressed stop and
+  their originals stay as they were, and every file not done yet leaves the list and is kept on a
+  quiet line with **Continue**, so you can carry on whenever you like (see "Carrying on after
+  closing"). Stop answers straight away, even on a slow network or cloud drive.
 - Pausing freezes the work exactly where it is, and Gracil stops using the processor and
   graphics card. Resuming carries on from the same point; nothing is lost or started over. You
   can also stop while paused.
@@ -98,7 +98,8 @@ pictures) below.
 - When the whole list is done (nothing left waiting, being compressed or waiting for your choice),
   the window says so clearly: the ring stays full, its middle fills with green and a check mark
   draws itself, and just below, in large letters, how much room the list saved, for example
-  **130 MB smaller**. If nothing came out smaller, there is no check mark, and the large line says
+  **130 MB smaller**. If nothing came out smaller, or files were left unfinished (by **Stop**, for
+  example), there is no check mark. When nothing came out smaller, the large line says
   **Nothing to make smaller** (every file was already compressed) or **Nothing was compressed**
   (something went wrong). Under it, a quiet line says how the list went, for example **22 files
   compressed · 4 were already compressed**. Files that couldn't be compressed are counted apart,
@@ -515,10 +516,10 @@ tells you how things are going:
   went wrong; the marble turns back to normal.
 
 Pointing at the marble says the same in words, and so does Gracil's name in the taskbar and in
-Alt+Tab, for example "Gracil · compressing 42%". Right-click the marble for its menu: **Open Gracil**; then
-the settings, **Start with Windows**, **Show Gracil in Send to**, **Show Gracil in File
-Explorer's menu…** and **Show mini-window when compressing from File Explorer**; then **Prepare to
-delete Gracil** and **Exit**.
+Alt+Tab, for example "Gracil · compressing 42%". Right-click the marble for its menu: **Open
+Gracil**; then the settings, **Start with Windows**, **Show Gracil in Send to**, **Show Gracil in
+File Explorer's menu…** and **Show mini-window when compressing from File Explorer**; then **Prepare
+to delete Gracil** and **Exit**.
 
 Click the marble and a small window opens right next to it, wherever your taskbar is. It shows
 the file being compressed and how far along it is; click the middle of its circle to pause or

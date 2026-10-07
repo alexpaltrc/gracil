@@ -9,12 +9,14 @@ use std::f32::consts::{FRAC_PI_2, PI, TAU};
 use std::time::Instant;
 
 use gracil_core::queue::JobId;
+use iced::alignment::Vertical;
 use iced::mouse;
 use iced::widget::canvas::{self, Action, Event, Frame, Geometry, LineCap, Path, Stroke};
+use iced::widget::text::Alignment;
 use iced::{Color, Point, Rectangle, Renderer, Size, Theme, window};
 
 use crate::app::Message;
-use crate::style;
+use crate::style::{self, size};
 
 /// Width and height of the dial, in logical pixels. Drawn smaller, everything shrinks with it.
 pub const SIZE: f32 = 148.0;
@@ -57,6 +59,8 @@ pub struct Dial {
     pub can_pause: bool,
     /// Whether the bottom of the middle stops. The mini-window's dial only pauses (spec §55).
     pub can_stop: bool,
+    /// The word that takes the stop square's place under the pointer, so it says what it does.
+    pub stop_word: &'static str,
     /// Gracil is getting ready and nothing has filled yet: the marble breathes softly, so the
     /// wait never looks stuck (ADR 0055).
     pub getting_ready: bool,
@@ -334,7 +338,8 @@ impl canvas::Program<Message> for Dial {
             return vec![frame.into_geometry()];
         }
 
-        // Stop sits in the middle of the bottom button.
+        // Stop sits in the middle of the bottom button; under the pointer the square gives way to
+        // the word, so what it does is never a guess.
         let stop = radius * 0.17;
         let stop_center = Point::new(center.x, (divider_y + center.y + radius) / 2.0);
         frame.fill(
@@ -343,8 +348,19 @@ impl canvas::Program<Message> for Dial {
                 Size::new(stop, stop),
                 (stop * 0.15).into(),
             ),
-            symbol(state.hover_bottom, true),
+            symbol(state.hover_bottom, true).scale_alpha(1.0 - state.hover_bottom),
         );
+        frame.fill_text(canvas::Text {
+            content: self.stop_word.to_owned(),
+            position: stop_center,
+            max_width: radius * 1.6,
+            color: palette.text.scale_alpha(state.hover_bottom),
+            size: size::CAPTION.into(),
+            font: style::FONT,
+            align_x: Alignment::Center,
+            align_y: Vertical::Center,
+            ..canvas::Text::default()
+        });
 
         vec![frame.into_geometry()]
     }
@@ -469,6 +485,7 @@ mod tests {
             paused,
             can_pause,
             can_stop: true,
+            stop_word: "Stop all",
             getting_ready: false,
         }
     }
@@ -516,6 +533,7 @@ mod tests {
         let radius = middle_radius(bounds.size());
         let mini = Dial {
             can_stop: false,
+            stop_word: "Stop all",
             ..dial(false, true)
         };
         assert_eq!(

@@ -1,6 +1,6 @@
 //! Application state and how it reacts to the user, the window and background work.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -1449,6 +1449,12 @@ impl Gracil {
             .collect();
         for id in done_with {
             self.remove(id);
+        }
+        // A file left unfinished and added again is on the list now, so it isn't offered too.
+        if !self.offered.is_empty() {
+            let adding: HashSet<&PathBuf> = paths.iter().collect();
+            self.offered
+                .retain(|unfinished| !adding.contains(&unfinished.path));
         }
         let added = self.queue.add(paths);
         if added > 0 && matches!(self.engine, EngineState::Unavailable) {

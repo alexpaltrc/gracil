@@ -62,19 +62,19 @@ with it.
   the open Gracil's window forward, even when it was closed next to the clock. Opening videos with
   it while it is running adds them to the same list.
 - Closing the window no longer stops Gracil: it keeps working next to the clock. Its marble there
-  fills up as the work goes on, shows two bars when paused, and changes to Windows' warning
-  color if something went wrong while the window was closed; click it then, and the small window
-  opens on the file that went wrong. Right-click it for **Open Gracil**, Gracil's settings,
-  **Prepare to delete Gracil** and **Exit**. The window's name in the taskbar says how the work
-  goes too, for example "Gracil · compressing 42%". If a file is compressing, waiting, or finished and
-  waiting for your choice, Exit first asks, and tells you exactly what would happen.
-- Click the marble next to the clock and a small window opens beside it, wherever your taskbar
-  is. It shows the file being compressed and how far along it is, and its ring pauses and resumes
+  fills up as the work goes on, shows two bars when paused, and changes to Windows' warning color if
+  something went wrong while the window was closed; click it then, and the small window opens on the
+  file that went wrong. Right-click it for **Open Gracil**, Gracil's settings, **Prepare to delete
+  Gracil** and **Exit**. The window's name in the taskbar says how the work goes too, for example
+  "Gracil · compressing 42%". If a file is compressing, waiting, or finished and waiting for your
+  choice, Exit first asks, and tells you exactly what would happen.
+- Click the marble next to the clock and a small window opens beside it, wherever your taskbar is.
+  It shows the file being compressed and how far along it is, and its ring pauses and resumes
   (stopping is left to the big window). It also says how many more files are waiting and where a
-  finished one went, and you can drop more files on it. When a file is done, you can choose **Replace** or
-  **Save copy** right there, without opening the big window. It stays open while you do other
-  things until you close it or click the marble again; **Open Gracil** in it brings up the big
-  window.
+  finished one went, and you can drop more files on it. When a file is done, you can choose
+  **Replace** or **Save copy** right there, without opening the big window. It stays open while you
+  do other things until you close it or click the marble again; **Open Gracil** in it brings up the
+  big window.
 - Right-click videos, images or whole folders in File Explorer, choose **Show more options**,
   then **Send to** and **Gracil**. It is there from the first time you open Gracil, with nothing
   to set up. For a folder, Gracil compresses every video and image inside it, subfolders included.
@@ -108,18 +108,18 @@ with it.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
   advances, filling an invisible circle with color behind it. The middle of the ring holds the
   controls, as symbols instead of words: the top part pauses (II) and turns into play (▶) to resume,
-  and the bottom part stops (■). Pause acts on everything being worked on at once. While Gracil gets
-  ready, before the marble starts moving, the marble's middle gently fades and returns, so you can
-  tell it is working. Pausing frees up your computer while keeping the work done so far; resuming
-  carries on from the same point. **View files**, which unfolds gently and quickly even with
-  thousands of files, shows every other video and image, how much smaller each one became and where
-  it went, for example **−35% · Replaced**. With two or more done, it adds them all up, for example
-  **In all: 3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says how much room they
-  freed. That line also says how many files are left, counting down to none as they finish, for
-  example **12 files left**. Click a file to show it large; click it again, close **View files**, or
-  click the small line naming the file being compressed to go back to the ring. Take a file off the
-  list with **×** or **Clear**. A video can always be compressed again, even right after replacing
-  it, without clearing the list first.
+  and the bottom part stops (■); pointing at it shows the words **Stop all**. Pause acts on
+  everything being worked on at once. While Gracil gets ready, before the marble starts moving, the
+  marble's middle gently fades and returns, so you can tell it is working. Pausing frees up your
+  computer while keeping the work done so far; resuming carries on from the same point. **View
+  files**, which unfolds gently and quickly even with thousands of files, shows every other video
+  and image, how much smaller each one became and where it went, for example **−35% · Replaced**.
+  With two or more done, it adds them all up, for example **In all: 3.4 GB → 2.2 GB, 35% smaller**,
+  and the line with **View files** says how much room they freed. That line also says how many files
+  are left, counting down to none as they finish, for example **12 files left**. Click a file to
+  show it large; click it again, close **View files**, or click the small line naming the file being
+  compressed to go back to the ring. Take a file off the list with **×** or **Clear**. A video can
+  always be compressed again, even right after replacing it, without clearing the list first.
 - Everything works from the keyboard too: **Tab** moves a ring from one button to the next, and
   **Enter** or **Space** presses it; on the **Always** line, the arrow keys move the choice. With
   no ring, **Space** pauses and resumes, **Esc** steps back, and **Ctrl+O** chooses files.
@@ -128,13 +128,14 @@ with it.
   percentage below is the whole list's. Adding files while Gracil works moves the marble back a
   little, since each file's part gets smaller, and the ring only closes at the real end of the
   list. The marble next to the clock follows the same ring.
-- When the whole list is done, the window says so clearly: the ring's middle fills with green and
-  a check mark draws itself, and just below, in large letters, how much room the list saved, for
+- When the whole list is done, the window says so clearly: the ring's middle fills with green and a
+  check mark draws itself, and just below, in large letters, how much room the list saved, for
   example **130 MB smaller**, with a quiet line such as **22 files compressed · 4 were already
-  compressed**. If nothing came out smaller, there is no check mark, and it says **Nothing to make
-  smaller** or **Nothing was compressed** instead. Files that couldn't be compressed are counted
-  apart, with a "!": click it to see the first of them and what happened. Below it, **Clear the
-  list** takes you back to the empty window, ready for your next files.
+  compressed**. If nothing came out smaller, or files were left unfinished, there is no check mark;
+  when nothing came out smaller it says **Nothing to make smaller** or **Nothing was compressed**
+  instead. Files that couldn't be compressed are counted apart, with a "!": click it to see the
+  first of them and what happened. Below it, **Clear the list** takes you back to the empty window,
+  ready for your next files.
 - When a video is done, you see how much smaller it became, and its size before and after, for
   example **120 MB → 78 MB**. Then you choose: **Replace** puts it in place of the original,
   keeping its name and the date it was created; **Save copy** keeps your original and saves

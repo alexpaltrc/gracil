@@ -51,6 +51,8 @@ pub struct Text {
     pub ffmpeg_missing: &'static str,
     pub compressing: &'static str,
     pub paused: &'static str,
+    /// What the dial's bottom button does, shown in place of its square under the pointer.
+    pub stop_all: &'static str,
     pub saving: &'static str,
     pub not_compressed: &'static str,
     /// A file already about as small as it gets (ADR 0029, ADR 0033).
@@ -306,6 +308,7 @@ static ENGLISH: Text = Text {
     ffmpeg_missing: "Gracil is missing part of itself. Download it again from GitHub",
     compressing: "Compressing",
     paused: "Paused",
+    stop_all: "Stop all",
     saving: "Saving",
     not_compressed: "Not compressed",
     already_compressed: "Already compressed",
@@ -445,6 +448,7 @@ static SPANISH: Text = Text {
     ffmpeg_missing: "A Gracil le falta una parte. Descárgalo de nuevo desde GitHub",
     compressing: "Comprimiendo",
     paused: "En pausa",
+    stop_all: "Detener todo",
     saving: "Guardando",
     not_compressed: "Sin comprimir",
     already_compressed: "Ya está comprimido",
