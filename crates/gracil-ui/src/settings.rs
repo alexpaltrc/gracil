@@ -9,6 +9,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::data;
 use crate::place::Wanted;
 use crate::work::Choice;
 
@@ -73,9 +74,10 @@ impl Settings {
             {
                 Some((EXPLORER_MINI_WINDOW, "on")) => settings.explorer_mini_window = true,
                 Some((EXPLORER_MINI_WINDOW, "off")) => settings.explorer_mini_window = false,
-                Some((ALWAYS, "replace")) => settings.always = Some(Choice::Replace),
-                Some((ALWAYS, "copy")) => settings.always = Some(Choice::SaveCopy),
                 Some((ALWAYS, "ask")) => settings.always = None,
+                Some((ALWAYS, word)) if data::choice_from(word).is_some() => {
+                    settings.always = data::choice_from(word);
+                }
                 Some((EXPLORER_MENU, "on")) => settings.explorer_menu = true,
                 Some((EXPLORER_MENU, "off")) => settings.explorer_menu = false,
                 Some((START_WITH_WINDOWS, "on")) => settings.start_with_windows = true,
@@ -86,19 +88,13 @@ impl Settings {
         settings
     }
 
+    /// Writes the settings whole or not at all, so closing halfway never loses them.
     fn write(&self, path: &Path) -> io::Result<()> {
-        if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir)?;
-        }
         let switch = |on: bool| if on { "on" } else { "off" };
-        let always = match self.always {
-            Some(Choice::Replace) => "replace",
-            Some(Choice::SaveCopy) => "copy",
-            None => "ask",
-        };
-        fs::write(
+        let always = self.always.map_or("ask", data::choice_word);
+        data::write_whole(
             path,
-            format!(
+            &format!(
                 "{EXPLORER_MENU}={}\n{START_WITH_WINDOWS}={}\n{EXPLORER_MINI_WINDOW}={}\n\
                  {ALWAYS}={always}\n",
                 switch(self.explorer_menu),
@@ -110,7 +106,7 @@ impl Settings {
 }
 
 fn file() -> Option<PathBuf> {
-    gracil_core::toolchain::default_private_dir().map(|dir| dir.join(FILE))
+    data::file(FILE)
 }
 
 #[cfg(test)]

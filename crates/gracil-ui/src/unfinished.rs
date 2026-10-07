@@ -13,6 +13,7 @@ use std::sync::{Mutex, OnceLock};
 
 use tracing::warn;
 
+use crate::data;
 use crate::work::Choice;
 
 const FILE: &str = "unfinished.txt";
@@ -90,21 +91,15 @@ fn read(path: &Path) -> Vec<Unfinished> {
     text.lines()
         .filter_map(|line| {
             let (choice, path) = line.split_once('\t')?;
-            let choice = match choice {
-                "replace" => Some(Choice::Replace),
-                "copy" => Some(Choice::SaveCopy),
-                _ => None,
-            };
             (!path.is_empty()).then(|| Unfinished {
                 path: PathBuf::from(path),
-                choice,
+                choice: data::choice_from(choice),
             })
         })
         .collect()
 }
 
-/// Writes the list whole or not at all: to a file beside it first, which then takes its place.
-/// An empty list leaves no file.
+/// Writes the list whole or not at all. An empty list leaves no file.
 fn write(path: &Path, list: &[Unfinished]) -> io::Result<()> {
     if list.is_empty() {
         return match fs::remove_file(path) {
@@ -112,28 +107,18 @@ fn write(path: &Path, list: &[Unfinished]) -> io::Result<()> {
             _ => Ok(()),
         };
     }
-    if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir)?;
-    }
     let mut text = String::new();
     for file in list {
-        let choice = match file.choice {
-            Some(Choice::Replace) => "replace",
-            Some(Choice::SaveCopy) => "copy",
-            None => "",
-        };
-        text.push_str(choice);
+        text.push_str(file.choice.map_or("", data::choice_word));
         text.push('\t');
         text.push_str(&file.path.to_string_lossy());
         text.push('\n');
     }
-    let fresh = path.with_extension("txt.new");
-    fs::write(&fresh, text)?;
-    fs::rename(&fresh, path)
+    data::write_whole(path, &text)
 }
 
 fn file() -> Option<PathBuf> {
-    gracil_core::toolchain::default_private_dir().map(|dir| dir.join(FILE))
+    data::file(FILE)
 }
 
 #[cfg(test)]
