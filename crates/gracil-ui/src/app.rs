@@ -84,8 +84,11 @@ pub struct Gracil {
     /// Choices made before compressing, by File Explorer's commands: the result is placed as soon
     /// as it is ready.
     intents: HashMap<JobId, Choice>,
-    /// How many requests from File Explorer are still being looked through (ADR 0037).
+    /// How many lots of files and folders are still being looked through (ADR 0037): dropped,
+    /// chosen, from File Explorer or left unfinished.
     pub gathering: usize,
+    /// Files dropped on the window that are still arriving, one at a time.
+    dropped: Vec<PathBuf>,
     /// How many times Stop was pressed. Files found by a look started before the last press go
     /// straight to the files offered to carry on with (ADR 0044).
     stops: u64,
@@ -225,6 +228,8 @@ pub enum Message {
     FilesHovered(window::Id),
     FilesHoveredLeft(window::Id),
     FileDropped(PathBuf),
+    /// Every file dropped together has arrived.
+    DropLanded,
     ChooseFiles,
     FilesChosen(Vec<PathBuf>),
     Job(JobId, Report),
@@ -373,6 +378,7 @@ impl Gracil {
             resident: false,
             intents: HashMap::new(),
             gathering: 0,
+            dropped: Vec::new(),
             stops: 0,
             abandoned: 0,
             exiting: false,
@@ -537,18 +543,20 @@ impl Gracil {
                 }
                 Task::none()
             }
+            // Windows hands over a drop one file at a time: they are gathered, and looked through
+            // together once all have arrived.
             Message::FileDropped(path) => {
                 self.hovering = None;
-                // A folder brings in the videos and images inside it, as from File Explorer
-                // (ADR 0055).
-                if path.is_dir() {
-                    let stops = self.stops;
-                    self.gathering += 1;
-                    work::gather(vec![path], None)
-                        .map(move |found| Message::Found(stops, None, found))
+                self.dropped.push(path);
+                if self.dropped.len() == 1 {
+                    Task::done(Message::DropLanded)
                 } else {
-                    self.add(vec![path])
+                    Task::none()
                 }
+            }
+            Message::DropLanded => {
+                let paths = std::mem::take(&mut self.dropped);
+                self.look_through(paths, None, None)
             }
             Message::Key(window, key) => self.on_key(window, key),
             Message::ShowProblem => {
@@ -562,7 +570,7 @@ impl Gracil {
                 Task::none()
             }
             Message::ChooseFiles => Task::perform(choose_files(self.text), Message::FilesChosen),
-            Message::FilesChosen(paths) => self.add(paths),
+            Message::FilesChosen(paths) => self.look_through(paths, None, None),
             Message::Job(id, report) => self.on_report(id, report),
             Message::Cancel => {
                 self.stop();
@@ -1170,12 +1178,7 @@ impl Gracil {
         } else {
             Task::none()
         };
-        // Folders from File Explorer are looked through away from the window, which a slow
-        // drive would otherwise freeze; files join the list folder by folder (ADR 0035, 0037).
-        self.gathering += 1;
-        let (choice, stops) = (request.choice, self.stops);
-        let gather = work::gather(request.paths, request.only)
-            .map(move |found| Message::Found(stops, choice, found));
+        let gather = self.look_through(request.paths, request.only, request.choice);
         Task::batch([show, gather])
     }
 
@@ -1184,7 +1187,6 @@ impl Gracil {
     /// files, since there can be thousands of them.
     fn continue_unfinished(&mut self) -> Task<Message> {
         let offered = std::mem::take(&mut self.offered);
-        let stops = self.stops;
         let mut tasks = Vec::new();
         for choice in [None, Some(Choice::Replace), Some(Choice::SaveCopy)] {
             let paths: Vec<PathBuf> = offered
@@ -1192,15 +1194,27 @@ impl Gracil {
                 .filter(|file| file.choice == choice)
                 .map(|file| file.path.clone())
                 .collect();
-            if paths.is_empty() {
-                continue;
-            }
-            self.gathering += 1;
-            tasks.push(
-                work::gather(paths, None).map(move |found| Message::Found(stops, choice, found)),
-            );
+            tasks.push(self.look_through(paths, None, choice));
         }
         Task::batch(tasks)
+    }
+
+    /// Looks through files and folders away from the window, which a slow drive would otherwise
+    /// freeze, however they came: dropped, chosen, from File Explorer or left unfinished. A folder
+    /// brings in the videos and images inside it (ADR 0055), and files join the list folder by
+    /// folder (ADR 0035, 0037), each with `choice` if File Explorer made one.
+    fn look_through(
+        &mut self,
+        paths: Vec<PathBuf>,
+        only: Option<Kind>,
+        choice: Option<Choice>,
+    ) -> Task<Message> {
+        if paths.is_empty() {
+            return Task::none();
+        }
+        self.gathering += 1;
+        let stops = self.stops;
+        work::gather(paths, only).map(move |found| Message::Found(stops, choice, found))
     }
 
     fn on_found(
@@ -1226,19 +1240,19 @@ impl Gracil {
                 return Task::none();
             }
         };
-        // Found in a folder listing or checked already, so nothing is asked of the drive again.
-        let added = self.add_checked(paths.clone());
-        let mut tasks = vec![added];
-        if let Some(choice) = choice {
-            let ids: Vec<JobId> = paths
-                .iter()
-                .filter_map(|path| self.queue.find(path).map(|job| job.id))
-                .collect();
-            for id in ids {
-                self.intents.insert(id, choice);
-                if self.is_waiting(id) {
-                    tasks.push(self.choose(id, choice));
-                }
+        let Some(choice) = choice else {
+            return self.add(paths);
+        };
+        // File Explorer's choice goes with each file, found again once it is on the list.
+        let mut tasks = vec![self.add(paths.clone())];
+        let ids: Vec<JobId> = paths
+            .iter()
+            .filter_map(|path| self.queue.find(path).map(|job| job.id))
+            .collect();
+        for id in ids {
+            self.intents.insert(id, choice);
+            if self.is_waiting(id) {
+                tasks.push(self.choose(id, choice));
             }
         }
         Task::batch(tasks)
@@ -1439,15 +1453,11 @@ impl Gracil {
             )
     }
 
-    /// Adds videos to the list. A video the list is done with (put in place, failed, cancelled)
-    /// leaves it first, so the list never stops a video from being compressed again (spec §29).
-    /// One still waiting, running or waiting for a choice stays as it is.
+    /// Adds files to the list, once [`Self::look_through`] found them. A file the list is done
+    /// with (put in place, failed, cancelled) leaves it first, so the list never stops a file from
+    /// being compressed again (spec §29). One still waiting, running or waiting for a choice stays
+    /// as it is.
     fn add(&mut self, paths: Vec<PathBuf>) -> Task<Message> {
-        self.add_checked(files(paths).collect())
-    }
-
-    /// [`Self::add`] for paths known to be files already.
-    fn add_checked(&mut self, paths: Vec<PathBuf>) -> Task<Message> {
         let done_with: Vec<JobId> = paths
             .iter()
             .filter_map(|path| self.queue.find(path))
@@ -1837,12 +1847,6 @@ fn key_for(key: &keyboard::Key, modifiers: keyboard::Modifiers) -> Option<Key> {
         keyboard::Key::Named(Named::Tab) => Some(Key::NextControl),
         _ => None,
     }
-}
-
-/// Folders and anything else that is not a file are ignored; images are known by their name, and
-/// FFprobe later decides what is video.
-fn files(paths: impl IntoIterator<Item = PathBuf>) -> impl Iterator<Item = PathBuf> {
-    paths.into_iter().filter(|path| path.is_file())
 }
 
 /// The picker shows videos and images by default. Only a convenience: any video FFmpeg reads is

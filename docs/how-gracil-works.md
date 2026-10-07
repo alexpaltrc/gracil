@@ -474,15 +474,16 @@ For a folder, Gracil compresses every video and image inside it, subfolders incl
 videos only* leaves the images alone and *Compress images only* leaves the videos alone; **Send
 to** always takes both.
 
-Gracil looks through a folder in the background, so its window keeps responding even when the
-folder is large or lives on a network or cloud drive (OneDrive, Filen, a NAS…). Files join the
-list folder by folder, and compressing starts with the first ones found while Gracil keeps
-looking; until it finds the first, the window says **Looking through the folder…**, and after
-that the line with **View files** says **looking for more**. Looking only reads the names of the
-files. On a cloud drive, each file is still downloaded when its turn comes to be compressed, and
-the smaller version is uploaded when it is saved, so that part goes as fast as your connection.
-Each image is read from the drive only once, and a few are read ahead while others compress, so
-the waiting overlaps with the work.
+Gracil looks through a folder in the background, so its window keeps responding even when the folder
+is large or lives on a network or cloud drive (OneDrive, Filen, a NAS…). The same goes for whatever
+you drop on the window or choose with **+**, however many files there are. Files join the list
+folder by folder, and compressing starts with the first ones found while Gracil keeps looking; until
+it finds the first, the window says **Looking through the folder…**, and after that the line with
+**View files** says **looking for more**. Looking only reads the names of the files. On a cloud
+drive, each file is still downloaded when its turn comes to be compressed, and the smaller version
+is uploaded when it is saved, so that part goes as fast as your connection. Each image is read from
+the drive only once, and a few are read ahead while others compress, so the waiting overlaps with
+the work.
 
 If Gracil is already running, the files join its list. If Gracil wasn't running, it starts for
 that, and when it worked without opening the big window, it closes by itself once the work is
