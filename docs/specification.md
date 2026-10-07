@@ -600,7 +600,8 @@ navigation, advanced encoder controls and permanent diagnostic information.
 *Update (ADR 0055):* the empty window says **Drop videos or images here** with a way to choose
 files, and the **Always** pill at its foot (ADR 0057); the list's line comes up with the first file.
 Folders can be dropped too. **Esc** steps back, **Space** pauses and resumes, **Ctrl+O** chooses
-files.
+files. *Update (ADR 0059):* **Tab** and **Shift+Tab** move a focus ring through the window's
+controls, **Enter** or **Space** presses the ringed one, and the arrow keys move **Always**.
 
 # 50. Design system
 

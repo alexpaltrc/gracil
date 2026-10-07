@@ -119,8 +119,9 @@ with it.
   click the small line naming the file being compressed to go back to the ring. Take a file off the
   list with **×** or **Clear**. A video can always be compressed again, even right after replacing
   it, without clearing the list first.
-- A few keys work too, if you like them: **Space** pauses and resumes, **Esc** steps back, and
-  **Ctrl+O** chooses files.
+- Everything works from the keyboard too: **Tab** moves a ring from one button to the next, and
+  **Enter** or **Space** presses it; on the **Always** line, the arrow keys move the choice. With
+  no ring, **Space** pauses and resumes, **Esc** steps back, and **Ctrl+O** chooses files.
 - With more than one file, the ring stands for the whole list, with one equal part per file. Above
   it Gracil says how many files it holds, for example **Compressing 24 files**, and the
   percentage below is the whole list's. Adding files while Gracil works moves the marble back a

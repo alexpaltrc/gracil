@@ -8,6 +8,7 @@ mod app;
 mod dial;
 mod done;
 mod explorer;
+mod focus;
 mod logging;
 mod numbers;
 mod outside;

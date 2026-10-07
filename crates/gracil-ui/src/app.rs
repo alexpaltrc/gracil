@@ -19,6 +19,7 @@ use iced::window::settings::platform::CornerPreference;
 use iced::{Event, Size, Subscription, Task, Theme, event, keyboard, system, window};
 use tracing::{info, warn};
 
+use crate::focus::{self, Scope};
 use crate::logging;
 use crate::outside::{self, Outside};
 use crate::pace::{self, Breath};
@@ -292,6 +293,10 @@ pub enum Key {
     PauseResume,
     /// Ctrl+O: chooses files to add.
     ChooseFiles,
+    /// Tab: the keyboard's ring moves on to the next control (ADR 0059).
+    NextControl,
+    /// Shift+Tab: the ring moves back to the previous control.
+    PreviousControl,
 }
 
 impl Gracil {
@@ -887,6 +892,10 @@ impl Gracil {
             }
             Key::ChooseFiles if self.confirming_exit => Task::none(),
             Key::ChooseFiles => Task::perform(choose_files(self.text), Message::FilesChosen),
+            Key::NextControl | Key::PreviousControl => {
+                let scope = if in_mini { Scope::Mini } else { Scope::Main };
+                focus::step(scope, key == Key::NextControl)
+            }
         }
     }
 
@@ -1772,6 +1781,8 @@ fn key_for(key: &keyboard::Key, modifiers: keyboard::Modifiers) -> Option<Key> {
         keyboard::Key::Named(Named::Escape) => Some(Key::Back),
         keyboard::Key::Named(Named::Space) if modifiers.is_empty() => Some(Key::PauseResume),
         keyboard::Key::Character("o" | "O") if modifiers.command() => Some(Key::ChooseFiles),
+        keyboard::Key::Named(Named::Tab) if modifiers.shift() => Some(Key::PreviousControl),
+        keyboard::Key::Named(Named::Tab) => Some(Key::NextControl),
         _ => None,
     }
 }

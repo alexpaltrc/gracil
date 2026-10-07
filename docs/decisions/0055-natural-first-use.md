@@ -8,6 +8,9 @@ and §55.
 (item 12), **Show Gracil in Send to** and **Show Gracil in File Explorer's menu…** take the place
 of **Show in File Explorer's menu**.
 
+**Extended** by [ADR 0059](0059-keyboard-reaches-everything.md) (2026-10-07): beyond the few keys
+of item 10, Tab reaches every control and Enter or Space presses it.
+
 **Context.** Before the first public release the product owner asked for a review of the whole
 app: someone opening Gracil for the first time should know what to do without thinking, nothing
 should be out of place or extra, and nothing should look stuck or say something untrue. Walking

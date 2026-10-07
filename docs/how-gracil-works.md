@@ -77,8 +77,11 @@ pictures) below.
 - Pausing freezes the work exactly where it is, and Gracil stops using the processor and
   graphics card. Resuming carries on from the same point; nothing is lost or started over. You
   can also stop while paused.
-- A few keys work too, if you like them: **Space** pauses and resumes, **Esc** steps back (closes
-  the list, or the small window next to the clock), and **Ctrl+O** chooses files.
+- Everything works from the keyboard too. **Tab** moves a ring from one button to the next
+  (**Shift+Tab** goes back), and **Enter** or **Space** presses the one with the ring; on the
+  **Always** line, the arrow keys move the choice. With no ring, **Space** pauses and resumes,
+  **Esc** steps back (closes the list, or the small window next to the clock), and **Ctrl+O**
+  chooses files.
 - **View files**, under it, shows every video and image you added and how each one went: how much
   smaller it became, where it went (for example **−35% · Replaced**), or why it couldn't be
   compressed. With two or more done, a line at its top adds them all up, for example **In all:

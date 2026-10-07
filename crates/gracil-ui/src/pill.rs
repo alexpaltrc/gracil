@@ -2,18 +2,21 @@
 //! Its middle choice means "off": a small ring instead of a word, where the stone fades almost
 //! away; it fills in as it slides towards either end.
 //!
-//! Like the dial, it animates itself and only asks for frames while the stone is moving.
+//! Like the dial, it animates itself and only asks for frames while the stone is moving. The
+//! keyboard reaches it with Tab, and the arrow keys move the stone (ADR 0059).
 
 use std::time::Instant;
 
 use iced::advanced::layout::{self, Layout};
-use iced::advanced::widget::{Tree, tree};
+use iced::advanced::widget::{Operation, Tree, tree};
 use iced::advanced::{Clipboard, Shell, Widget, renderer};
 use iced::widget::{Space, container, row, text};
 use iced::{
-    Background, Border, Element, Event, Length, Rectangle, Renderer, Size, Theme, mouse, window,
+    Background, Border, Element, Event, Length, Rectangle, Renderer, Size, Theme, keyboard, mouse,
+    window,
 };
 
+use crate::focus::{self, Ring, Scope};
 use crate::style::{self, size, space};
 
 /// How quickly the stone catches up, in seconds (the time to cover about two thirds).
@@ -25,12 +28,14 @@ const RING: f32 = 7.0;
 pub struct Pill<'a, Message> {
     content: Element<'a, Message>,
     selected: usize,
+    scope: Scope,
     on_select: Box<dyn Fn(usize) -> Message + 'a>,
 }
 
 /// Three choices: the two `ends`, and between them "off", drawn as a small ring rather than a
 /// word. `selected` is the one picked, from 0 to 2.
 pub fn pill<'a, Message: 'a>(
+    scope: Scope,
     ends: [&'a str; 2],
     selected: usize,
     on_select: impl Fn(usize) -> Message + 'a,
@@ -59,17 +64,18 @@ pub fn pill<'a, Message: 'a>(
     Pill {
         content: row![label(0, ends[0]), ring, label(2, ends[1])].into(),
         selected,
+        scope,
         on_select: Box::new(on_select),
     }
 }
 
-#[derive(Default)]
 struct State {
     /// Where the stone is, from 0 (first choice) to 2 (last); `None` until first drawn.
     at: Option<f32>,
     last_frame: Option<Instant>,
     /// The choice under the cursor, so it lights up.
     hovered: Option<usize>,
+    ring: Ring,
 }
 
 impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
@@ -82,7 +88,12 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(State::default())
+        tree::State::new(State {
+            at: None,
+            last_frame: None,
+            hovered: None,
+            ring: Ring::new(self.scope),
+        })
     }
 
     fn children(&self) -> Vec<Tree> {
@@ -106,6 +117,18 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
         layout::Node::with_children(content.size(), vec![content])
     }
 
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        _renderer: &Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        let ring = &mut tree.state.downcast_mut::<State>().ring;
+        ring.scope = self.scope;
+        ring.offer(layout.bounds(), operation);
+    }
+
     fn update(
         &mut self,
         tree: &mut Tree,
@@ -118,6 +141,24 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
         _viewport: &Rectangle,
     ) {
         let target = self.selected as f32;
+        let ring = &mut tree.state.downcast_mut::<State>().ring;
+        if ring.drop_on_click(event) {
+            shell.request_redraw();
+        }
+        if ring.held {
+            if let Some(index) = arrowed(event, self.selected) {
+                if index != self.selected {
+                    shell.publish((self.on_select)(index));
+                }
+                shell.capture_event();
+                return;
+            }
+            // Enter and Space have nothing to press here, and don't reach the window either.
+            if focus::is_press(event) {
+                shell.capture_event();
+                return;
+            }
+        }
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let hit = segments(layout).position(|bounds| cursor.is_over(bounds));
@@ -263,6 +304,11 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
             );
         }
 
+        tree.state
+            .downcast_ref::<State>()
+            .ring
+            .draw(renderer, theme, bounds, radius);
+
         self.content.as_widget().draw(
             &tree.children[0],
             renderer,
@@ -296,6 +342,25 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
 impl<'a, Message: 'a> From<Pill<'a, Message>> for Element<'a, Message> {
     fn from(pill: Pill<'a, Message>) -> Self {
         Element::new(pill)
+    }
+}
+
+/// The choice an arrow key moves to from `selected`, if `event` is one.
+fn arrowed(event: &Event, selected: usize) -> Option<usize> {
+    use keyboard::key::Named;
+    let Event::Keyboard(keyboard::Event::KeyPressed {
+        key: keyboard::Key::Named(named),
+        ..
+    }) = event
+    else {
+        return None;
+    };
+    match named {
+        Named::ArrowLeft | Named::ArrowUp => Some(selected.saturating_sub(1)),
+        Named::ArrowRight | Named::ArrowDown => Some((selected + 1).min(2)),
+        Named::Home => Some(0),
+        Named::End => Some(2),
+        _ => None,
     }
 }
 

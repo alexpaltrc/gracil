@@ -12,6 +12,7 @@ use iced::{Center, Element, Fill, Padding, window};
 use crate::app::{EngineState, Finished, Gracil, Message};
 use crate::dial::{self, Dial, Shows};
 use crate::done::{self, Done};
+use crate::focus::{Scope, keyed};
 use crate::pill::pill;
 use crate::reveal::reveal;
 use crate::style::{self, size, space};
@@ -99,13 +100,19 @@ fn offer(state: &Gracil) -> Element<'_, Message> {
             text(state.text.unfinished(state.offered.len()))
                 .size(size::CAPTION)
                 .style(style::muted),
-            button(text(state.text.carry_on).size(size::CAPTION))
-                .style(style::quiet_button)
-                .on_press(Message::ContinueUnfinished),
-            hint(
-                button(text("×").size(size::CAPTION))
+            keyed(
+                Scope::Main,
+                button(text(state.text.carry_on).size(size::CAPTION))
                     .style(style::quiet_button)
-                    .on_press(Message::LetGoUnfinished),
+                    .on_press(Message::ContinueUnfinished)
+            ),
+            hint(
+                keyed(
+                    Scope::Main,
+                    button(text("×").size(size::CAPTION))
+                        .style(style::quiet_button)
+                        .on_press(Message::LetGoUnfinished)
+                ),
                 state.text.forget_unfinished,
             ),
         ]
@@ -124,7 +131,7 @@ fn always(state: &Gracil) -> Element<'_, Message> {
         None => 1,
         Some(Choice::SaveCopy) => 2,
     };
-    let pill = pill(state.text.always_choices, selected, |index| {
+    let pill = pill(Scope::Main, state.text.always_choices, selected, |index| {
         Message::Always(match index {
             0 => Some(Choice::Replace),
             2 => Some(Choice::SaveCopy),
@@ -163,9 +170,12 @@ fn focus(state: &Gracil, hovering: bool) -> Element<'_, Message> {
         None if state.gathering > 0 => text(state.text.looking).size(size::TITLE).into(),
         None => column![
             text(state.text.drop_files_here).size(size::TITLE),
-            button(text(state.text.or_choose_files).size(size::BODY))
-                .style(style::quiet_button)
-                .on_press(Message::ChooseFiles),
+            keyed(
+                Scope::Main,
+                button(text(state.text.or_choose_files).size(size::BODY))
+                    .style(style::quiet_button)
+                    .on_press(Message::ChooseFiles)
+            ),
         ]
         .spacing(space::S)
         .align_x(Center)
@@ -187,7 +197,8 @@ fn finished_view<'a>(state: &'a Gracil, finished: &Finished) -> Element<'a, Mess
     }
     // What failed leads to those files, with the reason under each.
     if finished.failed > 0 {
-        how = how.push(
+        how = how.push(keyed(
+            Scope::Main,
             button(
                 row![
                     text(state.text.failed(finished.failed)).size(size::BODY),
@@ -198,7 +209,7 @@ fn finished_view<'a>(state: &'a Gracil, finished: &Finished) -> Element<'a, Mess
             )
             .style(style::quiet_button)
             .on_press(Message::ShowProblem),
-        );
+        ));
     }
     column![
         Canvas::new(done)
@@ -206,12 +217,13 @@ fn finished_view<'a>(state: &'a Gracil, finished: &Finished) -> Element<'a, Mess
             .height(dial::SIZE + done::AMOUNT_ROOM),
         how,
         // The way to a new start: back to the empty window, ready for the next files.
-        container(
+        container(keyed(
+            Scope::Main,
             button(text(state.text.clear_list).size(size::BODY))
                 .padding([space::XS, space::M])
                 .style(style::action_button)
-                .on_press(Message::Clear),
-        )
+                .on_press(Message::Clear)
+        ),)
         .padding(Padding::default().top(space::M)),
     ]
     .spacing(space::XS)
@@ -312,11 +324,12 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
             shorten(&current.file_name(), DRAWER_NAME_CHARS),
             status(state, current).label
         );
-        content = content.push(
+        content = content.push(keyed(
+            Scope::Main,
             button(text(label).size(size::CAPTION).wrapping(Wrapping::None))
                 .style(style::quiet_button)
                 .on_press(Message::ShowCurrent),
-        );
+        ));
     }
     content.into()
 }
@@ -335,13 +348,19 @@ fn mini(state: &Gracil, window: window::Id) -> Element<'_, Message> {
         }
     };
     let side = column![
-        button(text("×").size(size::BODY))
-            .style(style::quiet_button)
-            .on_press(Message::CloseMini),
+        keyed(
+            Scope::Mini,
+            button(text("×").size(size::BODY))
+                .style(style::quiet_button)
+                .on_press(Message::CloseMini)
+        ),
         Space::new().height(Fill),
-        button(text(state.text.open_gracil).size(size::CAPTION))
-            .style(style::quiet_button)
-            .on_press(Message::OpenMain),
+        keyed(
+            Scope::Mini,
+            button(text(state.text.open_gracil).size(size::CAPTION))
+                .style(style::quiet_button)
+                .on_press(Message::OpenMain)
+        ),
     ]
     .align_x(iced::Right);
     container(
@@ -416,14 +435,20 @@ fn exit_question(state: &Gracil) -> Element<'_, Message> {
             .style(style::muted)
             .align_x(Center),
         row![
-            button(text(state.text.exit).size(size::BODY))
-                .padding([space::XS, space::M])
-                .style(style::action_button)
-                .on_press(Message::ConfirmExit),
-            button(text(state.text.keep_working).size(size::BODY))
-                .padding([space::XS, space::M])
-                .style(style::quiet_button)
-                .on_press(Message::KeepWorking),
+            keyed(
+                Scope::Main,
+                button(text(state.text.exit).size(size::BODY))
+                    .padding([space::XS, space::M])
+                    .style(style::action_button)
+                    .on_press(Message::ConfirmExit)
+            ),
+            keyed(
+                Scope::Main,
+                button(text(state.text.keep_working).size(size::BODY))
+                    .padding([space::XS, space::M])
+                    .style(style::quiet_button)
+                    .on_press(Message::KeepWorking)
+            ),
         ]
         .spacing(space::S),
     ]
@@ -436,10 +461,13 @@ fn exit_question(state: &Gracil) -> Element<'_, Message> {
 /// Replace and Save copy, the two things to do with a finished result (ADR 0009).
 fn choices(state: &Gracil, job: &Job, enabled: bool) -> Element<'static, Message> {
     let action = |label: &'static str, choice: Choice| {
-        button(text(label).size(size::BODY))
-            .padding([space::XS, space::M])
-            .style(style::action_button)
-            .on_press_maybe(enabled.then_some(Message::Choose(job.id, choice)))
+        keyed(
+            Scope::Main,
+            button(text(label).size(size::BODY))
+                .padding([space::XS, space::M])
+                .style(style::action_button)
+                .on_press_maybe(enabled.then_some(Message::Choose(job.id, choice))),
+        )
     };
     row![
         action(state.text.replace, Choice::Replace),
@@ -452,10 +480,13 @@ fn choices(state: &Gracil, job: &Job, enabled: bool) -> Element<'static, Message
 /// The same two choices, smaller, for the mini-window.
 fn mini_choices(state: &Gracil, job: &Job, enabled: bool) -> Element<'static, Message> {
     let action = |label: &'static str, choice: Choice| {
-        button(text(label).size(size::CAPTION))
-            .padding([2.0, space::S])
-            .style(style::action_button)
-            .on_press_maybe(enabled.then_some(Message::Choose(job.id, choice)))
+        keyed(
+            Scope::Mini,
+            button(text(label).size(size::CAPTION))
+                .padding([2.0, space::S])
+                .style(style::action_button)
+                .on_press_maybe(enabled.then_some(Message::Choose(job.id, choice))),
+        )
     };
     row![
         action(state.text.replace, Choice::Replace),
@@ -636,9 +667,12 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
     // The summary takes what room is left after "+", and wraps onto a second line rather than
     // pushing "+" out of the window.
     let add = hint(
-        button(text("+").size(size::TITLE).line_height(1.0))
-            .style(style::quiet_button)
-            .on_press(Message::ChooseFiles),
+        keyed(
+            Scope::Main,
+            button(text("+").size(size::TITLE).line_height(1.0))
+                .style(style::quiet_button)
+                .on_press(Message::ChooseFiles),
+        ),
         state.text.add_files,
     );
     // Once all is done, the big window already says how it went; the line below only opens the
@@ -649,10 +683,13 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
         format!("{summary}  ·  {toggle}")
     };
     row![
-        button(text(line).size(size::CAPTION))
-            .style(style::quiet_button)
-            .width(Fill)
-            .on_press(Message::ToggleDrawer),
+        keyed(
+            Scope::Main,
+            button(text(line).size(size::CAPTION))
+                .style(style::quiet_button)
+                .width(Fill)
+                .on_press(Message::ToggleDrawer)
+        ),
         add,
     ]
     .spacing(space::S)
@@ -662,9 +699,12 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
 
 fn drawer(state: &Gracil) -> Element<'_, Message> {
     let quiet = |label: &'static str, message: Option<Message>| {
-        button(text(label).size(size::CAPTION))
-            .style(style::quiet_button)
-            .on_press_maybe(message)
+        keyed(
+            Scope::Main,
+            button(text(label).size(size::CAPTION))
+                .style(style::quiet_button)
+                .on_press_maybe(message),
+        )
     };
 
     let mut header = row![].spacing(space::XS).align_y(Center);
@@ -704,15 +744,18 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
             state.can_remove(job).then_some(Message::Remove(job.id)),
         );
         row![
-            button(line)
-                .padding([space::XS, space::S])
-                .width(Fill)
-                .style(if state.selected == Some(job.id) {
-                    style::picked_row
-                } else {
-                    style::quiet_button
-                })
-                .on_press(Message::Select(job.id)),
+            keyed(
+                Scope::Main,
+                button(line)
+                    .padding([space::XS, space::S])
+                    .width(Fill)
+                    .style(if state.selected == Some(job.id) {
+                        style::picked_row
+                    } else {
+                        style::quiet_button
+                    })
+                    .on_press(Message::Select(job.id))
+            ),
             remove,
         ]
         .align_y(Center)
