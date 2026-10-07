@@ -119,11 +119,6 @@ impl VideoEncoder {
             Self::X265 => "libx265",
         }
     }
-
-    /// Whether this encoder runs on the graphics card rather than the processor.
-    pub fn on_the_card(self) -> bool {
-        self != Self::X265
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -90,12 +90,6 @@ impl Queue {
         self.keys.get(&key(path)).and_then(|&id| self.get(id))
     }
 
-    /// The first file being worked on, if any. Several can be: one video and a few images, each
-    /// getting ready or compressing (ADR 0040).
-    pub fn active(&self) -> Option<&Job> {
-        self.jobs.iter().find(|job| job.state.is_active())
-    }
-
     /// How many files of `kind` are in a state `test` accepts.
     pub fn count(&self, kind: Kind, test: impl Fn(JobState) -> bool) -> usize {
         self.jobs

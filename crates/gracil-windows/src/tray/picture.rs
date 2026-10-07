@@ -1,7 +1,6 @@
-//! The tray icon's pictures, drawn from the same shapes as the delivered tray artwork
-//! (`assets/icons/vector/gracil-tray-*.svg`): the support and the marble resting on it. Every
-//! state is drawn the same way at the size the taskbar asks for, so switching states never shifts
-//! a pixel (ADR 0020).
+//! The tray icon's pictures: the support and the marble resting on it. Every state is drawn the
+//! same way at the size the taskbar asks for, so switching states never shifts a pixel
+//! (ADR 0020).
 //!
 //! Plain arithmetic, no Windows calls, so it can be tested anywhere.
 

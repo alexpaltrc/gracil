@@ -54,4 +54,5 @@ around it, and it ignored the accent color the user picked in Windows.
 
 - Gracil follows the user's colors with nothing to set, and changes with them while open.
 - Piedra's colored icon files are no longer in `assets/icons/`, whose SVGs now hold the marble's
-  shapes in the new colors.
+  shapes in the new colors. *Update (2026-10-07):* nothing read those SVGs, so they were removed;
+  the shapes live in the `.ico` files and in the code that draws the tray icon.
