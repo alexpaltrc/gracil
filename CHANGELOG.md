@@ -191,4 +191,4 @@ with it.
   no buttons, and says why just below.
 - Gracil comes with FFmpeg, the free tool it uses to compress video, so there is nothing else to
   download. If that part of Gracil ever goes missing, files say **Can't start** with a "!"
-  explaining it: download Gracil again and it works as before.
+  explaining it: download Gracil again from where you got it and it works as before.

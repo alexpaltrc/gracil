@@ -305,7 +305,7 @@ static ENGLISH: Text = Text {
     clear_list: "Clear the list",
     getting_ready: "Getting ready",
     waiting: "Waiting",
-    ffmpeg_missing: "Gracil is missing part of itself. Download it again from GitHub",
+    ffmpeg_missing: "Gracil is missing its video tool. Download Gracil again from where you got it",
     compressing: "Compressing",
     paused: "Paused",
     stop_all: "Stop all",
@@ -335,7 +335,7 @@ static ENGLISH: Text = Text {
         1 => "1 file was left unfinished".to_owned(),
         _ => format!("{written} files were left unfinished"),
     },
-    ready: |_, written| format!("{written} ready to save"),
+    ready: |_, written| format!("{written} more to decide"),
     saved_as: |name| format!("Saved as {name}"),
     replaced_by: |name| format!("Replaced by {name}"),
     open_gracil: "Open Gracil",
@@ -399,12 +399,12 @@ static ENGLISH: Text = Text {
         match unchosen {
             0 => {}
             1 => parts.push(
-                "The finished file you haven't chosen for is let go and will be compressed again \
+                "The finished file you haven't saved yet is let go, and will be compressed again \
                  next time."
                     .to_owned(),
             ),
             _ => parts.push(format!(
-                "The {unchosen_written} finished files you haven't chosen for are let go and will \
+                "The {unchosen_written} finished files you haven't saved yet are let go, and will \
                  be compressed again next time."
             )),
         }
@@ -413,15 +413,15 @@ static ENGLISH: Text = Text {
     failures: Failures {
         no_video: "This file has no video",
         unreadable: "This file can't be opened as a video or an image",
-        could_not_compress: "This file couldn't be compressed",
-        not_smaller: "This file couldn't be made smaller than the original, so it isn't saved",
+        could_not_compress: "This file couldn't be compressed. Try adding it again",
+        not_smaller: "This file couldn't be made smaller than the original, so it was left as it is",
         as_small_as_it_gets: "This file is already compressed about as much as it can be, so it was left as it is",
-        could_not_save: "The compressed file couldn't be saved in this folder",
+        could_not_save: "The compressed file couldn't be saved in this folder. Make sure files can be saved there, then add it again",
         name_taken: "Another file already has this file's new name, so the original was kept",
         animated: "Gracil doesn't compress moving images, so it was left as it is",
         not_accepted: "Gracil doesn't compress this kind of image, so it was left as it is",
         hdr: "This photo is stored in HDR, which Gracil doesn't compress, so it was left as it is",
-        no_encoder: "Gracil is missing part of itself. Download it again from GitHub",
+        no_encoder: "Gracil is missing its photo tool. Download Gracil again from where you got it",
         no_room: "The drive is almost full, so this file was left as it is. Free up some space and add it again",
         too_large: "This image is too large for this computer's memory, so it was left as it is",
     },
@@ -440,12 +440,12 @@ static SPANISH: Text = Text {
     replace: "Reemplazar",
     save_copy: "Guardar copia",
     replace_all: "Reemplazar todos",
-    save_all_copies: "Guardar todos como copia",
+    save_all_copies: "Guardar todos como copias",
     clear: "Limpiar",
     clear_list: "Limpiar la lista",
     getting_ready: "Preparando",
     waiting: "En espera",
-    ffmpeg_missing: "A Gracil le falta una parte. Descárgalo de nuevo desde GitHub",
+    ffmpeg_missing: "A Gracil le falta su herramienta de video. Vuelve a descargarlo de donde lo obtuviste",
     compressing: "Comprimiendo",
     paused: "En pausa",
     stop_all: "Detener todo",
@@ -472,8 +472,8 @@ static SPANISH: Text = Text {
         _ => format!("Quedaron {written} archivos sin terminar"),
     },
     ready: |count, written| match count {
-        1 => "1 listo para guardar".to_owned(),
-        _ => format!("{written} listos para guardar"),
+        1 => "1 más por decidir".to_owned(),
+        _ => format!("{written} más por decidir"),
     },
     saved_as: |name| format!("Guardado como {name}"),
     replaced_by: |name| format!("Reemplazado por {name}"),
@@ -494,11 +494,11 @@ static SPANISH: Text = Text {
     prepare_to_delete: "Preparar para eliminar Gracil",
     always: "Siempre",
     always_choices: ["Reemplazar", "Preguntar", "Guardar copia"],
-    nothing_to_shrink: "No había nada que reducir",
+    nothing_to_shrink: "No hay nada que reducir",
     nothing_compressed: "No se comprimió nada",
     always_tip: "Qué hacer con cada archivo terminado",
     forget_unfinished: "Olvidar estos archivos",
-    cannot_start: "No puede empezar",
+    cannot_start: "No se puede iniciar",
     prepare_question: "¿Preparar para eliminar Gracil?",
     compressed: |count, written| match count {
         1 => "1 archivo comprimido".to_owned(),
@@ -551,12 +551,12 @@ static SPANISH: Text = Text {
         match unchosen {
             0 => {}
             1 => parts.push(
-                "El archivo terminado que aún no elegiste se descarta y se volverá a comprimir la \
+                "El archivo terminado que aún no guardaste se descarta y se volverá a comprimir la \
                  próxima vez."
                     .to_owned(),
             ),
             _ => parts.push(format!(
-                "Los {unchosen_written} archivos terminados que aún no elegiste se descartan y se \
+                "Los {unchosen_written} archivos terminados que aún no guardaste se descartan y se \
                  volverán a comprimir la próxima vez."
             )),
         }
@@ -565,15 +565,15 @@ static SPANISH: Text = Text {
     failures: Failures {
         no_video: "Este archivo no tiene video",
         unreadable: "Este archivo no se puede abrir como video ni como imagen",
-        could_not_compress: "Este archivo no se pudo comprimir",
-        not_smaller: "Este archivo no se pudo hacer más pequeño que el original, así que no se guarda",
+        could_not_compress: "Este archivo no se pudo comprimir. Intenta agregarlo de nuevo",
+        not_smaller: "Este archivo no se pudo hacer más pequeño que el original, así que se dejó como está",
         as_small_as_it_gets: "Este archivo ya está comprimido casi al máximo, así que se dejó como está",
-        could_not_save: "El archivo comprimido no se pudo guardar en esta carpeta",
+        could_not_save: "El archivo comprimido no se pudo guardar en esta carpeta. Comprueba que se pueden guardar archivos ahí y vuelve a agregarlo",
         name_taken: "Ya hay otro archivo con el nuevo nombre de este archivo, así que se conservó el original",
         animated: "Gracil no comprime imágenes en movimiento, así que se dejó como está",
         not_accepted: "Gracil no comprime este tipo de imagen, así que se dejó como está",
         hdr: "Esta foto está guardada en HDR, que Gracil no comprime, así que se dejó como está",
-        no_encoder: "A Gracil le falta una parte. Descárgalo de nuevo desde GitHub",
+        no_encoder: "A Gracil le falta su herramienta de fotos. Vuelve a descargarlo de donde lo obtuviste",
         no_room: "El disco está casi lleno, así que este archivo se dejó como está. Libera espacio y vuelve a agregarlo",
         too_large: "Esta imagen es demasiado grande para la memoria de esta computadora, así que se dejó como está",
     },
@@ -621,7 +621,7 @@ mod tests {
         );
         assert_eq!(
             en.exit_explanation(0, 0, 1),
-            "The finished file you haven't chosen for is let go and will be compressed again \
+            "The finished file you haven't saved yet is let go, and will be compressed again \
              next time."
         );
         assert!(
@@ -650,8 +650,8 @@ mod tests {
         assert_eq!(es.compressing_files(1), "Comprimiendo 1 archivo");
         assert_eq!(es.unfinished(1), "Quedó 1 archivo sin terminar");
         assert_eq!(en.unfinished(2), "2 files were left unfinished");
-        assert_eq!(es.ready(1), "1 listo para guardar");
-        assert_eq!(es.ready(2), "2 listos para guardar");
+        assert_eq!(es.ready(1), "1 más por decidir");
+        assert_eq!(es.ready(2), "2 más por decidir");
         assert_eq!(
             es.files_left(15_031),
             "Quedan 15,031 archivos",
@@ -688,7 +688,7 @@ mod tests {
             already: 3,
             ..Finished::default()
         };
-        assert_eq!(es.headline(&already), "No había nada que reducir");
+        assert_eq!(es.headline(&already), "No hay nada que reducir");
     }
 
     #[test]

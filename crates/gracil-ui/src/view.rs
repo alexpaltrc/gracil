@@ -436,20 +436,22 @@ fn exit_question(state: &Gracil) -> Element<'_, Message> {
             .size(size::BODY)
             .style(style::muted)
             .align_x(Center),
+        // Carrying on is the safe answer, so it is the one in the accent, first, as in Windows'
+        // own dialogs; leaving is still one click away.
         row![
-            keyed(
-                Scope::Main,
-                button(text(state.text.exit).size(size::BODY))
-                    .padding([space::XS, space::M])
-                    .style(style::action_button)
-                    .on_press(Message::ConfirmExit)
-            ),
             keyed(
                 Scope::Main,
                 button(text(state.text.keep_working).size(size::BODY))
                     .padding([space::XS, space::M])
-                    .style(style::quiet_button)
+                    .style(style::action_button)
                     .on_press(Message::KeepWorking)
+            ),
+            keyed(
+                Scope::Main,
+                button(text(state.text.exit).size(size::BODY))
+                    .padding([space::XS, space::M])
+                    .style(style::quiet_button)
+                    .on_press(Message::ConfirmExit)
             ),
         ]
         .spacing(space::S),

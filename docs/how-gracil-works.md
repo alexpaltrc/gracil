@@ -162,7 +162,8 @@ never uses the internet. Its license and where to find its source code are in th
 folder.
 
 If that folder is ever removed or damaged, Gracil can't compress videos: they show **Can't start**,
-with a **!** that says so. Download Gracil again from GitHub and it works as before. Gracil never
+with a **!** that says Gracil is missing its video tool. Download Gracil again from where you got
+it and it works as before. Gracil never
 downloads anything by itself.
 
 ## Choosing the fastest way to compress
@@ -521,18 +522,17 @@ Gracil**; then the settings, **Start with Windows**, **Show Gracil in Send to**,
 File Explorer's menu…** and **Show mini-window when compressing from File Explorer**; then **Prepare
 to delete Gracil** and **Exit**.
 
-Click the marble and a small window opens right next to it, wherever your taskbar is. It shows
-the file being compressed and how far along it is; click the middle of its circle to pause or
-carry on (stopping is only in the big window, where it is clear what stops). When a file is done,
-it shows how much smaller it became with **Replace** and **Save copy**, so you can choose right
-there without opening the big window (unless **Always** already chose for you). If more files
-finish while another is compressing, it says how many are ready to save and shows them one by
-one when the work is done. It also tells you how many more files are waiting after it and, once
-one is placed, where it went. If a file couldn't be compressed, click the small "!" beside it and
-the big window opens on that file, with the reason written out. You can drop more files or
-folders on it.
-It stays open while you do other things; close it with its **×** or by clicking the marble
-again, and use **Open Gracil** in it to get the big window.
+Click the marble and a small window opens right next to it, wherever your taskbar is. It shows the
+file being compressed and how far along it is; click the middle of its circle to pause or carry on
+(stopping is only in the big window, where it is clear what stops). When a file is done, it shows
+how much smaller it became with **Replace** and **Save copy**, so you can choose right there without
+opening the big window (unless **Always** already chose for you). If more files finish while another
+is compressing, it says how many more are left to decide on and shows them one by one when the work
+is done. It also tells you how many more files are waiting after it and, once one is placed, where
+it went. If a file couldn't be compressed, click the small "!" beside it and the big window opens on
+that file, with the reason written out. You can drop more files or folders on it. It stays open
+while you do other things; close it with its **×** or by clicking the marble again, and use **Open
+Gracil** in it to get the big window.
 
 When you compress from File Explorer, this small window opens by itself so you can see the
 work happen. If you'd rather it didn't, right-click the marble and untick **Show mini-window when
@@ -541,12 +541,12 @@ are compressed.
 
 **Exit** is how you quit Gracil. If nothing is compressing, waiting or waiting for your choice,
 Gracil quits straight away. Otherwise it first asks, and tells you exactly what will happen: the
-file being compressed stops and its original stays exactly as it was, files still waiting are
-kept for next time, and finished files you haven't chosen for are let go, to be compressed again
-next time (see below). Choose **Keep working**, or press **Esc**, to carry on. If the work
-finishes while you decide, the question goes away. Gracil quits within a few seconds, even if a
-file it was working on is on a slow network or cloud drive; only a file being put in its place is
-always finished first.
+file being compressed stops and its original stays exactly as it was, files still waiting are kept
+for next time, and finished files you haven't saved yet are let go, to be compressed again next
+time (see below). Choose **Keep working**, the highlighted button, or press **Esc**, to carry on. If
+the work finishes while you decide, the question goes away. Gracil quits within a few seconds, even
+if a file it was working on is on a slow network or cloud drive; only a file being put in its place
+is always finished first.
 
 When Gracil quits, finished files you didn't choose for are deleted; their originals stay as
 they were, and they are on the list to carry on with.
