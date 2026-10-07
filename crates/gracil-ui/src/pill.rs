@@ -17,6 +17,7 @@ use iced::{
 };
 
 use crate::focus::{self, Ring, Scope};
+use crate::motion;
 use crate::style::{self, size, space};
 
 /// How quickly the stone catches up, in seconds (the time to cover about two thirds).
@@ -178,11 +179,9 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
             Event::Window(window::Event::RedrawRequested(now)) => {
                 let state = tree.state.downcast_mut::<State>();
                 let at = state.at.unwrap_or(target);
-                let elapsed = state
-                    .last_frame
-                    .map_or(0.0, |last| now.duration_since(last).as_secs_f32().min(0.1));
-                let next = at + (target - at) * (1.0 - (-elapsed / EASE).exp());
-                if (target - next).abs() < 0.002 {
+                let next =
+                    motion::approach(at, target, motion::elapsed(state.last_frame, *now), EASE);
+                if next == target {
                     state.at = Some(target);
                     state.last_frame = None;
                 } else {
@@ -264,16 +263,22 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
                 width: a.width + (b.width - a.width) * t,
                 height: a.height,
             };
-            // Quiet in the middle, filled at either end.
+            // Quiet in the middle, filled at either end. A contrast theme has no faint colors, so
+            // there the quiet stone is outlined in full.
             let lit = (at - 1.0).abs();
             let fill = palette.text.scale_alpha(0.06).mix(palette.primary, lit);
+            let edge = if style::contrasting() {
+                tokens.border
+            } else {
+                palette.text.scale_alpha(0.10)
+            };
             renderer.fill_quad(
                 renderer::Quad {
                     bounds: stone,
                     border: Border::default()
                         .rounded(stone.height / 2.0)
                         .width(1.0)
-                        .color(palette.text.scale_alpha(0.10 * (1.0 - lit))),
+                        .color(edge.scale_alpha(1.0 - lit)),
                     ..renderer::Quad::default()
                 },
                 Background::Color(fill),

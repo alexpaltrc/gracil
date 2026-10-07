@@ -14,6 +14,8 @@ use iced::{
     Background, Element, Event, Length, Rectangle, Renderer, Size, Theme, Vector, mouse, window,
 };
 
+use crate::motion;
+
 /// How quickly it unfolds, in seconds (the time to cover about two thirds): a little slower
 /// than the pill's stone, since it moves more.
 const EASE: f32 = 0.06;
@@ -124,11 +126,13 @@ impl<Message: Clone> Widget<Message, Theme, Renderer> for Reveal<'_, Message> {
         if let Event::Window(window::Event::RedrawRequested(now)) = event {
             let state = tree.state.downcast_mut::<State>();
             let before = state.shown;
-            let elapsed = state
-                .last_frame
-                .map_or(0.0, |last| now.duration_since(last).as_secs_f32().min(0.1));
-            let next = state.shown + (target - state.shown) * (1.0 - (-elapsed / EASE).exp());
-            if (target - next).abs() < 0.002 {
+            let next = motion::approach(
+                state.shown,
+                target,
+                motion::elapsed(state.last_frame, *now),
+                EASE,
+            );
+            if next == target {
                 state.shown = target;
                 state.last_frame = None;
             } else {

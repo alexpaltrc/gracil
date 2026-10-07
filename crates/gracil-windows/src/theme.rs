@@ -1,10 +1,19 @@
-//! Windows' light and dark choices and accent color, read where Windows keeps them.
+//! Windows' choices about how apps look and move: light and dark, the accent color, contrast
+//! themes and animation effects, read where Windows keeps them.
 
 use std::ptr;
 
+use windows_sys::Win32::Graphics::Gdi::{
+    COLOR_HIGHLIGHT, COLOR_WINDOW, COLOR_WINDOWTEXT, GetSysColor,
+};
 use windows_sys::Win32::System::Registry::{
     HKEY_CURRENT_USER, RRF_RT_REG_BINARY, RRF_RT_REG_DWORD, RegGetValueW,
 };
+use windows_sys::Win32::UI::Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    SPI_GETCLIENTAREAANIMATION, SPI_GETHIGHCONTRAST, SystemParametersInfoW,
+};
+use windows_sys::core::BOOL;
 
 use crate::wide;
 
@@ -80,4 +89,58 @@ fn personalize(name: &str) -> Option<bool> {
         )
     };
     (status == 0).then_some(data != 0)
+}
+
+/// Whether Windows' "Animation effects" setting is on. Assumed on if it can't be read, as it is
+/// unless someone turned it off.
+pub fn animations() -> bool {
+    let mut on: BOOL = 1;
+    // SAFETY: for this action Windows writes one BOOL to the address given, which is `on`.
+    #[allow(unsafe_code)]
+    let read =
+        unsafe { SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, (&raw mut on).cast(), 0) };
+    read == 0 || on != 0
+}
+
+/// The colors of a contrast theme, as `[red, green, blue]`: what Windows asks every app to draw
+/// with while one is on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Contrast {
+    pub background: [u8; 3],
+    pub text: [u8; 3],
+    /// Selected and filled controls.
+    pub highlight: [u8; 3],
+}
+
+/// The contrast theme's colors while one is on in Windows' settings, or `None`.
+pub fn contrast() -> Option<Contrast> {
+    let mut settings = HIGHCONTRASTW {
+        cbSize: size_of::<HIGHCONTRASTW>() as u32,
+        ..HIGHCONTRASTW::default()
+    };
+    // SAFETY: for this action Windows fills the HIGHCONTRASTW given, whose size it is told both
+    // in `cbSize` and in the second argument.
+    #[allow(unsafe_code)]
+    let read = unsafe {
+        SystemParametersInfoW(
+            SPI_GETHIGHCONTRAST,
+            settings.cbSize,
+            (&raw mut settings).cast(),
+            0,
+        )
+    };
+    if read == 0 || settings.dwFlags & HCF_HIGHCONTRASTON == 0 {
+        return None;
+    }
+    let color = |index| {
+        // SAFETY: GetSysColor only reads, and every index used here is one of Windows' own.
+        #[allow(unsafe_code)]
+        let [r, g, b, _] = unsafe { GetSysColor(index) }.to_le_bytes();
+        [r, g, b]
+    };
+    Some(Contrast {
+        background: color(COLOR_WINDOW),
+        text: color(COLOR_WINDOWTEXT),
+        highlight: color(COLOR_HIGHLIGHT),
+    })
 }

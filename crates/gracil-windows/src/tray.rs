@@ -26,9 +26,10 @@ use windows_sys::Win32::UI::Shell::{
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreateIcon, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon,
     DestroyMenu, DispatchMessageW, GetMessageW, HICON, MF_CHECKED, MF_SEPARATOR, MF_STRING, MSG,
-    PostMessageW, RegisterClassExW, RegisterWindowMessageW, SM_CXSMICON, SetForegroundWindow,
-    SetMenuDefaultItem, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP,
-    WM_CONTEXTMENU, WM_NULL, WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPED,
+    PostMessageW, RegisterClassExW, RegisterWindowMessageW, SM_CXSMICON,
+    SPI_SETCLIENTAREAANIMATION, SPI_SETHIGHCONTRAST, SetForegroundWindow, SetMenuDefaultItem,
+    TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP, WM_CONTEXTMENU,
+    WM_NULL, WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPED,
 };
 
 use crate::wide;
@@ -65,7 +66,8 @@ pub enum TrayEvent {
     PrepareToDelete,
     /// Exit in the icon's menu.
     Exit,
-    /// Windows' colors changed: light or dark, or the accent color.
+    /// Windows changed how apps should look or move: light or dark, the accent color, a contrast
+    /// theme, or animation effects.
     Colors,
 }
 
@@ -362,7 +364,7 @@ unsafe extern "system" fn window_procedure(
             refresh(window);
             0
         }
-        WM_SETTINGCHANGE if is_theme_change(lparam) => {
+        WM_SETTINGCHANGE if is_look_change(wparam, lparam) => {
             if let Some(shared) = SHARED.get() {
                 lock(shared).light_taskbar = crate::theme::light_taskbar();
             }
@@ -571,8 +573,15 @@ fn make_icon(state: TrayState, light_taskbar: bool) -> Option<HICON> {
     (!icon.is_null()).then_some(icon)
 }
 
-/// Whether a settings broadcast is about light and dark.
-fn is_theme_change(lparam: LPARAM) -> bool {
+/// Whether a settings broadcast is about how apps look or move: light and dark and the accent
+/// color, a contrast theme, or animation effects.
+fn is_look_change(wparam: WPARAM, lparam: LPARAM) -> bool {
+    if matches!(
+        u32::try_from(wparam),
+        Ok(SPI_SETHIGHCONTRAST | SPI_SETCLIENTAREAANIMATION)
+    ) {
+        return true;
+    }
     if lparam == 0 {
         return false;
     }

@@ -34,7 +34,7 @@ pub use process::set_suspended;
 pub use quiet::{
     free_memory, free_space, idle_for, own_memory, saving_energy, total_memory, work_quietly,
 };
-pub use theme::{Accent, accent, light_apps};
+pub use theme::{Accent, Contrast, accent, animations, contrast, light_apps};
 pub use tray::{Tray, TrayEvent, TrayMenu, TrayState};
 
 use std::ffi::OsStr;

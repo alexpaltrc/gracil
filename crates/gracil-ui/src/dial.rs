@@ -16,6 +16,7 @@ use iced::widget::text::Alignment;
 use iced::{Color, Point, Rectangle, Renderer, Size, Theme, window};
 
 use crate::app::Message;
+use crate::motion::{self, approach};
 use crate::style::{self, size};
 
 /// Width and height of the dial, in logical pixels. Drawn smaller, everything shrinks with it.
@@ -134,7 +135,7 @@ impl Dial {
             self.target_play(),
             f32::from(hovered == Some(Part::PauseResume)),
             f32::from(hovered == Some(Part::Stop)),
-            f32::from(self.getting_ready && !self.paused),
+            f32::from(self.getting_ready && !self.paused && !motion::still()),
         ]
     }
 }
@@ -174,9 +175,7 @@ impl canvas::Program<Message> for Dial {
                 }
             }
             Event::Window(window::Event::RedrawRequested(now)) => {
-                let elapsed = state
-                    .last_frame
-                    .map_or(0.0, |last| now.duration_since(last).as_secs_f32().min(0.1));
+                let elapsed = motion::elapsed(state.last_frame, *now);
                 let [fill, play, top, bottom, breathing] = self.targets(hovered);
                 state.fill = approach(state.fill, fill, elapsed, FILL_EASE);
                 state.play = approach(state.play, play, elapsed, SYMBOL_EASE);
@@ -429,16 +428,6 @@ fn pause_play_shapes() -> [(Quad, Quad); 2] {
     ]
 }
 
-/// Moves `value` towards `target`, snapping once the difference can't be seen.
-fn approach(value: f32, target: f32, elapsed: f32, ease: f32) -> f32 {
-    let next = value + (target - value) * (1.0 - (-elapsed / ease).exp());
-    if (target - next).abs() < 0.002 {
-        target
-    } else {
-        next
-    }
-}
-
 fn lerp(from: f32, to: f32, t: f32) -> f32 {
     from + (to - from) * t
 }
@@ -455,16 +444,6 @@ fn mix(from: Color, to: Color, t: f32) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn values_ease_and_then_settle_exactly() {
-        let mut value = 0.0;
-        for _ in 0..200 {
-            value = approach(value, 1.0, 1.0 / 60.0, FILL_EASE);
-        }
-        assert_eq!(value, 1.0);
-        assert!(approach(0.0, 1.0, 1.0 / 60.0, FILL_EASE) < 0.1);
-    }
 
     #[test]
     fn the_stop_button_is_about_a_quarter_of_the_middle() {

@@ -4,6 +4,7 @@
 //! still temporary (§78). Screens only ever refer to these names, so restyling Gracil happens
 //! here.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use iced::theme::{Mode, Palette};
@@ -46,6 +47,41 @@ impl Accent {
         on_light: Color::from_rgb8(0x00, 0x5F, 0xB8),
         on_dark: Color::from_rgb8(0x4C, 0xC2, 0xFF),
     };
+}
+
+/// The colors of a contrast theme chosen in Windows. While one is on, Gracil draws with them
+/// alone, as Windows asks every app to.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Contrast {
+    pub background: Color,
+    pub text: Color,
+    pub highlight: Color,
+}
+
+/// Whether a contrast theme is on, so the roles beyond the palette follow it too.
+static CONTRASTING: AtomicBool = AtomicBool::new(false);
+
+/// Says whether a contrast theme is on, before the window is drawn with `contrast_palette`.
+pub fn set_contrasting(on: bool) {
+    CONTRASTING.store(on, Ordering::Relaxed);
+}
+
+/// Whether a contrast theme is on, for the few faint touches that need a solid stand-in.
+pub fn contrasting() -> bool {
+    CONTRASTING.load(Ordering::Relaxed)
+}
+
+/// The palette while a contrast theme is on: its background, its text, and its highlight for
+/// filled controls. States read in words and marks, not in colors of their own.
+pub fn contrast_palette(contrast: Contrast) -> Palette {
+    Palette {
+        background: contrast.background,
+        text: contrast.text,
+        primary: contrast.highlight,
+        success: contrast.text,
+        warning: contrast.text,
+        danger: contrast.text,
+    }
 }
 
 /// Windows 11's palette (ADR 0031): its neutral app backgrounds and text, its status colors, and
@@ -98,21 +134,18 @@ const DARK_BACKGROUND: Color = Color::from_rgb8(0x20, 0x20, 0x20);
 /// The light and dark values of the roles that don't depend on the accent.
 struct Neutrals {
     secondary: Color,
-    on_accent: Color,
     border: Color,
     thumb: Color,
 }
 
 const LIGHT: Neutrals = Neutrals {
     secondary: Color::from_rgb8(0x5C, 0x5C, 0x5C),
-    on_accent: Color::WHITE,
     border: Color::from_rgb8(0x86, 0x86, 0x86),
     thumb: Color::WHITE,
 };
 
 const DARK: Neutrals = Neutrals {
     secondary: Color::from_rgb8(0xCC, 0xCC, 0xCC),
-    on_accent: Color::BLACK,
     border: Color::from_rgb8(0x9A, 0x9A, 0x9A),
     thumb: Color::from_rgb8(0x45, 0x45, 0x45),
 };
@@ -121,6 +154,16 @@ const DARK: Neutrals = Neutrals {
 /// how far its background has gone from light grey to dark grey says how far to mix them.
 pub fn tokens(theme: &Theme) -> Tokens {
     let palette = theme.palette();
+    let on_accent = readable_on(palette.primary);
+    if contrasting() {
+        return Tokens {
+            secondary: palette.text,
+            accent: palette.primary,
+            on_accent,
+            border: palette.text,
+            thumb: palette.background,
+        };
+    }
     let t = ((palette.background.r - LIGHT_BACKGROUND.r)
         / (DARK_BACKGROUND.r - LIGHT_BACKGROUND.r))
         .clamp(0.0, 1.0);
@@ -128,10 +171,35 @@ pub fn tokens(theme: &Theme) -> Tokens {
     Tokens {
         secondary: mix(LIGHT.secondary, DARK.secondary),
         accent: palette.primary,
-        on_accent: mix(LIGHT.on_accent, DARK.on_accent),
+        on_accent,
         border: mix(LIGHT.border, DARK.border),
         thumb: mix(LIGHT.thumb, DARK.thumb),
     }
+}
+
+/// White or black, whichever reads better on `color`: white on the darker shade Windows uses in
+/// light mode and black on the lighter one in dark mode, as Windows does, but also right for an
+/// accent pale enough that white would fade into it.
+fn readable_on(color: Color) -> Color {
+    // Contrast is (lighter + 0.05) / (darker + 0.05) in relative luminance (WCAG 2), so white and
+    // black read equally well where luminance is 0.179.
+    if luminance(color) > 0.179 {
+        Color::BLACK
+    } else {
+        Color::WHITE
+    }
+}
+
+/// How light a color looks, from 0 (black) to 1 (white), as WCAG 2 measures it.
+fn luminance(color: Color) -> f32 {
+    let linear = |c: f32| {
+        if c <= 0.040_45 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b)
 }
 
 /// A color part of the way from `from` to `to`.
@@ -263,5 +331,21 @@ pub fn tooltip(theme: &Theme) -> container::Style {
             .width(1.0)
             .color(tokens(theme).border),
         ..container::Style::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn text_on_the_accent_reads_like_windows_and_stays_readable_on_pale_accents() {
+        assert_eq!(readable_on(Accent::WINDOWS.on_light), Color::WHITE);
+        assert_eq!(readable_on(Accent::WINDOWS.on_dark), Color::BLACK);
+        // A yellow accent's darker shade is still too light for white text.
+        assert_eq!(
+            readable_on(Color::from_rgb8(0xC2, 0x9F, 0x00)),
+            Color::BLACK
+        );
     }
 }

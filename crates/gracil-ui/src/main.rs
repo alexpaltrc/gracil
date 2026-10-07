@@ -10,6 +10,7 @@ mod done;
 mod explorer;
 mod focus;
 mod logging;
+mod motion;
 mod numbers;
 mod outside;
 mod pace;

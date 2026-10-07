@@ -24,7 +24,9 @@ with it.
 - Gracil wears Windows 11's own colors, in light and dark, so it looks like part of Windows. Its
   buttons and progress take the accent color you picked in Windows. It follows Windows' light or
   dark mode and your accent color, and when you change either, Gracil fades gently to match.
-  Every word and button stays easy to read in both.
+  Every word and button stays easy to read in both, even on a pale accent color.
+- Gracil follows Windows' contrast themes, drawing with their colors alone, and Windows'
+  **Animation effects**: when they are off, nothing in Gracil moves.
 - Gracil has its own icon, a marble resting on a support, in the window, the taskbar and File
   Explorer. It sits on a small tile in Windows' own greys, always the opposite of Windows: dark
   when Windows is light, light when Windows is dark, so it stands out in both. It stays sharp at

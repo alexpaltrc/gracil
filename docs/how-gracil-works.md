@@ -39,6 +39,14 @@ gently instead of flashing. Its windows always open in the right colors from the
 moment.
 Every word and every button is chosen to stay easy to read in both, by the usual accessibility
 measure: the buttons for what to do with a finished video are filled, so they stand out clearly.
+The words on them are white or black, whichever reads better on your accent color, so even a pale
+one stays readable.
+
+If you turn on a contrast theme in Windows (**Settings → Accessibility → Contrast themes**),
+Gracil draws with that theme's colors alone, and the moment you turn it on or off, Gracil changes
+with it. If you turn off **Animation effects** (**Settings → Accessibility → Visual effects**),
+nothing in Gracil moves: the ring, the list and the colors change at once instead of gliding, and
+the marble stays still while Gracil gets ready.
 
 Gracil's symbol is a marble resting on a support: the marble is your video, and the support is
 Gracil, which takes care of the technical work. It is Gracil's icon in the window, the taskbar and

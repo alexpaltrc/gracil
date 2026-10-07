@@ -14,6 +14,7 @@ use iced::{Point, Rectangle, Renderer, Size, Theme, window};
 
 use crate::app::Message;
 use crate::dial;
+use crate::motion;
 use crate::style::{self, size};
 
 /// Room below the ring for the amount saved.
@@ -52,9 +53,12 @@ impl canvas::Program<Message> for Done {
     ) -> Option<Action<Message>> {
         if let Event::Window(window::Event::RedrawRequested(now)) = event {
             let started = *state.started.get_or_insert(*now);
-            state.progress = (now.saturating_duration_since(started).as_secs_f32()
-                / ENTRANCE.as_secs_f32())
-            .min(1.0);
+            state.progress = if motion::still() {
+                1.0
+            } else {
+                (now.saturating_duration_since(started).as_secs_f32() / ENTRANCE.as_secs_f32())
+                    .min(1.0)
+            };
         }
         (state.progress < 1.0).then(Action::request_redraw)
     }
