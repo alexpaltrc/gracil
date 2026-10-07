@@ -49,7 +49,8 @@ pub fn pill<'a, Message: 'a>(
                 }),
             }
         }))
-        .padding([4.0, space::S + 2.0])
+        // At least 24 pixels tall, easy to hit.
+        .padding([5.0, space::S + 2.0])
         .into()
     };
     Pill {

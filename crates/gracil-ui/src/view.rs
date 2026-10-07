@@ -487,7 +487,8 @@ fn mini_choices(state: &Gracil, job: &Job, enabled: bool) -> Element<'static, Me
         keyed(
             Scope::Mini,
             button(text(label).size(size::CAPTION))
-                .padding([2.0, space::S])
+                // Five pixels above and below make it at least 24 pixels tall, easy to hit.
+                .padding([5.0, space::S])
                 .style(style::action_button)
                 .on_press_maybe(enabled.then_some(Message::Choose(job.id, choice))),
         )
