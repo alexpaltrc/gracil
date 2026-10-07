@@ -77,19 +77,18 @@ with it.
   **Replace** or **Save copy** right there, without opening the big window. It stays open while you
   do other things until you close it or click the marble again; **Open Gracil** in it brings up the
   big window.
-- Right-click videos, images or whole folders in File Explorer, choose **Show more options**,
-  then **Send to** and **Gracil**. It is there from the first time you open Gracil, with nothing
-  to set up. For a folder, Gracil compresses every video and image inside it, subfolders included.
-  What happens follows the **Always** line of Gracil's window: on Replace or Save a copy, the files
-  are compressed without opening the big window and put where the line says; on **Ask**,
-  Gracil's window opens and asks after each file. Other files picked along are left alone. The
-  small window opens by itself so you can watch; if you'd rather it didn't, untick **Show
-  mini-window when compressing from File Explorer** in the marble's right-click menu. Gracil looks
-  through folders in the background, so it keeps responding even with large folders or folders on
-  a network or cloud drive: files join the list folder by folder and compressing starts with the
-  first ones found. Don't want Gracil in **Send to**? Untick **Show Gracil in Send to** in the
-  marble's right-click menu. After moving Gracil's folder, open Gracil once and **Send to**
-  follows it.
+- Right-click videos, images or whole folders in File Explorer, choose **Show more options**, then
+  **Send to** and **Gracil**. It is there from the first time you open Gracil, with nothing to set
+  up. For a folder, Gracil compresses every video and image inside it, subfolders included. What
+  happens follows the **Always** line of Gracil's window: on **Replace** or **Save copy**, the files
+  are compressed without opening the big window and put where the line says; on **Ask**, Gracil's
+  window opens and asks after each file. Other files picked along are left alone. The small window
+  opens by itself so you can watch; if you'd rather it didn't, untick **Show mini-window when
+  compressing from File Explorer** in the marble's right-click menu. Gracil looks through folders in
+  the background, so it keeps responding even with large folders or folders on a network or cloud
+  drive: files join the list folder by folder and compressing starts with the first ones found.
+  Don't want Gracil in **Send to**? Untick **Show Gracil in Send to** in the marble's right-click
+  menu. After moving Gracil's folder, open Gracil once and **Send to** follows it.
 - Gracil can also have its own commands in File Explorer's right-click menu (in progress): tick
   **Show Gracil in File Explorer's menu…** in the marble's right-click menu, and allow it when
   Windows asks, since the commands are for everyone who uses the computer. Videos and images then
@@ -167,11 +166,11 @@ with it.
   recent NVIDIA card, Intel graphics (including the graphics built into most Intel processors) or
   AMD graphics. Gracil checks with a tiny test which one works, and without one it uses the
   processor.
-- Each video gets its own amount of compression. Gracil first tries a few short moments of the
-  video and picks the strongest compression that still looks the same as the original, so easy
-  videos come out much smaller and demanding ones keep their detail. This takes a few seconds
-  while Gracil is getting ready, and you can stop it at any time. It looks at every other picture,
-  which is just as reliable and quicker, and leaves the processor freer.
+- Each video gets its own amount of compression. Gracil first tries a few short moments of the video
+  and picks the strongest compression that still looks the same as the original, so easy videos come
+  out much smaller and demanding ones keep their detail. This takes a few seconds to a minute while
+  Gracil is getting ready, and you can stop it at any time. It looks at every other picture, which
+  is just as reliable and quicker, and leaves the processor freer.
 - Gracil makes videos lighter, never heavier. Those same short moments tell it how big the video
   will come out, so it only compresses when the result will be clearly smaller, instead of working
   for minutes to find out it isn't.
@@ -180,7 +179,7 @@ with it.
   less sharp than the first time, which is what compressing a video again asks for. If not even
   that would make the video clearly lighter, it stays as it is and shows **Already compressed**
   with a small "!" saying it's already about as small as it can get.
-- Colours are stored more finely, so skies and shadows stay smooth instead of banded.
+- Colors are stored more finely, so skies and shadows stay smooth instead of banded.
 - Every video keeps its picture size, 4K included. Videos with more than 30 frames per second
   become 30; slower ones keep exactly the rate they had. Slow motion recorded by a phone loses its
   slowed-down effect.

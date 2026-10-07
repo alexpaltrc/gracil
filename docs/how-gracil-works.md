@@ -463,7 +463,7 @@ and a folder shows **Gracil** with **Compress videos and images**, **Compress vi
 What happens next follows the **Always** line at the foot of Gracil's window, the same for
 **Send to** and for Gracil's own commands:
 
-- On **Replace** or **Save a copy**: the files are compressed without opening the big window, and
+- On **Replace** or **Save copy**: the files are compressed without opening the big window, and
   each one is put where the line says.
 - On **Ask**, in the middle: Gracil's window opens and asks you after each file, just as when
   you drop files on it.
