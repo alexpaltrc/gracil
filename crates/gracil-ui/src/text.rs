@@ -83,7 +83,7 @@ pub struct Text {
     pub always: &'static str,
     /// The pill's two ends: always replace, always save a copy. Its middle, "ask each time", is a
     /// small circle rather than a word.
-    pub always_choices: [&'static str; 2],
+    pub always_choices: [&'static str; 3],
     /// The big line once everything is done, when nothing came out smaller and nothing failed.
     pub nothing_to_shrink: &'static str,
     /// The same, when nothing came out smaller and something failed.
@@ -351,10 +351,10 @@ static ENGLISH: Text = Text {
     start_with_windows: "Start with Windows",
     prepare_to_delete: "Prepare to delete Gracil",
     always: "Always",
-    always_choices: ["Replace", "Save copy"],
+    always_choices: ["Replace", "Ask", "Save copy"],
     nothing_to_shrink: "Nothing to make smaller",
     nothing_compressed: "Nothing was compressed",
-    always_tip: "What to do with each finished file. In the middle: ask each time",
+    always_tip: "What to do with each finished file",
     forget_unfinished: "Forget these files",
     cannot_start: "Can't start",
     prepare_question: "Prepare to delete Gracil?",
@@ -489,10 +489,10 @@ static SPANISH: Text = Text {
     start_with_windows: "Iniciar con Windows",
     prepare_to_delete: "Preparar para eliminar Gracil",
     always: "Siempre",
-    always_choices: ["Reemplazar", "Guardar copia"],
+    always_choices: ["Reemplazar", "Preguntar", "Guardar copia"],
     nothing_to_shrink: "No había nada que reducir",
     nothing_compressed: "No se comprimió nada",
-    always_tip: "Qué hacer con cada archivo terminado. En el centro: preguntar cada vez",
+    always_tip: "Qué hacer con cada archivo terminado",
     forget_unfinished: "Olvidar estos archivos",
     cannot_start: "No puede empezar",
     prepare_question: "¿Preparar para eliminar Gracil?",

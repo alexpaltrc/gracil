@@ -8,6 +8,9 @@ time.
 commands no longer carry a choice of their own (item 3); the running Gracil applies **Always** to
 what they send, and in the middle the window asks.
 
+**Changed** by [ADR 0060](0060-reasons-in-sight.md) (2026-10-07): the middle is no longer a
+circle but the word **Ask** (Preguntar).
+
 **Context.** ADR 0009 asks after every video whether to replace it or save a copy. People who
 always answer the same way are asked again and again, and a result finished while only the
 mini-window is open waits until someone decides. Spec §66 keeps settings small and forbids

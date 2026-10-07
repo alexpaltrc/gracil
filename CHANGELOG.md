@@ -78,7 +78,7 @@ with it.
   then **Send to** and **Gracil**. It is there from the first time you open Gracil, with nothing
   to set up. For a folder, Gracil compresses every video and image inside it, subfolders included.
   What happens follows the **Always** line of Gracil's window: on Replace or Save a copy, the files
-  are compressed without opening the big window and put where the line says; on the circle,
+  are compressed without opening the big window and put where the line says; on **Ask**,
   Gracil's window opens and asks after each file. Other files picked along are left alone. The
   small window opens by itself so you can watch; if you'd rather it didn't, untick **Show
   mini-window when compressing from File Explorer** in the marble's right-click menu. Gracil looks
@@ -140,9 +140,9 @@ with it.
   the smaller one next to it as `Gracil-` followed by its name. With several files
   done, **Replace all** and **Save all as copies** handle them in one go.
 - If you always answer the same way, the line at the foot of the window lets you say so once:
-  **Always**, then **Replace**, a small circle, and **Save copy**; point at **Always** for a
-  reminder. Pick either end and Gracil does that with every file that finishes from then on. On
-  the circle in the middle, where it starts, Gracil asks each time.
+  **Always**, then **Replace**, **Ask** and **Save copy**; point at **Always** for a reminder.
+  Pick either end and Gracil does that with every file that finishes from then on. On **Ask**, in
+  the middle, where it starts, Gracil asks each time.
 - Replacing is done safely: if anything goes wrong, your original is put back. No other file is
   ever overwritten.
 - If Gracil is closed suddenly, for example when the computer loses power or it is forced to
@@ -186,7 +186,7 @@ with it.
   left out, and the usual sound every player uses is kept.
 - If a video is unusual, Gracil quietly tries simpler ways until one works, instead of giving up.
 - If a file can't be made smaller, Gracil doesn't keep it. It says **Already compressed**, with
-  no buttons, and a small "!" explains why when you point at it.
+  no buttons, and says why just below.
 - Gracil comes with FFmpeg, the free tool it uses to compress video, so there is nothing else to
   download. If that part of Gracil ever goes missing, files say **Can't start** with a "!"
   explaining it: download Gracil again and it works as before.

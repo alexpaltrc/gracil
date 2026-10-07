@@ -281,6 +281,8 @@ pub enum Message {
     Key(window::Id, Key),
     /// The finished view's count of files that couldn't be compressed: the first of them is shown.
     ShowProblem,
+    /// The mini-window's "!": the big window opens on that file, with the reason in words.
+    Explain(JobId),
     Outside(Outside),
 }
 
@@ -684,6 +686,10 @@ impl Gracil {
                 Task::none()
             }
             Message::OpenMain => self.show_main(),
+            Message::Explain(id) => {
+                self.selected = Some(id);
+                self.show_main()
+            }
             Message::CloseMini => self.close_mini(),
             Message::MiniReady(handle) => {
                 self.place_mini(handle);

@@ -273,7 +273,11 @@ impl<Message> Widget<Message, Theme, Renderer> for Keyed<'_, Message> {
             // The button is clicked in its middle, so it does just what a click does, and
             // nothing if it can't be pressed now.
             let middle = mouse::Cursor::Available(layout.bounds().center());
+            // Each half gets a shell of its own: a button captures the press, and would then
+            // ignore the release in the same shell.
             for click in [mouse::Event::ButtonPressed, mouse::Event::ButtonReleased] {
+                let mut messages = Vec::new();
+                let mut half = Shell::new(&mut messages);
                 self.content.as_widget_mut().update(
                     &mut tree.children[0],
                     &Event::Mouse(click(mouse::Button::Left)),
@@ -281,9 +285,10 @@ impl<Message> Widget<Message, Theme, Renderer> for Keyed<'_, Message> {
                     middle,
                     renderer,
                     clipboard,
-                    shell,
+                    &mut half,
                     viewport,
                 );
+                shell.merge(half, std::convert::identity);
             }
             shell.capture_event();
             return;

@@ -64,3 +64,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0057](0057-always-in-sight.md) | **Always** stays in sight, the empty window included |
 | [0058](0058-explorer-send-to-and-main-menu.md) | File Explorer: **Send to** for everyone, and a main menu for the whole computer turned on from the tray; the menu DLL is gone |
 | [0059](0059-keyboard-reaches-everything.md) | The keyboard reaches every control: Tab moves a ring, Enter or Space presses, arrows move **Always** |
+| [0060](0060-reasons-in-sight.md) | Reasons are written out under the file shown large; the middle of **Always** says **Ask** |

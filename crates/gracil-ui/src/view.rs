@@ -4,7 +4,7 @@ use std::ffi::OsStr;
 use std::ops::Range;
 
 use gracil_core::job::JobState;
-use gracil_core::queue::Job;
+use gracil_core::queue::{Job, JobId};
 use iced::widget::text::Wrapping;
 use iced::widget::{Canvas, Space, button, column, container, row, scrollable, text, tooltip};
 use iced::{Center, Element, Fill, Padding, window};
@@ -123,8 +123,8 @@ fn offer(state: &Gracil) -> Element<'_, Message> {
     .into()
 }
 
-/// "Always (Replace / ○ / Save a copy)": what to do with every finished video, or, in the
-/// middle, ask each time (ADR 0025).
+/// "Always (Replace / Ask / Save copy)": what to do with every finished file, or, in the middle,
+/// ask each time (ADR 0025, ADR 0060).
 fn always(state: &Gracil) -> Element<'_, Message> {
     let selected = match state.always() {
         Some(Choice::Replace) => 0,
@@ -290,7 +290,7 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         content = content.push(Canvas::new(ring).width(dial::SIZE).height(dial::SIZE));
     }
 
-    let mut details = column![status_line(&shown, size::BODY)]
+    let mut details = column![status_line(&shown, size::BODY, Explain::Below)]
         .spacing(space::S)
         .align_x(Center);
     match state.outcomes.get(&job.id) {
@@ -376,7 +376,7 @@ fn mini(state: &Gracil, window: window::Id) -> Element<'_, Message> {
 fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
     let mut details = column![
         name(job, MINI_NAME_CHARS, size::BODY),
-        status_line(&status(state, job), size::CAPTION),
+        status_line(&status(state, job), size::CAPTION, Explain::Link(job.id)),
     ]
     .spacing(space::XS);
     match state.outcomes.get(&job.id) {
@@ -623,19 +623,57 @@ fn drawer_status(state: &Gracil, job: &Job) -> Status {
     }
 }
 
-fn status_line(status: &Status, text_size: f32) -> Element<'static, Message> {
-    let mut line = row![
-        text(status.label.clone())
-            .size(text_size)
-            .style(style::muted)
-            .wrapping(Wrapping::None)
-    ]
-    .spacing(space::S)
-    .align_y(Center);
-    if let Some(explanation) = status.notice {
-        line = line.push(notice(explanation));
+/// Where a status's explanation goes.
+enum Explain {
+    /// In words under the status: the file shown large.
+    Below,
+    /// Behind the "!", which opens the big window on the file: the mini-window, too small for it.
+    Link(JobId),
+    /// Behind the "!", on hover: the list, where picking the row shows it large.
+    Hover,
+}
+
+fn status_line(status: &Status, text_size: f32, explain: Explain) -> Element<'static, Message> {
+    let label = text(status.label.clone())
+        .size(text_size)
+        .style(style::muted)
+        .wrapping(Wrapping::None);
+    let Some(explanation) = status.notice else {
+        return label.into();
+    };
+    let mark = || text("!").size(size::BODY).style(style::notice);
+    match explain {
+        Explain::Below => column![
+            row![label, mark()].spacing(space::S).align_y(Center),
+            text(explanation)
+                .size(size::CAPTION)
+                .style(style::muted)
+                .align_x(Center),
+        ]
+        .spacing(space::XS)
+        .align_x(Center)
+        .into(),
+        Explain::Link(id) => row![
+            label,
+            hint(
+                keyed(
+                    Scope::Mini,
+                    button(mark())
+                        .padding([0.0, space::XS])
+                        .style(style::quiet_button)
+                        .on_press(Message::Explain(id)),
+                ),
+                explanation,
+            ),
+        ]
+        .spacing(space::XS)
+        .align_y(Center)
+        .into(),
+        Explain::Hover => row![label, hint(mark(), explanation)]
+            .spacing(space::S)
+            .align_y(Center)
+            .into(),
     }
-    line.into()
 }
 
 fn name(job: &Job, max_chars: usize, text_size: f32) -> Element<'static, Message> {
@@ -735,7 +773,7 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
     let rows = jobs[shown].iter().map(|job| {
         let line = row![
             container(name(job, DRAWER_NAME_CHARS, size::BODY)).width(Fill),
-            status_line(&drawer_status(state, job), size::CAPTION),
+            status_line(&drawer_status(state, job), size::CAPTION, Explain::Hover),
         ]
         .spacing(space::M)
         .align_y(Center);
@@ -787,11 +825,6 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
         .width(Fill)
         .style(style::drawer)
         .into()
-}
-
-/// A small "!" that explains itself on hover (spec §2.3).
-fn notice(explanation: &'static str) -> Element<'static, Message> {
-    hint(text("!").size(size::BODY).style(style::notice), explanation)
 }
 
 /// `content`, saying a few words about itself on hover.

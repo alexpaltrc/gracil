@@ -1,6 +1,6 @@
 //! The pill: one capsule holding three choices, with a soft stone that slides to the one picked.
-//! Its middle choice means "off": a small ring instead of a word, where the stone fades almost
-//! away; it fills in as it slides towards either end.
+//! Its middle choice, "ask", is the quiet one: the stone there is a faint outline, and fills in
+//! with the accent as it slides towards either end.
 //!
 //! Like the dial, it animates itself and only asks for frames while the stone is moving. The
 //! keyboard reaches it with Tab, and the arrow keys move the stone (ADR 0059).
@@ -10,7 +10,7 @@ use std::time::Instant;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::widget::{Operation, Tree, tree};
 use iced::advanced::{Clipboard, Shell, Widget, renderer};
-use iced::widget::{Space, container, row, text};
+use iced::widget::{container, row, text};
 use iced::{
     Background, Border, Element, Event, Length, Rectangle, Renderer, Size, Theme, keyboard, mouse,
     window,
@@ -22,9 +22,6 @@ use crate::style::{self, size, space};
 /// How quickly the stone catches up, in seconds (the time to cover about two thirds).
 const EASE: f32 = 0.07;
 
-/// The middle ring's diameter, in logical pixels.
-const RING: f32 = 7.0;
-
 pub struct Pill<'a, Message> {
     content: Element<'a, Message>,
     selected: usize,
@@ -32,37 +29,36 @@ pub struct Pill<'a, Message> {
     on_select: Box<dyn Fn(usize) -> Message + 'a>,
 }
 
-/// Three choices: the two `ends`, and between them "off", drawn as a small ring rather than a
-/// word. `selected` is the one picked, from 0 to 2.
+/// Three choices, the middle one quiet. `selected` is the one picked, from 0 to 2.
 pub fn pill<'a, Message: 'a>(
     scope: Scope,
-    ends: [&'a str; 2],
+    choices: [&'a str; 3],
     selected: usize,
     on_select: impl Fn(usize) -> Message + 'a,
 ) -> Pill<'a, Message> {
     let label = move |index: usize, label: &'a str| -> Element<'a, Message> {
         let picked = index == selected;
         container(text(label).size(size::CAPTION).style(move |theme: &Theme| {
-            // A picked end sits on the accent.
+            // A picked end sits on the accent; the picked middle, on a faint outline.
             let tokens = style::tokens(theme);
             text::Style {
-                color: Some(if picked {
-                    tokens.on_accent
-                } else {
-                    tokens.secondary
+                color: Some(match (picked, index) {
+                    (true, 1) => theme.palette().text,
+                    (true, _) => tokens.on_accent,
+                    (false, _) => tokens.secondary,
                 }),
             }
         }))
         .padding([4.0, space::S + 2.0])
         .into()
     };
-    // The ring's room: as tall as a word, a little narrower.
-    let ring: Element<'a, Message> =
-        container(Space::new().width(RING + 8.0).height(size::CAPTION * 1.3))
-            .padding([4.0, space::S])
-            .into();
     Pill {
-        content: row![label(0, ends[0]), ring, label(2, ends[1])].into(),
+        content: row![
+            label(0, choices[0]),
+            label(1, choices[1]),
+            label(2, choices[2])
+        ]
+        .into(),
         selected,
         scope,
         on_select: Box::new(on_select),
@@ -267,7 +263,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
                 width: a.width + (b.width - a.width) * t,
                 height: a.height,
             };
-            // Off in the middle, filled at either end.
+            // Quiet in the middle, filled at either end.
             let lit = (at - 1.0).abs();
             let fill = palette.text.scale_alpha(0.06).mix(palette.primary, lit);
             renderer.fill_quad(
@@ -280,27 +276,6 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
                     ..renderer::Quad::default()
                 },
                 Background::Color(fill),
-            );
-
-            // The middle choice: a small empty ring, like a marble's outline. It is clearer while
-            // picked and fades back when an end is.
-            let middle = parts[1].center();
-            let ring = Rectangle {
-                x: middle.x - RING / 2.0,
-                y: middle.y - RING / 2.0,
-                width: RING,
-                height: RING,
-            };
-            renderer.fill_quad(
-                renderer::Quad {
-                    bounds: ring,
-                    border: Border::default()
-                        .rounded(RING / 2.0)
-                        .width(1.2)
-                        .color(tokens.secondary.scale_alpha(0.7 + 0.3 * (1.0 - lit))),
-                    ..renderer::Quad::default()
-                },
-                Background::Color(iced::Color::TRANSPARENT),
             );
         }
 

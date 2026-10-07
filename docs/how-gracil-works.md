@@ -126,10 +126,10 @@ You decide after seeing the result, so you never trade your original for a file 
 shrink. With several files done, **View files** offers **Replace all** and **Save all as copies**.
 
 If you always answer the same way, use the line at the foot of the window, always there, even before
-you add files: **Always**, followed by **Replace**, a small circle and **Save copy** (point at
-**Always** for a reminder of what it does). Pick **Replace** or **Save copy** and Gracil does that
-with every file that finishes from then on, without asking. On the circle in the middle, the setting
-is off and Gracil asks each time; that is how it starts. Files already waiting for you keep waiting,
+you add files: **Always**, followed by **Replace**, **Ask** and **Save copy** (point at **Always**
+for a reminder of what it does). Pick **Replace** or **Save copy** and Gracil does that with every
+file that finishes from then on, without asking. On **Ask**, in the middle, the setting is off
+and Gracil asks each time; that is how it starts. Files already waiting for you keep waiting,
 and if Gracil can't do what you picked for a file (for example replacing would overwrite another
 file), that file waits for you with a **!** that explains why. When you compress from File Explorer,
 the command you clicked decides instead.
@@ -419,8 +419,8 @@ Gracil never writes over your video while it works.
   temporary file it makes and only ever removes those, never a file just because its name looks
   similar. Files on a drive that isn't connected are tidied once it is.
 - If the compressed file isn't smaller than the original, Gracil doesn't keep it. It shows
-  **Already compressed**, with no buttons, since there is nothing to choose, and a small "!"
-  explains why when you point at it.
+  **Already compressed**, with no buttons, since there is nothing to choose, and says why just
+  below.
 
 ## Saving a copy
 
@@ -454,7 +454,7 @@ What happens next follows the **Always** line at the foot of Gracil's window, th
 
 - On **Replace** or **Save a copy**: the files are compressed without opening the big window, and
   each one is put where the line says.
-- On the circle in the middle: Gracil's window opens and asks you after each file, just as when
+- On **Ask**, in the middle: Gracil's window opens and asks you after each file, just as when
   you drop files on it.
 
 So the words in File Explorer never change; changing the **Always** line is all it takes.
@@ -526,7 +526,8 @@ it shows how much smaller it became with **Replace** and **Save copy**, so you c
 there without opening the big window (unless **Always** already chose for you). If more files
 finish while another is compressing, it says how many are ready to save and shows them one by
 one when the work is done. It also tells you how many files are left and, once one is placed,
-where it went. You can drop more files or folders on it.
+where it went. If a file couldn't be compressed, click the small "!" beside it and the big window
+opens on that file, with the reason written out. You can drop more files or folders on it.
 It stays open while you do other things; close it with its **×** or by clicking the marble
 again, and use **Open Gracil** in it to get the big window.
 

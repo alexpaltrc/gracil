@@ -32,8 +32,8 @@ Yes. Right-click videos in File Explorer, choose **Show more options**, then **S
 Explorer's menu, if you turned them on in the menu of its marble *(in progress)*.
 
 If Gracil isn't running when you send videos, it starts quietly and compresses them: without its
-big window when the **Always** line is on **Replace** or **Save a copy**, and with it, to ask you,
-when it is on the circle in the middle. The small window next to the clock opens so you can
+big window when the **Always** line is on **Replace** or **Save copy**, and with it, to ask you,
+when it is on **Ask**, in the middle. The small window next to the clock opens so you can
 watch, unless you turned that off. When the work is done and you've closed the small window,
 Gracil quits again by itself. The next time you sign in to Windows, it starts as usual.
 

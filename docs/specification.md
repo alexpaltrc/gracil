@@ -58,7 +58,8 @@ connection to work. FFmpeg, which Gracil cannot compress without, comes inside G
 
 When something does not go as expected, Gracil does not open a dialog to explain it. It tells the
 user inside the interface, in a way that feels natural: a control turns off, a small mark
-appears, and hovering it gives a short, plain explanation. The user stays in their flow, and the
+appears, and a short, plain explanation is there to read (*update, ADR 0060:* written out under
+the file shown large, rather than only on hover). The user stays in their flow, and the
 interface keeps its calm, minimal look. Dialogs are only for decisions with real consequences,
 such as exiting while a compression is running (§54.1).
 
@@ -804,7 +805,8 @@ configuration.
 
 *Update (ADR 0025):* a second setting, requested by the product owner: **Always (Replace / ○ /
 Save a copy)** in the main window. The middle, the default, asks after each video as in §37.1; an
-end answers that question ahead of time for every video that finishes afterwards.
+end answers that question ahead of time for every video that finishes afterwards. *Update (ADR
+0060):* the middle is labeled **Ask**: **Replace · Ask · Save copy**.
 
 # 67. Error handling
 
