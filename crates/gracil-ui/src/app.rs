@@ -388,8 +388,9 @@ impl Gracil {
         (state, tasks)
     }
 
+    /// The same words as the tray's tip, so the taskbar and Alt+Tab say how the work goes too.
     pub fn title(&self, _window: window::Id) -> String {
-        "Gracil".into()
+        self.look().1
     }
 
     pub fn theme(&self, _window: window::Id) -> Theme {
@@ -475,6 +476,15 @@ impl Gracil {
         let Some(tray) = &self.tray else {
             return;
         };
+        let look = self.look();
+        if self.tray_shown.as_ref() != Some(&look) {
+            tray.show(look.0, &look.1);
+            self.tray_shown = Some(look);
+        }
+    }
+
+    /// How the work goes, as the tray's picture and the words beside it.
+    fn look(&self) -> (TrayState, String) {
         // Like the ring: the whole list when there is more than one file (ADR 0034, item 13).
         let done = self.working().map(|job| {
             self.list_progress()
@@ -495,11 +505,7 @@ impl Gracil {
             }
             _ => self.text.tray_tip(state),
         };
-        let look = (state, tip);
-        if self.tray_shown.as_ref() != Some(&look) {
-            tray.show(look.0, &look.1);
-            self.tray_shown = Some(look);
-        }
+        (state, tip)
     }
 
     fn handle(&mut self, message: Message) -> Task<Message> {

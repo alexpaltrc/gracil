@@ -206,7 +206,7 @@ impl Text {
         (self.ready)(count, &number(count))
     }
 
-    /// How many files are waiting their turn.
+    /// How many more files wait their turn after the one shown (the footer's count includes it).
     pub fn in_line(&self, count: usize) -> String {
         (self.in_line)(count, &number(count))
     }
@@ -367,7 +367,7 @@ static ENGLISH: Text = Text {
         _ => format!("{written} were already compressed"),
     },
     failed: |_, written| format!("{written} couldn't be compressed"),
-    in_line: |_, written| format!("{written} to go"),
+    in_line: |_, written| format!("{written} more waiting"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
         TrayState::Processing(done) => format!("Gracil · compressing {}%", percent(done)),
@@ -509,8 +509,8 @@ static SPANISH: Text = Text {
         _ => format!("{written} no se pudieron comprimir"),
     },
     in_line: |count, written| match count {
-        1 => "falta 1".to_owned(),
-        _ => format!("faltan {written}"),
+        1 => "1 más en espera".to_owned(),
+        _ => format!("{written} más en espera"),
     },
     compressing_files: |count, written| match count {
         1 => "Comprimiendo 1 archivo".to_owned(),

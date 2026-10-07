@@ -514,7 +514,8 @@ tells you how things are going:
   went wrong while the window was closed. Click it and the small window opens on the file that
   went wrong; the marble turns back to normal.
 
-Pointing at the marble says the same in words. Right-click it for its menu: **Open Gracil**; then
+Pointing at the marble says the same in words, and so does Gracil's name in the taskbar and in
+Alt+Tab, for example "Gracil · compressing 42%". Right-click the marble for its menu: **Open Gracil**; then
 the settings, **Start with Windows**, **Show Gracil in Send to**, **Show Gracil in File
 Explorer's menu…** and **Show mini-window when compressing from File Explorer**; then **Prepare to
 delete Gracil** and **Exit**.
@@ -525,9 +526,10 @@ carry on (stopping is only in the big window, where it is clear what stops). Whe
 it shows how much smaller it became with **Replace** and **Save copy**, so you can choose right
 there without opening the big window (unless **Always** already chose for you). If more files
 finish while another is compressing, it says how many are ready to save and shows them one by
-one when the work is done. It also tells you how many files are left and, once one is placed,
-where it went. If a file couldn't be compressed, click the small "!" beside it and the big window
-opens on that file, with the reason written out. You can drop more files or folders on it.
+one when the work is done. It also tells you how many more files are waiting after it and, once
+one is placed, where it went. If a file couldn't be compressed, click the small "!" beside it and
+the big window opens on that file, with the reason written out. You can drop more files or
+folders on it.
 It stays open while you do other things; close it with its **×** or by clicking the marble
 again, and use **Open Gracil** in it to get the big window.
 
