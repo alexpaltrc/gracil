@@ -27,14 +27,15 @@ ready for more videos. Only **Exit**, in the menu of its marble next to the cloc
 
 ## If I quit Gracil, can I still compress videos from File Explorer?
 
-Yes. Right-click videos in File Explorer and **Gracil** is always in the menu (on Windows 11, under
-**Show more options**), whether Gracil is running or not. The menu belongs to Gracil's folder on
-your computer, not to Gracil while it runs.
+Yes. Right-click videos in File Explorer, choose **Show more options**, then **Send to** and
+**Gracil**, whether Gracil is running or not. The same goes for Gracil's own commands in File
+Explorer's menu, if you turned them on in the menu of its marble *(in progress)*.
 
-If Gracil isn't running when you pick one of them, it starts quietly, without its big window, and
-compresses the videos. The small window next to the clock opens so you can watch, unless you
-turned that off. When the work is done and you've closed the small window, Gracil quits again by
-itself. The next time you sign in to Windows, it starts as usual.
+If Gracil isn't running when you send videos, it starts quietly and compresses them: without its
+big window when the **Always** line is on **Replace** or **Save a copy**, and with it, to ask you,
+when it is on the circle in the middle. The small window next to the clock opens so you can
+watch, unless you turned that off. When the work is done and you've closed the small window,
+Gracil quits again by itself. The next time you sign in to Windows, it starts as usual.
 
 ## After replacing a video, a file ending in ".bak" appeared next to it. What is it?
 
@@ -48,14 +49,16 @@ smaller video is already in place.
 ## Can I move Gracil's folder?
 
 Yes. Gracil keeps everything it needs, its settings and its diary included, in its own folder, so
-they move with it. Open Gracil once from its new place and File Explorer's menu and the start with
-Windows follow it.
+they move with it. Open Gracil once from its new place and **Send to** and the start with Windows
+follow it. If you turned on Gracil's own commands in File Explorer's menu, tick **Show Gracil in
+File Explorer's menu…** again from the new place.
 
 ## How do I remove Gracil?
 
 Delete its folder. Gracil keeps nothing anywhere else. To leave Windows exactly as it was, first
 choose **Prepare to delete Gracil** in the menu of its marble next to the clock: it takes Gracil
-out of File Explorer's menu and out of starting with Windows, closes Gracil and shows you its
-folder, ready to delete. If you delete the
-folder without doing that, nothing breaks: the menu simply stops showing Gracil, and Windows
-forgets the start the next time you sign in.
+out of File Explorer and out of starting with Windows, closes Gracil and shows you its folder,
+ready to delete (if you turned on its own commands in File Explorer's menu, Windows asks you once
+more). If you delete the folder without doing that, nothing breaks: Gracil may still be listed in
+**Send to** or File Explorer's menu, where it does nothing, and Windows forgets the start the
+next time you sign in.

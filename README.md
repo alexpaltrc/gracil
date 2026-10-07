@@ -26,8 +26,7 @@ Requirements: Windows 11 x64, Rust stable (MSVC), Git. Details in
 |---|---|
 | `crates/gracil-core` | The compression engine. Independent from the UI. |
 | `crates/gracil-ui` | The Gracil app: windows, tray, mini-window |
-| `crates/gracil-windows` | Windows integration: single instance, pipe, tray icon, safe replace |
-| `crates/gracil-shell` | File Explorer's Gracil menu |
+| `crates/gracil-windows` | Windows integration: tray, File Explorer, one instance, safe replace |
 | `packaging/` | The FFmpeg build that ships in the zip |
 | `docs/how-gracil-works.md` | How Gracil works, in plain language, for users |
 | `docs/specification.md` | Product and engineering specification |
@@ -56,4 +55,4 @@ Copyright (C) 2026 Alex Palacios
 Gracil is free software, licensed under the [GNU General Public License, version 3 or any later
 version](LICENSE). The zip carries the licenses of everything inside it in its `licenses` folder:
 Gracil's, FFmpeg's (GPL), jpegli's and its libraries' (BSD and similar), and those of the Rust
-libraries built into `gracil.exe` and `gracil_shell.dll`.
+libraries built into `gracil.exe`.

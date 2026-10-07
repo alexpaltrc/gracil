@@ -6,6 +6,11 @@
 command itself, for the current user, in File Explorer's classic menu (**Show more options** on
 Windows 11); how it works is unchanged.
 
+**Superseded** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07): File Explorer
+on Windows 11 ignored the per-user registration, so `gracil-shell` and its DLL are deleted.
+Gracil is in **Send to**, and its main menu is plain commands for the whole computer, turned on
+from the tray.
+
 **Context.** Spec §57–§62 ask for **Gracil (N)** in File Explorer's context menu, with
 **Compress and replace** and **Compress and save a copy**, for one or many videos. The handler
 runs inside `explorer.exe`, must answer at once and must never take the shell down. §61 prefers

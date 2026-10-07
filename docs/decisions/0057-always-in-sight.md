@@ -4,6 +4,11 @@
 [0055](0055-natural-first-use.md) as far as the **Always** pill goes; back to what
 [0025](0025-always-replace-or-copy.md) first decided.
 
+**Superseded in part** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07): File
+Explorer's words no longer follow **Always**; the running Gracil applies it to what File Explorer
+sends. The first reason below no longer holds, but **Always** still decides what File Explorer's
+commands do, so the decision stands.
+
 **Context.** ADR 0055 hid the **Always** pill until the first file came, so the empty window
 showed only where to drop. In use this turned out to hide a setting people need before there are
 files:

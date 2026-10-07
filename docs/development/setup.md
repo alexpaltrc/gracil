@@ -24,7 +24,7 @@ Every commit must pass `scripts/check.ps1`.
 It never opens a console window, even in development builds,
 so what you test is what users see. Logs and crashes go to the `data\logs` folder beside the
 build, such as `target\debug\data\logs` (ADR 0050). A build in `target` keeps its own settings
-there and never touches File Explorer's menu or the start with Windows.
+there and never puts itself in File Explorer or in the start with Windows.
 
 The interface follows the Windows display language. To check the other language, set
 `GRACIL_LANGUAGE` to `en` or `es` before running (ADR 0011).

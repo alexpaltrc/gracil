@@ -432,23 +432,33 @@ Gracil runs once. If you open it again while it is already running, from its fol
 or anywhere else, the Gracil you have opens its window and comes forward, even when it was working
 quietly next to the clock. If you open videos with it, they join the same list.
 
-Right-click videos, images or a folder in File Explorer and you'll find **Gracil** in the menu (on
-Windows 11, choose **Show more options** first), with the number of files in brackets when you
-picked more than one, for example **Gracil (3)**. Other files you picked along with them are left
-alone, and if there's no video, image or folder among them, the menu doesn't show Gracil at all.
+## From File Explorer
 
-Inside, the commands say exactly what will happen, and they follow the **Always** line at the foot
-of Gracil's window:
+Right-click videos, images or a folder in File Explorer, choose **Show more options**, then
+**Send to** and **Gracil**. Gracil is there from the first time you open it, with nothing to set
+up. You can send many files and folders at once; other files picked along with them are left
+alone.
 
-- On **Replace**: *Compress and replace videos and images*, *… videos* and *… images*.
-- On **Save a copy**: *Compress and save copies of videos and images*, and so on.
-- On the circle in the middle: just *Compress videos and images*, and so on. Gracil's window
-  opens and, as always on the circle, asks you after each file.
+Gracil can also have its own commands in File Explorer's menu, without going through **Send to**
+*(in progress)*. Tick **Show Gracil in File Explorer's menu…** in the menu of its marble next to
+the clock. These commands are for everyone who uses the computer, so Windows asks you once whether
+to allow it. Then, under **Show more options**, videos and images show **Compress with Gracil**,
+and a folder shows **Gracil** with **Compress videos and images**, **Compress videos only** and
+**Compress images only**.
 
-For a folder, all three are there and end in *in this folder*: Gracil compresses every video and
-image inside it, subfolders included. *… videos* leaves the images alone and *… images* leaves the
-videos alone. For files, you see the command that fits what you picked: only videos, only images, or
-all three when you picked both.
+What happens next follows the **Always** line at the foot of Gracil's window, the same for
+**Send to** and for Gracil's own commands:
+
+- On **Replace** or **Save a copy**: the files are compressed without opening the big window, and
+  each one is put where the line says.
+- On the circle in the middle: Gracil's window opens and asks you after each file, just as when
+  you drop files on it.
+
+So the words in File Explorer never change; changing the **Always** line is all it takes.
+
+For a folder, Gracil compresses every video and image inside it, subfolders included. *Compress
+videos only* leaves the images alone and *Compress images only* leaves the videos alone; **Send
+to** always takes both.
 
 Gracil looks through a folder in the background, so its window keeps responding even when the
 folder is large or lives on a network or cloud drive (OneDrive, Filen, a NAS…). Files join the
@@ -460,13 +470,16 @@ the smaller version is uploaded when it is saved, so that part goes as fast as y
 Each image is read from the drive only once, and a few are read ahead while others compress, so
 the waiting overlaps with the work.
 
-With **Replace** or **Save a copy**, the files are compressed without opening the big window. If
-Gracil is already running, the files join its list. If Gracil wasn't running, it starts for that,
-and closes by itself once the work is done.
+If Gracil is already running, the files join its list. If Gracil wasn't running, it starts for
+that, and when it worked without opening the big window, it closes by itself once the work is
+done.
 
-Gracil puts itself in File Explorer's menu each time it starts, so after moving its folder, open it
-once from the new place. If you'd rather not have it there, turn off **Show Gracil in File
-Explorer's menu** in the menu of its marble next to the clock; turn it on again to bring it back.
+Gracil puts itself in **Send to** each time it starts, so after moving its folder, open it once
+from the new place. If you'd rather not have it there, untick **Show Gracil in Send to** in the
+menu of its marble next to the clock; tick it again to bring it back. Gracil's own commands in
+File Explorer's menu stay as they were written: after moving the folder, tick **Show Gracil in
+File Explorer's menu…** again from the new place. Untick it to take them away; Windows asks you
+once more.
 
 ## Starting with Windows
 
@@ -480,9 +493,10 @@ deleted, Windows forgets it by itself.
 ## Removing Gracil
 
 **Prepare to delete Gracil**, in the menu of its marble next to the clock, takes Gracil out of
-File Explorer's menu and out of starting with Windows, closes it and shows you its folder in
-File Explorer. Delete that folder, and nothing of Gracil is left. Opening Gracil again instead
-puts both back.
+**Send to** and out of starting with Windows, closes it and shows you its folder in File
+Explorer. If you turned on Gracil's own commands in File Explorer's menu, Windows asks you once
+more, so they can go too. Delete that folder, and nothing of Gracil is left. Opening Gracil again
+instead puts **Send to** and the start with Windows back.
 
 ## Closing Gracil
 
@@ -498,8 +512,9 @@ tells you how things are going:
   went wrong; the marble turns back to normal.
 
 Pointing at the marble says the same in words. Right-click it for its menu: **Open Gracil**; then
-the three settings, **Start with Windows**, **Show Gracil in File Explorer's menu** and **Show
-mini-window when compressing from File Explorer**; then **Prepare to delete Gracil** and **Exit**.
+the settings, **Start with Windows**, **Show Gracil in Send to**, **Show Gracil in File
+Explorer's menu…** and **Show mini-window when compressing from File Explorer**; then **Prepare to
+delete Gracil** and **Exit**.
 
 Click the marble and a small window opens right next to it, wherever your taskbar is. It shows
 the file being compressed and how far along it is; click the middle of its circle to pause or

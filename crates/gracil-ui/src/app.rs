@@ -304,6 +304,7 @@ impl Gracil {
         let menu = TrayMenu {
             open: text.open_gracil.to_owned(),
             explorer_menu: text.explorer_menu.to_owned(),
+            explorer_main_menu: text.explorer_main_menu.to_owned(),
             explorer_mini_window: text.explorer_mini_window.to_owned(),
             start_with_windows: text.start_with_windows.to_owned(),
             prepare_to_delete: text.prepare_to_delete.to_owned(),
@@ -317,6 +318,7 @@ impl Gracil {
         if let Some(tray) = &tray {
             tray.check_explorer_mini_window(settings.explorer_mini_window);
             tray.check_explorer_menu(settings.explorer_menu);
+            tray.check_explorer_main_menu(place::main_menu_is_ours());
             tray.check_start_with_windows(settings.start_with_windows);
         }
         // Read from Windows itself: Iced only learns the theme once a window exists, so its first
@@ -702,6 +704,18 @@ impl Gracil {
             Message::Outside(Outside::Tray(TrayEvent::Open)) => self.show_main(),
             Message::Outside(Outside::Tray(TrayEvent::ExplorerMenu)) => {
                 self.toggle_explorer_menu();
+                Task::none()
+            }
+            Message::Outside(Outside::Tray(TrayEvent::ExplorerMainMenu)) => {
+                // Windows asks for permission; the menu shows the outcome once it is known.
+                let on = !place::main_menu_is_ours();
+                place::set_main_menu(on, |ours| outside::send(Outside::MainMenu(ours)));
+                Task::none()
+            }
+            Message::Outside(Outside::MainMenu(ours)) => {
+                if let Some(tray) = &self.tray {
+                    tray.check_explorer_main_menu(ours);
+                }
                 Task::none()
             }
             Message::Outside(Outside::Tray(TrayEvent::ExplorerMiniWindow)) => {
@@ -1106,7 +1120,11 @@ impl Gracil {
 
     /// Adds what was asked for, and shows the window when the request wants it. A choice made in
     /// advance applies to each of its videos, including one already on the list.
-    fn on_request(&mut self, request: Request) -> Task<Message> {
+    fn on_request(&mut self, mut request: Request) -> Task<Message> {
+        // File Explorer leaves the choice to **Always** (ADR 0058).
+        if request.from_explorer && request.choice.is_none() {
+            request.choice = self.settings.always;
+        }
         self.requested = true;
         self.resident |= request.at_startup;
         let show = if request.shows_window() {

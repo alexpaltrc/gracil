@@ -4,6 +4,11 @@
 [0024](0024-start-with-windows.md), [0034](0034-image-standard.md) and
 [0050](0050-portable-and-open-source.md), and corrects [0053](0053-ready-for-github.md).
 
+**Superseded in part** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07):
+**Prepare to delete Gracil** deletes the **Send to** shortcut and, when the main menu starts this
+Gracil, asks Windows' permission once more to remove it; there are no DLL copies to move aside.
+The licenses cover the libraries of `gracil.exe` only.
+
 **Context.** ADR 0050 made Gracil a portable zip but kept a habit from the Store package: when
 its own `data` folder couldn't be written, Gracil quietly used `%LOCALAPPDATA%\Gracil` instead,
 and the Gracil in daily use lived in `%LOCALAPPDATA%\Programs\Gracil`. Images were worked on in a

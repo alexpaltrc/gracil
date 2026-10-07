@@ -3,9 +3,12 @@
 //!
 //! - `gracil.exe [videos]`: show the window, with the videos added if any. The user chooses Replace
 //!   or Save copy after each one is done.
-//! - `gracil.exe --replace videos` and `--save-copy videos`: what File Explorer's commands send.
+//! - `gracil.exe --replace videos` and `--save-copy videos`: a choice made in advance.
 //!   The videos are compressed in the background, and each result is placed as asked.
-//! - `--videos` or `--images` with either: only that kind, from the files and folders sent. A
+//! - `gracil.exe --explorer paths`: what File Explorer's menu and Send to send (ADR 0058). The
+//!   **Always** setting decides: set, the files are compressed in the background as it says;
+//!   unset, the window opens and asks, as with dropped files.
+//! - `--videos` or `--images` with any of these: only that kind, from the files and folders sent. A
 //!   folder is looked through, subfolders included (ADR 0035).
 //! - `gracil.exe --startup`: what Windows sends when it starts Gracil with the session. Gracil
 //!   stays in the tray with no window (ADR 0024).
@@ -30,13 +33,16 @@ pub struct Request {
     pub at_startup: bool,
     /// Only videos, or only images, from what was sent (File Explorer's commands, ADR 0035).
     pub only: Option<Kind>,
+    /// From File Explorer, to follow the **Always** setting (ADR 0058).
+    pub from_explorer: bool,
 }
 
-const REPLACE: &str = "--replace";
-const SAVE_COPY: &str = "--save-copy";
-const STARTUP: &str = "--startup";
-const VIDEOS: &str = "--videos";
-const IMAGES: &str = "--images";
+pub const REPLACE: &str = "--replace";
+pub const SAVE_COPY: &str = "--save-copy";
+pub const STARTUP: &str = "--startup";
+pub const VIDEOS: &str = "--videos";
+pub const IMAGES: &str = "--images";
+pub const EXPLORER: &str = "--explorer";
 
 impl Request {
     /// Reads a command line without the program's own name.
@@ -46,6 +52,7 @@ impl Request {
             paths: Vec::new(),
             at_startup: false,
             only: None,
+            from_explorer: false,
         };
         for argument in arguments {
             if argument == OsStr::new(REPLACE) {
@@ -58,6 +65,8 @@ impl Request {
                 request.only = Some(Kind::Video);
             } else if argument == OsStr::new(IMAGES) {
                 request.only = Some(Kind::Image);
+            } else if argument == OsStr::new(EXPLORER) {
+                request.from_explorer = true;
             } else {
                 // Absolute, so the same video named two ways is still one video.
                 let path = PathBuf::from(argument);
@@ -79,6 +88,7 @@ impl Request {
         };
         let paths = self.paths.iter().map(|path| path.clone().into_os_string());
         let startup = self.at_startup.then(|| OsString::from(STARTUP));
+        let explorer = self.from_explorer.then(|| OsString::from(EXPLORER));
         let only = self.only.map(|kind| {
             OsString::from(match kind {
                 Kind::Video => VIDEOS,
@@ -87,6 +97,7 @@ impl Request {
         });
         flag.into_iter()
             .chain(startup)
+            .chain(explorer)
             .chain(only)
             .chain(paths)
             .collect()
@@ -142,6 +153,14 @@ mod tests {
         assert!(request.paths.is_empty());
         assert!(!request.shows_window());
         assert!(Request::parse(request.to_arguments()).at_startup);
+    }
+
+    #[test]
+    fn file_explorer_survives_forwarding() {
+        let request = Request::parse(arguments(&["--explorer", "--videos", r"C:\Fotos"]));
+        assert!(request.from_explorer);
+        assert_eq!(request.choice, None);
+        assert_eq!(Request::parse(request.to_arguments()), request);
     }
 
     #[test]

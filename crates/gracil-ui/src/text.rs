@@ -66,8 +66,14 @@ pub struct Text {
     pub exit: &'static str,
     pub exit_question: &'static str,
     pub keep_working: &'static str,
-    /// The tray menu's setting for Gracil in File Explorer's menu (ADR 0050).
+    /// The tray menu's setting for Gracil in File Explorer's Send to (ADR 0058).
     pub explorer_menu: &'static str,
+    /// The tray menu's setting for Gracil in File Explorer's main menu, which asks for an
+    /// administrator's permission (ADR 0058).
+    pub explorer_main_menu: &'static str,
+    /// File Explorer's commands: for picked files, then for a folder's videos and images, its
+    /// videos only and its images only.
+    pub explorer_commands: [&'static str; 4],
     pub explorer_mini_window: &'static str,
     /// The tray menu's setting for starting with Windows (ADR 0054).
     pub start_with_windows: &'static str,
@@ -333,7 +339,14 @@ static ENGLISH: Text = Text {
     exit: "Exit",
     exit_question: "Exit Gracil?",
     keep_working: "Keep working",
-    explorer_menu: "Show Gracil in File Explorer's menu",
+    explorer_menu: "Show Gracil in Send to",
+    explorer_main_menu: "Show Gracil in File Explorer's menu…",
+    explorer_commands: [
+        "Compress with Gracil",
+        "Compress videos and images",
+        "Compress videos only",
+        "Compress images only",
+    ],
     explorer_mini_window: "Show mini-window when compressing from File Explorer",
     start_with_windows: "Start with Windows",
     prepare_to_delete: "Prepare to delete Gracil",
@@ -464,7 +477,14 @@ static SPANISH: Text = Text {
     exit: "Salir",
     exit_question: "¿Salir de Gracil?",
     keep_working: "Seguir trabajando",
-    explorer_menu: "Mostrar Gracil en el menú del Explorador de archivos",
+    explorer_menu: "Mostrar Gracil en «Enviar a»",
+    explorer_main_menu: "Mostrar Gracil en el menú del Explorador de archivos…",
+    explorer_commands: [
+        "Comprimir con Gracil",
+        "Comprimir videos e imágenes",
+        "Comprimir solo los videos",
+        "Comprimir solo las imágenes",
+    ],
     explorer_mini_window: "Mostrar miniventana al comprimir desde el Explorador de archivos",
     start_with_windows: "Iniciar con Windows",
     prepare_to_delete: "Preparar para eliminar Gracil",

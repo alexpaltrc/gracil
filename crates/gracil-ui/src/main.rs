@@ -7,6 +7,7 @@
 mod app;
 mod dial;
 mod done;
+mod explorer;
 mod logging;
 mod numbers;
 mod outside;
@@ -31,6 +32,23 @@ fn main() -> iced::Result {
     // First, while this is the only thread (see `draw_with_direct3d`).
     gracil_windows::draw_with_direct3d();
     logging::init();
+
+    // Started as an administrator to write or remove File Explorer's main menu (ADR 0058): that
+    // is all, with no window and no claim on the running Gracil.
+    let mut arguments = std::env::args_os().skip(1);
+    if let (Some(flag), None) = (arguments.next(), arguments.next()) {
+        for (asked, on) in [
+            (place::ADD_MAIN_MENU, true),
+            (place::REMOVE_MAIN_MENU, false),
+        ] {
+            if flag == asked {
+                let written = place::write_main_menu(on);
+                logging::finish();
+                std::process::exit(if written { 0 } else { 1 });
+            }
+        }
+    }
+
     let request = Request::parse(std::env::args_os().skip(1));
 
     // One Gracil per session: a later launch hands its request over and leaves (ADR 0019).

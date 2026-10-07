@@ -20,6 +20,8 @@ pub enum Outside {
     Tray(TrayEvent),
     /// Gracil rests or works on, as the computer runs warm or cools (ADR 0045).
     Breath(Breath),
+    /// Whether File Explorer's main menu starts this Gracil, once Windows has asked (ADR 0058).
+    MainMenu(bool),
 }
 
 type Channel = (

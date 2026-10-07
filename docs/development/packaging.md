@@ -16,7 +16,6 @@ This makes a release build and lays out `target\portable\Gracil`, then zips it a
 | | |
 |---|---|
 | `gracil.exe` | Gracil |
-| `gracil_shell.dll` | File Explorer's menu ([ADR 0022](../decisions/0022-explorer-command.md)) |
 | `cjpegli.exe` | jpegli, which compresses every photo ([ADR 0034](../decisions/0034-image-standard.md)) |
 | `ffmpeg\` | `ffmpeg.exe` and `ffprobe.exe`, the pinned build ([FFmpeg](ffmpeg.md)) |
 | `licenses\` | Gracil's own license (GPL-3.0-or-later), FFmpeg's and where its source is, the licenses of jpegli and the libraries built into it, and those of the Rust libraries built into Gracil |
@@ -41,10 +40,13 @@ This closes the Gracil running from that folder, with its helpers, and copies th
 keeping its `data` folder, so settings and unfinished lists stay. Then start `gracil.exe` again.
 `-CopyTo <folder>` puts it somewhere else. A development build run from `target` keeps its own
 `data` folder there and never touches the daily one's. On every start, a whole Gracil folder (with
-FFmpeg and the DLL beside the program) registers File Explorer's menu for the current user and
-its start at the next sign-in (`RunOnce`); a development build in `target` leaves both as they
-are. On Windows 11 the menu is under **Show more options**. If File Explorer still shows an old
-menu, restart it (Task Manager → Windows Explorer → Restart).
+FFmpeg beside the program) puts itself in File Explorer's **Send to** and its start at the next
+sign-in (`RunOnce`), and removes what the former per-user menu left; a development build in
+`target` leaves Windows as it is. File Explorer's main menu is written for the whole computer
+only when turned on from the tray, after Windows asks for an administrator's permission
+([ADR 0058](../decisions/0058-explorer-send-to-and-main-menu.md), in progress). On Windows 11 both
+are under **Show more options**. If File Explorer still shows an old menu, restart it (Task
+Manager → Windows Explorer → Restart).
 
 To remove Gracil, choose **Prepare to delete Gracil** in its tray menu and delete the folder it
 shows (ADR 0054).
@@ -52,16 +54,15 @@ shows (ADR 0054).
 ## Where Gracil keeps its data
 
 In `data\` beside `gracil.exe`, and nowhere else: `settings.txt`, `logs\`, `unfinished.txt`,
-`temporary\` and `shell\` (the copy of the menu's DLL that File Explorer loads). If that folder
-can't be written, Gracil runs without saving anything. Images being compressed pass through
-short-lived `gracil-image-…` files in Windows' temporary folder.
+and `temporary\`. If that folder can't be written, Gracil runs without saving anything. Images
+being compressed pass through short-lived `gracil-image-…` files in Windows' temporary folder.
 
 ## Licenses
 
 `licenses\` in the zip holds Gracil's license (`LICENSE`, GPL-3.0-or-later), FFmpeg's with where
 its source is, jpegli's and its libraries', and `rust-libraries.txt`, written by
 `scripts/licenses.ps1` from `cargo metadata` with the license files of every Rust library built
-into `gracil.exe` and `gracil_shell.dll`.
+into `gracil.exe`.
 
 ## Versions
 

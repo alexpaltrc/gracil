@@ -1,6 +1,6 @@
 //! Everything Gracil needs from Windows itself (see docs/architecture/overview.md).
 //!
-//! This is one of the two crates allowed to use `unsafe`, and only to call Windows functions.
+//! This is the only crate allowed to use `unsafe`, and only to call Windows functions.
 //! Every call explains why it is sound.
 
 mod appear;
@@ -24,7 +24,8 @@ pub use heat::{GraphicsHeat, Heat, Thermometer};
 pub use icon::{set_icon_theme, set_window_icon};
 pub use instance::{claim, forward, is_running, serve};
 pub use integration::{
-    EXPLORER_CLSID, Places, add_to_explorer, explorer_menu, explorer_places, remove_from_explorer,
+    ExplorerCommand, ExplorerMenu, add_main_menu, add_to_send_to, main_menu_program,
+    remove_former_menus, remove_from_send_to, remove_main_menu, run_as_administrator,
     start_with_windows, stop_starting_with_windows,
 };
 pub use lifetime::{end_children_with_this_process, use_efficiency_mode, use_processors};

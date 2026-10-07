@@ -1,6 +1,7 @@
 //! Gracil's place in Windows without an installer (ADR 0050): starting with Windows and File
-//! Explorer's menu, written again each time Gracil starts so a moved or updated folder keeps
-//! working.
+//! Explorer's Send to, written again each time Gracil starts so a moved or updated folder keeps
+//! working, and File Explorer's main menu, which takes an administrator's permission and so is
+//! only written when the user turns it on (ADR 0058).
 //!
 //! Only a whole Gracil folder, the one the zip unpacks with FFmpeg beside `gracil.exe`, touches
 //! Windows. A development build run from `target` leaves the user's Gracil where it is.
@@ -8,37 +9,42 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, Instant};
 
 use gracil_core::toolchain;
-use gracil_windows::Places;
 use tracing::{info, warn};
 
-const MENU_DLL: &str = "gracil_shell.dll";
-/// Where the copy Explorer loads is kept, inside the data folder.
-const MENU_FOLDER: &str = "shell";
+use crate::explorer;
+use crate::request::EXPLORER;
+use crate::text::{Language, Text};
+
+/// Where the DLL copies of the menu Gracil had before ADR 0058 were kept, in the data folder.
+const FORMER_MENU_FOLDER: &str = "shell";
+/// What Gracil is started with, as an administrator, to write or remove the main menu.
+pub const ADD_MAIN_MENU: &str = "--add-main-menu";
+pub const REMOVE_MAIN_MENU: &str = "--remove-main-menu";
 
 /// What Gracil's place in Windows should be, as the settings say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Wanted {
-    /// In File Explorer's menu.
+    /// In File Explorer's Send to.
     pub in_explorer: bool,
     /// Started with Windows at the next sign-in (ADR 0054).
     pub at_sign_in: bool,
 }
 
-/// Settles Gracil's place in Windows on a thread of its own: Explorer's menu and starting with
-/// Windows, each on or off as `wanted` says.
+/// Settles Gracil's place in Windows on a thread of its own: Send to and starting with Windows,
+/// each on or off as `wanted` says.
 pub fn settle(wanted: Wanted) {
     let _ = thread::Builder::new()
         .name("gracil-place".into())
         .spawn(move || {
-            let Some(places) = whole_folder() else {
+            let Some(program) = whole_folder() else {
                 info!("not a whole Gracil folder; Windows is left as it is");
                 return;
             };
             let started = if wanted.at_sign_in {
-                gracil_windows::start_with_windows(&places.program)
+                gracil_windows::start_with_windows(&program)
             } else {
                 gracil_windows::stop_starting_with_windows()
             };
@@ -46,33 +52,100 @@ pub fn settle(wanted: Wanted) {
                 warn!(%error, wanted.at_sign_in, "start with Windows not settled");
             }
             let settled = if wanted.in_explorer {
-                add_to_explorer(&places)
+                gracil_windows::add_to_send_to(&program, EXPLORER)
             } else {
-                remove_from_explorer(&places)
+                gracil_windows::remove_from_send_to()
             };
             match settled {
-                Ok(()) => info!(wanted.in_explorer, "File Explorer's menu settled"),
-                Err(error) => warn!(%error, wanted.in_explorer, "File Explorer's menu not settled"),
+                Ok(()) => info!(wanted.in_explorer, "Send to settled"),
+                Err(error) => warn!(%error, wanted.in_explorer, "Send to not settled"),
             }
+            remove_former_menus();
         });
 }
 
-/// Readies Gracil's folder to be deleted (ADR 0054): takes Gracil out of File Explorer's menu
-/// and out of starting with Windows, so deleting the folder leaves nothing, then shows the
-/// folder in File Explorer, picked. Done before returning, since Gracil exits right after.
+/// Whether File Explorer's main menu starts this Gracil.
+pub fn main_menu_is_ours() -> bool {
+    whole_folder().is_some_and(|program| gracil_windows::main_menu_program() == Some(program))
+}
+
+/// Turns File Explorer's main menu on or off for this Gracil, on a thread of its own. Windows
+/// first asks the user for an administrator's permission; `done` gets whether the main menu now
+/// starts this Gracil, whatever the answer was. File Explorer starts the administrator's Gracil
+/// (ADR 0058), so the menu itself is watched for the change, for as long as asking may take.
+pub fn set_main_menu(on: bool, done: impl FnOnce(bool) + Send + 'static) {
+    let _ = thread::Builder::new()
+        .name("gracil-main-menu".into())
+        .spawn(move || {
+            if let Some(program) = whole_folder() {
+                let flag = if on { ADD_MAIN_MENU } else { REMOVE_MAIN_MENU };
+                match gracil_windows::run_as_administrator(&program, flag) {
+                    Ok(()) => {
+                        let changed = wait_for_main_menu(on);
+                        info!(on, changed, "File Explorer's main menu");
+                    }
+                    Err(error) => warn!(%error, on, "File Explorer's main menu not settled"),
+                }
+            }
+            done(main_menu_is_ours());
+        });
+}
+
+/// Waits until the main menu is `on`, or off, or the user has had long enough to answer.
+/// Whether it changed.
+fn wait_for_main_menu(on: bool) -> bool {
+    const LONGEST: Duration = Duration::from_secs(120);
+    const EVERY: Duration = Duration::from_millis(500);
+    let asked = Instant::now();
+    while asked.elapsed() < LONGEST {
+        if main_menu_is_ours() == on {
+            return true;
+        }
+        thread::sleep(EVERY);
+    }
+    false
+}
+
+/// What Gracil does when started with [`ADD_MAIN_MENU`] or [`REMOVE_MAIN_MENU`], as an
+/// administrator. `true` when it went well.
+pub fn write_main_menu(on: bool) -> bool {
+    let Ok(program) = std::env::current_exe() else {
+        return false;
+    };
+    let written = if on {
+        let menu = explorer::menu(program, Text::get(Language::detect()));
+        gracil_windows::add_main_menu(&menu)
+    } else {
+        gracil_windows::remove_main_menu(&explorer::extensions())
+    };
+    written
+        .inspect_err(|error| warn!(%error, on, "File Explorer's main menu not written"))
+        .is_ok()
+}
+
+/// Readies Gracil's folder to be deleted (ADR 0054): takes Gracil out of File Explorer and out
+/// of starting with Windows, so deleting the folder leaves nothing, then shows the folder in File
+/// Explorer, picked. Done before returning, since Gracil exits right after.
 pub fn prepare_to_delete() {
-    let Some(places) = whole_folder() else {
+    let Some(program) = whole_folder() else {
         return;
     };
     if let Err(error) = gracil_windows::stop_starting_with_windows() {
         warn!(%error, "start with Windows not removed");
     }
-    match remove_from_explorer(&places) {
-        Ok(()) => info!("Gracil taken out of Windows"),
-        Err(error) => warn!(%error, "File Explorer's menu not removed"),
+    if let Err(error) = gracil_windows::remove_from_send_to() {
+        warn!(%error, "Send to not removed");
     }
-    release_menu_copies(&places.data.join(MENU_FOLDER));
-    if let Some(folder) = places.program.parent() {
+    if main_menu_is_ours() {
+        // Windows asks for permission once more; saying no leaves the menu, which then simply
+        // finds no Gracil.
+        if let Err(error) = gracil_windows::run_as_administrator(&program, REMOVE_MAIN_MENU) {
+            warn!(%error, "File Explorer's main menu not removed");
+        }
+    }
+    remove_former_menus();
+    info!("Gracil taken out of Windows");
+    if let Some(folder) = program.parent() {
         use std::os::windows::process::CommandExt;
         let shown = std::process::Command::new("explorer.exe")
             .raw_arg(format!("/select,\"{}\"", folder.display()))
@@ -83,89 +156,33 @@ pub fn prepare_to_delete() {
     }
 }
 
-/// Clears the menu's DLL copies out of the data folder. A copy Explorer still has loaded cannot
-/// be deleted, but it can be moved: it goes to the temporary folder, so it never stops the
-/// folder from being deleted, and Windows clears it from there.
-fn release_menu_copies(copies: &Path) {
+/// Clears what the menus Gracil had before ADR 0058 left: keys for the current user only, which
+/// File Explorer never showed, and the DLL copies kept in the data folder.
+fn remove_former_menus() {
+    if let Err(error) = gracil_windows::remove_former_menus(&explorer::extensions()) {
+        warn!(%error, "the former menu's keys stay");
+    }
+    if let Some(copies) = toolchain::default_private_dir().map(|data| data.join(FORMER_MENU_FOLDER))
+    {
+        remove_dll_copies(&copies);
+    }
+}
+
+fn remove_dll_copies(copies: &Path) {
     let Ok(entries) = fs::read_dir(copies) else {
         return;
     };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if fs::remove_file(&path).is_ok() {
-            continue;
-        }
-        let parked = std::env::temp_dir().join(format!(
-            "gracil-shell-{:x}-{}",
-            std::process::id(),
-            entry.file_name().to_string_lossy()
-        ));
-        if let Err(error) = fs::rename(&path, &parked) {
-            warn!(%error, "a copy of the menu stays in the data folder");
+    for path in entries.flatten().map(|entry| entry.path()) {
+        if path.extension().is_some_and(|ext| ext == "dll") {
+            let _ = fs::remove_file(&path);
         }
     }
     let _ = fs::remove_dir(copies);
 }
 
-/// This Gracil's program and data folder, when it runs from a whole Gracil folder.
-fn whole_folder() -> Option<Places> {
+/// This Gracil's `gracil.exe`, when it runs from a whole Gracil folder.
+fn whole_folder() -> Option<PathBuf> {
     let program = std::env::current_exe().ok()?;
-    let folder = program.parent()?;
-    let whole = folder.join(r"ffmpeg\ffmpeg.exe").is_file() && folder.join(MENU_DLL).is_file();
-    whole.then_some(Places {
-        program: program.clone(),
-        data: toolchain::default_private_dir()?,
-    })
-}
-
-/// Registers a copy of the menu's DLL kept in the data folder: Explorer holds the DLL it loads
-/// until it closes, and the one beside `gracil.exe` must stay free for the next update to replace.
-fn add_to_explorer(places: &Places) -> std::io::Result<()> {
-    let folder = places
-        .program
-        .parent()
-        .ok_or_else(|| std::io::Error::other("gracil.exe has no folder"))?;
-    let shipped = folder.join(MENU_DLL);
-    let copies = places.data.join(MENU_FOLDER);
-    fs::create_dir_all(&copies)?;
-    let copy = copies.join(copy_name(&shipped)?);
-    if !copy.is_file() {
-        fs::copy(&shipped, &copy)?;
-    }
-    gracil_windows::add_to_explorer(&copy, places)?;
-    tidy_copies(&copies, Some(&copy));
-    Ok(())
-}
-
-fn remove_from_explorer(places: &Places) -> std::io::Result<()> {
-    // Another Gracil folder may hold the menu now; only this one's registration is taken away.
-    let ours = gracil_windows::explorer_places().is_none_or(|registered| &registered == places);
-    if ours {
-        gracil_windows::remove_from_explorer()?;
-    }
-    tidy_copies(&places.data.join(MENU_FOLDER), None);
-    Ok(())
-}
-
-/// A name that changes whenever the shipped DLL does, so an update brings a fresh copy.
-fn copy_name(shipped: &Path) -> std::io::Result<String> {
-    let metadata = fs::metadata(shipped)?;
-    let modified = metadata
-        .modified()?
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |since| since.as_secs());
-    Ok(format!("gracil_shell-{}-{modified}.dll", metadata.len()))
-}
-
-/// Deletes the copies other than `keep`. One Explorer still holds can't be deleted; it goes on a
-/// later start, once Explorer has let it go.
-fn tidy_copies(copies: &Path, keep: Option<&PathBuf>) {
-    let Ok(entries) = fs::read_dir(copies) else {
-        return;
-    };
-    for path in entries.flatten().map(|entry| entry.path()) {
-        if Some(&path) != keep && path.extension().is_some_and(|ext| ext == "dll") {
-            let _ = fs::remove_file(&path);
-        }
-    }
+    let whole = program.parent()?.join(r"ffmpeg\ffmpeg.exe").is_file();
+    whole.then_some(program)
 }

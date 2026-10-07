@@ -1,4 +1,4 @@
-# Writes the licenses of every Rust library built into gracil.exe and gracil_shell.dll to one
+# Writes the licenses of every Rust library built into gracil.exe to one
 # text file, for the zip's licenses folder (ADR 0054). Called by portable.ps1.
 #
 #   scripts/licenses.ps1 -Out <file>
@@ -23,8 +23,8 @@ foreach ($package in $metadata.packages) { $packages[$package.id] = $package }
 $nodes = @{}
 foreach ($node in $metadata.resolve.nodes) { $nodes[$node.id] = $node }
 
-# Walks the normal dependencies from the two shipped crates.
-$shipped = $metadata.packages | Where-Object { $_.name -in 'gracil-ui', 'gracil-shell' }
+# Walks the normal dependencies from the shipped crate.
+$shipped = $metadata.packages | Where-Object { $_.name -eq 'gracil-ui' }
 $pending = New-Object System.Collections.Generic.Queue[string]
 $seen = New-Object 'System.Collections.Generic.HashSet[string]'
 foreach ($package in $shipped) { $pending.Enqueue($package.id) }
@@ -60,7 +60,7 @@ foreach ($package in $libraries) {
 }
 
 $sections = New-Object System.Collections.Generic.List[string]
-$sections.Add("The Rust libraries built into gracil.exe and gracil_shell.dll, and their licenses.")
+$sections.Add("The Rust libraries built into gracil.exe, and their licenses.")
 foreach ($entry in $texts.GetEnumerator()) {
     $sections.Add("==== Used by: $($entry.Value -join ', ') ====`n`n$($entry.Key)")
 }

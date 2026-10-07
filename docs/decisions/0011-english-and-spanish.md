@@ -2,6 +2,10 @@
 
 **Status:** Accepted.
 
+**Superseded in part** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07):
+`gracil-shell` is gone. File Explorer's main menu takes its words from Gracil's own tables, in the
+Windows language of the moment it is turned on.
+
 **Context.** The product owner wants Gracil available in English and Spanish from the first
 version. Gracil shows very few words, and a language setting would be one more thing to think
 about (§66).

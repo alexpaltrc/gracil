@@ -45,7 +45,7 @@ if (-not $FFmpeg -or -not (Test-Pinned $FFmpeg)) {
     exit 1
 }
 
-cargo build --release -p gracil-ui -p gracil-shell
+cargo build --release -p gracil-ui
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # A fresh folder every time, so nothing from an older build ends up in the zip.
@@ -56,7 +56,6 @@ $licenses = Join-Path $layout 'licenses'
 $tools = Join-Path $layout 'ffmpeg'
 New-Item -ItemType Directory -Path $layout, $licenses, $tools | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'target\release\gracil.exe') -Destination $layout
-Copy-Item -LiteralPath (Join-Path $root 'target\release\gracil_shell.dll') -Destination $layout
 Copy-Item -LiteralPath (Join-Path $FFmpeg 'ffmpeg.exe'), (Join-Path $FFmpeg 'ffprobe.exe') -Destination $tools
 $utf8 = New-Object System.Text.UTF8Encoding $false
 
@@ -101,7 +100,7 @@ $notices = @(
 }
 [System.IO.File]::WriteAllText((Join-Path $licenses 'cjpegli-licenses.txt'), ($notices -join "`r`n`r`n"), $utf8)
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $licenses 'gracil-license.txt')
-# The Rust libraries built into gracil.exe and gracil_shell.dll.
+# The Rust libraries built into gracil.exe.
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'licenses.ps1') -Out (Join-Path $licenses 'rust-libraries.txt')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

@@ -53,8 +53,10 @@ pub enum TrayEvent {
     Toggle,
     /// Open in the icon's menu: show Gracil's window.
     Open,
-    /// The menu's File Explorer menu setting was clicked, to turn it the other way.
+    /// The menu's Send to setting was clicked, to turn it the other way.
     ExplorerMenu,
+    /// The menu's File Explorer main menu setting was clicked, to turn it the other way.
+    ExplorerMainMenu,
     /// The menu's File Explorer setting was clicked, to turn it the other way.
     ExplorerMiniWindow,
     /// The menu's start with Windows setting was clicked, to turn it the other way.
@@ -70,8 +72,10 @@ pub enum TrayEvent {
 /// The words of the icon's menu, in the interface's language.
 pub struct TrayMenu {
     pub open: String,
-    /// The setting for Gracil being in File Explorer's menu.
+    /// The setting for Gracil being in File Explorer's Send to.
     pub explorer_menu: String,
+    /// The setting for Gracil being in File Explorer's main menu.
+    pub explorer_main_menu: String,
     /// The setting for showing the mini-window when compressing from File Explorer.
     pub explorer_mini_window: String,
     /// The setting for Gracil starting with Windows.
@@ -99,11 +103,13 @@ const EXPLORER_MINI_WINDOW: usize = 3;
 const EXPLORER_MENU: usize = 4;
 const START_WITH_WINDOWS: usize = 5;
 const PREPARE_TO_DELETE: usize = 6;
+const EXPLORER_MAIN_MENU: usize = 7;
 
 /// Everything the icon's window needs, shared with the rest of Gracil.
 struct Shared {
     open: Vec<u16>,
     explorer_menu: Vec<u16>,
+    explorer_main_menu: Vec<u16>,
     explorer_mini_window: Vec<u16>,
     start_with_windows: Vec<u16>,
     prepare_to_delete: Vec<u16>,
@@ -122,8 +128,10 @@ struct Current {
     /// Gracil is leaving: the icon is gone and must not come back.
     gone: bool,
     light_taskbar: bool,
-    /// Whether the menu shows Gracil in File Explorer's menu as on.
+    /// Whether the menu shows Gracil in File Explorer's Send to as on.
     explorer_menu: bool,
+    /// Whether the menu shows Gracil in File Explorer's main menu as on.
+    explorer_main_menu: bool,
     /// Whether the menu shows the File Explorer setting as on.
     explorer_mini_window: bool,
     /// Whether the menu shows starting with Windows as on.
@@ -145,6 +153,7 @@ impl Tray {
         let shared = Shared {
             open: wide(&menu.open),
             explorer_menu: wide(&menu.explorer_menu),
+            explorer_main_menu: wide(&menu.explorer_main_menu),
             explorer_mini_window: wide(&menu.explorer_mini_window),
             start_with_windows: wide(&menu.start_with_windows),
             prepare_to_delete: wide(&menu.prepare_to_delete),
@@ -158,6 +167,7 @@ impl Tray {
                 gone: false,
                 light_taskbar: crate::theme::light_taskbar(),
                 explorer_menu: false,
+                explorer_main_menu: false,
                 explorer_mini_window: false,
                 start_with_windows: false,
             }),
@@ -192,10 +202,17 @@ impl Tray {
         };
     }
 
-    /// Whether the menu shows Gracil in File Explorer's menu as on.
+    /// Whether the menu shows Gracil in File Explorer's Send to as on.
     pub fn check_explorer_menu(&self, on: bool) {
         if let Some(shared) = SHARED.get() {
             lock(shared).explorer_menu = on;
+        }
+    }
+
+    /// Whether the menu shows Gracil in File Explorer's main menu as on.
+    pub fn check_explorer_main_menu(&self, on: bool) {
+        if let Some(shared) = SHARED.get() {
+            lock(shared).explorer_main_menu = on;
         }
     }
 
@@ -377,11 +394,12 @@ fn show_menu(window: HWND, x: i32, y: i32) {
     let Some(shared) = SHARED.get() else {
         return;
     };
-    let (menu_check, explorer_check, start_check) = {
+    let (menu_check, main_menu_check, explorer_check, start_check) = {
         let current = lock(shared);
         let check = |on: bool| if on { MF_CHECKED } else { 0 };
         (
             check(current.explorer_menu),
+            check(current.explorer_main_menu),
             check(current.explorer_mini_window),
             check(current.start_with_windows),
         )
@@ -408,6 +426,12 @@ fn show_menu(window: HWND, x: i32, y: i32) {
             MF_STRING | menu_check,
             EXPLORER_MENU,
             shared.explorer_menu.as_ptr(),
+        );
+        AppendMenuW(
+            menu,
+            MF_STRING | main_menu_check,
+            EXPLORER_MAIN_MENU,
+            shared.explorer_main_menu.as_ptr(),
         );
         AppendMenuW(
             menu,
@@ -441,6 +465,7 @@ fn show_menu(window: HWND, x: i32, y: i32) {
     match chosen as usize {
         OPEN => notify(TrayEvent::Open),
         EXPLORER_MENU => notify(TrayEvent::ExplorerMenu),
+        EXPLORER_MAIN_MENU => notify(TrayEvent::ExplorerMainMenu),
         EXPLORER_MINI_WINDOW => notify(TrayEvent::ExplorerMiniWindow),
         START_WITH_WINDOWS => notify(TrayEvent::StartWithWindows),
         PREPARE_TO_DELETE => notify(TrayEvent::PrepareToDelete),

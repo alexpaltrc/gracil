@@ -1,10 +1,11 @@
 # Architecture overview
 
 Gracil is one Rust process (`gracil.exe`) that owns a job scheduler and drives external `ffmpeg.exe`
-/ `ffprobe.exe` processes, plus a tiny COM DLL loaded by File Explorer that only forwards requests.
+/ `ffprobe.exe` processes. File Explorer reaches it through plain commands that start `gracil.exe`;
+no Gracil code runs inside `explorer.exe` (ADR 0058).
 
 ```
- File Explorer ──(IExplorerCommand, gracil_shell.dll)──┐
+ File Explorer: Send to, main menu ──(--explorer)──────┐
                                                        │ named pipe (paths + action)
  2nd launch of gracil.exe ─────────────────────────────┤
                                                        ▼
@@ -22,9 +23,8 @@ Gracil is one Rust process (`gracil.exe`) that owns a job scheduler and drives e
 | Crate | Kind | Responsibility | Introduced |
 |---|---|---|---|
 | `gracil-core` | lib | Job state model, output naming, FFprobe inspection, capability detection, FFmpeg argument construction, progress parsing, scheduler, output validation. No UI dependency. | M0 |
-| `gracil-windows` | lib | Everything that needs Windows itself (`windows-sys`): single-instance mutex, named-pipe IPC, process suspend/resume, `ReplaceFileW`, timestamps, tray, taskbar geometry. The only crate (besides the shell DLL) allowed `unsafe`. | M4/M5 |
+| `gracil-windows` | lib | Everything that needs Windows itself (`windows-sys`): single-instance mutex, named-pipe IPC, process suspend/resume, `ReplaceFileW`, timestamps, tray, taskbar geometry, File Explorer's Send to shortcut and main menu (the `windows` crate for their few COM calls). The only crate allowed `unsafe`. | M4/M5 |
 | `gracil-ui` | bin `gracil` | Iced + WGPU application: main window (Focus + Drawer), mini-window, settings, wiring core ↔ Windows layer. | M2 |
-| `gracil-shell` | cdylib | `gracil_shell.dll`, the `IExplorerCommand` COM server for File Explorer's classic menu (under **Show more options** on Windows 11), built with the `windows` crate's `#[implement]` (ADR 0022). Depends only on `gracil-core` (which files are videos or images) and `gracil-windows`; counts the files and forwards them. | M7 |
 
 Crates are created when they get real content, not ahead of time.
 
@@ -99,8 +99,10 @@ reads on its first text, is loaded on a thread at start-up so a cold first frame
 
 **Always.** The main window's foot holds a three-way pill (`pill.rs`, a small custom widget that
 slides its stone itself) for `settings.always`: replace, ask, or save a copy. When a job finishes,
-`on_report` places it with File Explorer's choice for that job if there is one, else with
-`settings.always`; in the middle nothing happens until the user chooses (ADR 0025).
+`on_report` places it with the choice made in advance for that job (`--replace`, `--save-copy`)
+if there is one, else with `settings.always`; in the middle nothing happens until the user
+chooses (ADR 0025). An `--explorer` request takes `settings.always` as its choice when it arrives
+(ADR 0058).
 
 **Single instance.** The first process creates the named mutex `Local\Gracil.SingleInstance`
 and serves the pipe `\\.\pipe\Gracil.<session>` (`gracil_windows::claim`, `serve`). Any later
@@ -108,16 +110,19 @@ invocation (a new launch, "Open with", Explorer) sends its command line over the
 (`gracil_windows::forward`) and exits. `gracil-ui`'s `request` parses the command line and pipe
 messages alike, and `outside` turns them, from any thread, into messages for the app. Gracil
 starts with no window; a request without a choice opens it, while `--replace` and `--save-copy`
-work in the background. A Gracil whose window never opened ends itself when that work is done
-(ADR 0019).
+work in the background, and so does `--explorer` when **Always** is set. A Gracil whose window
+never opened ends itself when that work is done (ADR 0019).
 
-**File Explorer.** `gracil_shell.dll` gives Explorer one `IExplorerCommand`, titled "Gracil" or
-"Gracil (N)" by the number of selected files with a video extension
-(`gracil_core::media::looks_like_video`) and hidden when there are none, with **Compress and
-replace** and **Compress and save a copy** under it. A click returns at once; a thread of the DLL
-forwards the paths over the pipe when Gracil is running, or starts Gracil with as many paths as
-fit on its command line and forwards the rest (ADR 0022). It starts the `gracil.exe` recorded in its
-registration (ADR 0050), or the one beside the DLL.
+**File Explorer** (ADR 0058). Both of Gracil's places in File Explorer start
+`gracil.exe --explorer` with what was picked, which forwards it over the pipe like any later
+launch. **Send to** is a shortcut, `Gracil.lnk`, in the user's own Send to folder
+(`gracil_windows::add_to_send_to`). The **main menu** is plain commands for the whole computer
+under `HKEY_LOCAL_MACHINE\SOFTWARE\Classes` (`gracil_windows::add_main_menu`, words from
+`explorer.rs`): `SystemFileAssociations\.<ext>\shell\Gracil` for every video and image type, with
+`MultiSelectModel` `Player`, and `Directory\shell\Gracil` with three numbered subcommands (all,
+`--videos`, `--images`, ADR 0035). Per-user (`HKCU`) verbs are not used: File Explorer on
+Windows 11 ignored them, though in-process verb listings showed them. The running Gracil applies
+**Always** to an `--explorer` request (ADR 0025); in the middle, the window opens and asks.
 
 **Starting with Windows.** The current user's `RunOnce` key starts `gracil.exe --startup` at the
 next sign-in; Windows deletes the value as it runs it, and every start writes it again while
@@ -126,12 +131,18 @@ That request opens nothing, and marks the app `resident`: it stays in the tray f
 instead of leaving when background work is done (ADR 0024).
 
 **Its place in Windows** (`place.rs`, ADR 0050). Gracil is a portable folder with no installer. On
-every start, off the UI thread, a whole Gracil folder (FFmpeg and `gracil_shell.dll` beside
-`gracil.exe`) writes the `Run` value again and registers File Explorer's classic menu for the
-current user (`gracil_windows::add_to_explorer`): the `IExplorerCommand` class, pointing at a copy
-of the DLL in `data\shell\` so the shipped one is never held, with the program and data folder
-recorded beside it for the DLL to find. With the menu turned off in the tray, the registration is
-removed if it points at this folder. A development build in `target` leaves Windows alone.
+every start, off the UI thread, a whole Gracil folder (FFmpeg beside `gracil.exe`) writes the
+`RunOnce` value and the Send to shortcut again, each as its tray setting says, and removes what
+the per-user menu of ADR 0050 left (its `HKCU` keys, both COM classes, the DLL copies in
+`data\shell\`). The main menu is never written at start-up: it needs an administrator. Its tray
+item starts `gracil.exe --add-main-menu` (or `--remove-main-menu`) as an administrator, which
+writes or removes it with no window and exits; a `GracilProgram` value beside the folder command
+tells which `gracil.exe` wrote it, so the tray ticks it only for that one. Gracil runs in a job
+object (ADR 0018), so it asks File Explorer, through the desktop's Shell automation, to start the
+administrator's Gracil (`gracil_windows::run_as_administrator`), then watches the menu for up to
+two minutes. *(In progress: Windows still denies this on the product owner's PC; written from an
+administrator's terminal, the menu works.)* A development build in `target` leaves Windows
+alone.
 
 ## Data on disk
 
@@ -140,7 +151,8 @@ and nothing is saved (`toolchain::default_private_dir`, ADR 0054):
 
 - Settings: `settings.txt`, one `name=value` per line.
 - Logs: `logs\`, one plain-text file per day, the last seven kept.
-- Unfinished files: `unfinished.txt`; leftovers' ledgers: `temporary\`; the menu's DLL: `shell\`.
+- Unfinished files: `unfinished.txt`; leftovers' ledgers: `temporary\`. A `shell\` folder left
+  by the former menu DLL is removed on start (ADR 0058).
 - No job history is persisted.
 
 See [`../decisions/`](../decisions/) for the reasoning behind the main choices.

@@ -7,6 +7,12 @@
 the FFmpeg lookup order of [0008](0008-ffmpeg-detected-or-provisioned.md). Changes spec §64 and
 §65.
 
+**Superseded in part** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07):
+items 4 to 6. File Explorer ignored the per-user menu, so the zip has no `gracil_shell.dll`.
+Gracil puts itself in **Send to** on every start (the tray setting now reads **Show Gracil in
+Send to**), and its main menu is written for the whole computer only when turned on from the
+tray.
+
 **Context.** The product owner reserved Gracil's name in the Microsoft Store and then learned that
 Gracil could not stay there, even for free. Gracil goes on as a free, open-source program
 published on GitHub, and portable: a zip that is unpacked and run, with no installer. Without a

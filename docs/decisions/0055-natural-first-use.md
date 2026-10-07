@@ -4,6 +4,10 @@
 [0025](0025-always-replace-or-copy.md), [0039](0039-a-clear-done.md) and spec §40.1, §49, §54.1
 and §55.
 
+**Changed** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07): in the tray menu
+(item 12), **Show Gracil in Send to** and **Show Gracil in File Explorer's menu…** take the place
+of **Show in File Explorer's menu**.
+
 **Context.** Before the first public release the product owner asked for a review of the whole
 app: someone opening Gracil for the first time should know what to do without thinking, nothing
 should be out of place or extra, and nothing should look stuck or say something untrue. Walking

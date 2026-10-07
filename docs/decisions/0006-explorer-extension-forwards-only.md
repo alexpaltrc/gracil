@@ -2,6 +2,11 @@
 
 **Status:** Accepted
 
+**Superseded in part** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07):
+there is no Explorer extension any more. File Explorer reaches Gracil through **Send to** and,
+when turned on, plain commands that start `gracil.exe`; no Gracil code runs inside
+`explorer.exe`, which keeps this decision's aim.
+
 **Context.** The context-menu handler runs inside `explorer.exe`. A slow or crashing handler
 freezes or crashes the whole shell.
 

@@ -124,8 +124,7 @@ gracil/
 ├── crates/
 │   ├── gracil-core/
 │   ├── gracil-ui/
-│   ├── gracil-windows/
-│   └── gracil-shell/
+│   └── gracil-windows/
 ├── docs/
 │   ├── architecture/
 │   ├── decisions/
@@ -155,7 +154,9 @@ abstraction should have a clear responsibility.
   state, settings, tray mini-window UI.
 - **gracil-windows**: Windows APIs, single-instance behavior, IPC, process management, system tray
   integration, window positioning, filesystem replacement, Explorer integration support.
-- **gracil-shell**: modern Windows 11 File Explorer context-menu extension.
+- **gracil-shell**: modern Windows 11 File Explorer context-menu extension. *Removed by
+  [ADR 0058](decisions/0058-explorer-send-to-and-main-menu.md):* File Explorer reaches Gracil
+  through **Send to** and plain commands that start `gracil.exe`, written by gracil-windows.
 
 Most importantly: **gracil-core must not depend on Iced.** The compression engine must be usable
 without initializing Iced, WGPU or a visible window. This is required for background compression
@@ -481,7 +482,8 @@ product owner's request it now uses the more familiar wording "Compress and save
 In the main window, videos are compressed as soon as they are added. When a result is ready, the
 window shows how much smaller it is and offers **Replace** and **Save copy** for it; with several
 results waiting, both are offered for all of them at once. A result the user never chooses for is
-discarded, and the original stays as it was. File Explorer's two commands choose up front instead.
+discarded, and the original stays as it was. From File Explorer, the **Always** setting decides
+the same way (ADR 0058).
 
 # 38. Compress and replace
 
@@ -694,9 +696,22 @@ compression behavior.
 
 # 57. Windows 11 File Explorer integration
 
-Required. Gracil's `IExplorerCommand` is registered for the current user in File Explorer's
-classic menu (under **Show more options** on Windows 11), by Gracil itself on every start, and can
-be turned off from the tray (ADR 0050). Windows only offers its modern menu to packaged apps.
+Required. Windows only offers its modern menu to packaged apps, and on Windows 11 File Explorer
+ignores commands written for the current user only, so Gracil is in File Explorer in two ways
+([ADR 0058](decisions/0058-explorer-send-to-and-main-menu.md)), both under **Show more options**:
+
+- **Send to → Gracil**, a shortcut in the user's own Send to folder, written by Gracil itself on
+  every start and turned off from the tray (**Show Gracil in Send to**). No administrator needed.
+- **Its own commands** in the main menu, written for the whole computer when the user turns them
+  on from the tray (**Show Gracil in File Explorer's menu…**), after Windows asks for an
+  administrator's permission once. *(In progress: asking for the permission from inside Gracil
+  is still being made to work.)*
+
+Both start `gracil.exe --explorer` with what was picked, and the running Gracil applies the
+**Always** setting to it.
+
+*Before ADR 0058,* a per-user `IExplorerCommand` DLL (ADR 0022, ADR 0050) filled this role; File
+Explorer never showed it.
 
 # 58. Explorer multi-selection
 
@@ -714,10 +729,20 @@ which opens the window and asks.
 folders are looked through away from the window, folder by folder, and work starts with the
 first files found.
 
+*Amended by [ADR 0058](decisions/0058-explorer-send-to-and-main-menu.md) (2026-10-07):* the words
+no longer follow **Always** and there is no count. Picked videos and images show **Compress with
+Gracil**, which sends every picked file; a folder shows **Gracil** with **Compress videos and
+images**, **Compress videos only** and **Compress images only**. The running Gracil applies
+**Always**: set, the files are compressed in the background as it says; in the middle, the window
+opens and asks. **Send to → Gracil** sends files and folders the same way, both kinds.
+
 # 59. Dynamic Explorer count
 
 Use the selected item collection to count supported videos for the title. Do not perform
 expensive work to calculate the title. Explorer callbacks must remain extremely fast.
+
+*Update (ADR 0058):* plain commands can't count, so the title is fixed. No Gracil code runs
+inside File Explorer any more.
 
 # 60. Explorer shell extension safety
 
@@ -726,11 +751,16 @@ capabilities, run FFprobe, process video, wait for compression, or scan the file
 expensively. It only inspects the selection cheaply, displays the commands, forwards paths and
 action to Gracil and returns promptly.
 
+*Update (ADR 0058):* there is no shell extension. File Explorer starts `gracil.exe`, which hands
+the request to the running Gracil and leaves, so nothing slow can ever run inside File Explorer.
+
 # 61. Shell extension language
 
 Prefer Rust + windows-rs. If a robust `IExplorerCommand` in Rust becomes unusually fragile, a very
 small isolated C++ shim is acceptable — explain why first, put no product logic in it, and only
 forward paths/actions to Rust. Do not migrate the application to C++.
+
+*Update (ADR 0058):* no longer applies; there is no shell extension.
 
 # 62. Background Explorer workflow
 
@@ -744,6 +774,9 @@ forward paths/actions to Rust. Do not migrate the application to C++.
 
 No console window. Do not initialize the main window unless needed.
 
+*Update (ADR 0058):* step 1 is File Explorer starting `gracil.exe --explorer` with the picked
+paths. With **Always** in the middle there is no action, so the main window opens and asks.
+
 # 63. Additive Explorer requests
 
 Explorer requests are additive to the existing scheduler. Do not create unrelated scheduler
@@ -751,20 +784,22 @@ instances.
 
 # 64. Portable distribution
 
-Gracil is portable (ADR 0050). It ships as a zip holding Gracil, the File Explorer menu, jpegli,
-FFmpeg and FFprobe, and their licenses, built by `scripts/portable.ps1`. It keeps its data in a
-`data` folder beside itself and nowhere else; without a writable one it runs without saving
-anything (ADR 0054). Removing Gracil is deleting its folder: its start with Windows uses
-`RunOnce`, which Windows forgets by itself once the folder is gone, and **Remove Gracil from
-Windows** in the tray menu takes away File Explorer's menu first. It is free and open source
+Gracil is portable (ADR 0050). It ships as a zip holding Gracil, jpegli, FFmpeg and FFprobe, and
+their licenses, built by `scripts/portable.ps1`. It keeps its data in a `data` folder beside
+itself and nowhere else; without a writable one it runs without saving anything (ADR 0054).
+Removing Gracil is deleting its folder: its start with Windows uses `RunOnce`, which Windows
+forgets by itself once the folder is gone, and **Prepare to delete Gracil** in the tray menu
+takes it out of File Explorer first (ADR 0058). It is free and open source
 (GPL-3.0-or-later), published on GitHub, outside the Microsoft Store.
 
 # 66. Settings philosophy
 
 Settings stay intentionally small. Currently required: **Show mini-window when compressing from
-File Explorer** (default ON). In the tray menu too: **Show Gracil in File Explorer's menu** (ADR
-0050) and **Start with Windows** (ADR 0054), both default ON. Do not add GPU/CPU/codec
-selection, bitrate, FFmpeg arguments, thread count or advanced encoder configuration.
+File Explorer** (default ON). In the tray menu too: **Show Gracil in Send to** (ADR 0050,
+ADR 0058) and **Start with Windows** (ADR 0054), both default ON, and **Show Gracil in File
+Explorer's menu…** (ADR 0058), off until the user turns it on and Windows' permission is given.
+Do not add GPU/CPU/codec selection, bitrate, FFmpeg arguments, thread count or advanced encoder
+configuration.
 
 *Update (ADR 0025):* a second setting, requested by the product owner: **Always (Replace / ○ /
 Save a copy)** in the main window. The middle, the default, asks after each video as in §37.1; an
@@ -857,8 +892,8 @@ Every milestone compiles and is testable.
   focus loss, multi-monitor positioning, Explorer mini-window preference.
 - **M7 — File Explorer integration**: modern context menu, supported-file filtering,
   multi-selection, dynamic Gracil (N), both commands, IPC forwarding, shell stability testing.
-- **M8 — Packaging**: a portable zip with FFmpeg, jpegli and the File Explorer menu inside, built
-  by `scripts/portable.ps1` (ADR 0050).
+- **M8 — Packaging**: a portable zip with FFmpeg and jpegli inside, built by
+  `scripts/portable.ps1` (ADR 0050).
 - **M9 — Image compression** *(planned, not started; added 2026-10-03 at the product owner's
   request)*: compress photos and other images the way Gracil compresses video. See §77.1.
 
@@ -1073,6 +1108,11 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
 - **Always stays in sight.** *Asked by the product owner.* The **Always** pill is at the foot of
   the main window even before there are files, since File Explorer's menu follows it and it is
   best set before a large folder starts. *Built 2026-10-06 (ADR 0057).*
+- **Gracil really in File Explorer.** On Windows 11, File Explorer never showed the menu Gracil
+  wrote for the current user. Gracil is now in **Send to** for everyone, and its own commands in
+  File Explorer's menu can be turned on from the tray, with Windows' permission. Their words no
+  longer change with **Always**, which Gracil applies itself. *Send to built 2026-10-07; the
+  menu's permission in progress (ADR 0058).*
 
 # 78. Temporary UI decisions
 

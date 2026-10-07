@@ -64,7 +64,7 @@ with it.
 - Closing the window no longer stops Gracil: it keeps working next to the clock. Its marble there
   fills up as the work goes on, shows two bars when paused, and changes to Windows' warning
   color if something went wrong while the window was closed; click it then, and the small window
-  opens on the file that went wrong. Right-click it for **Open Gracil**, Gracil's three settings,
+  opens on the file that went wrong. Right-click it for **Open Gracil**, Gracil's settings,
   **Prepare to delete Gracil** and **Exit**. If a file is compressing, waiting, or finished and
   waiting for your choice, Exit first asks, and tells you exactly what would happen.
 - Click the marble next to the clock and a small window opens beside it, wherever your taskbar
@@ -74,19 +74,24 @@ with it.
   **Save copy** right there, without opening the big window. It stays open while you do other
   things until you close it or click the marble again; **Open Gracil** in it brings up the big
   window.
-- Right-click videos, images or a whole folder in File Explorer and choose **Gracil** (on Windows
-  11, under **Show more options**), which shows how many files you picked, for example
-  **Gracil (3)**. For a folder, Gracil compresses every video and image inside it, subfolders
-  included, or only the videos, or only the images. The commands follow the **Always** line of
-  Gracil's window: "Compress and replace…" on Replace, "Compress and save copies of…" on Save a
-  copy, and just "Compress…" on the circle, which opens Gracil's window and asks after each file.
-  Other files picked along are left alone. The small window opens by itself so you can watch; if
-  you'd rather it didn't, untick **Show mini-window when compressing from File Explorer** in the
-  marble's right-click menu. Gracil looks through folders in the background, so it keeps
-  responding even with large folders or folders on a network or cloud drive: files join the list
-  folder by folder and compressing starts with the first ones found. Don't want Gracil in the
-  menu? Untick **Show Gracil in File Explorer's menu** in the marble's right-click menu. After
-  moving Gracil's folder, open Gracil once and the menu follows it.
+- Right-click videos, images or whole folders in File Explorer, choose **Show more options**,
+  then **Send to** and **Gracil**. It is there from the first time you open Gracil, with nothing
+  to set up. For a folder, Gracil compresses every video and image inside it, subfolders included.
+  What happens follows the **Always** line of Gracil's window: on Replace or Save a copy, the files
+  are compressed without opening the big window and put where the line says; on the circle,
+  Gracil's window opens and asks after each file. Other files picked along are left alone. The
+  small window opens by itself so you can watch; if you'd rather it didn't, untick **Show
+  mini-window when compressing from File Explorer** in the marble's right-click menu. Gracil looks
+  through folders in the background, so it keeps responding even with large folders or folders on
+  a network or cloud drive: files join the list folder by folder and compressing starts with the
+  first ones found. Don't want Gracil in **Send to**? Untick **Show Gracil in Send to** in the
+  marble's right-click menu. After moving Gracil's folder, open Gracil once and **Send to**
+  follows it.
+- Gracil can also have its own commands in File Explorer's right-click menu (in progress): tick
+  **Show Gracil in File Explorer's menu…** in the marble's right-click menu, and allow it when
+  Windows asks, since the commands are for everyone who uses the computer. Videos and images then
+  show **Compress with Gracil**, and a folder shows **Gracil**, to compress its videos and images,
+  only its videos, or only its images. They follow the **Always** line just like **Send to**.
 - Gracil starts by itself when you sign in, waiting quietly next to the clock until you give it
   videos. To stop that, untick **Start with Windows** in the marble's right-click menu. Once
   Gracil's folder is deleted, Windows forgets to start it by itself.
