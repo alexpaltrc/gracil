@@ -117,11 +117,11 @@ with it.
   files**, which unfolds gently and quickly even with thousands of files, shows every other video
   and image, how much smaller each one became and where it went, for example **−35% · Replaced**.
   With two or more done, it adds them all up, for example **In all: 3.4 GB → 2.2 GB, 35% smaller**,
-  and the line with **View files** says how much room they freed. That line also says how many files
-  are left, counting down to none as they finish, for example **12 files left**. Click a file to
-  show it large; click it again, close **View files**, or click the small line naming the file being
-  compressed to go back to the ring. Take a file off the list with **×** or **Clear**. A video can
-  always be compressed again, even right after replacing it, without clearing the list first.
+  and the line with **View files** says how many files are left, counting down to none as they
+  finish, for example **12 files left**. Click a file to show it large; click it again, close **View
+  files**, or click the small line naming the file being compressed to go back to the ring. Take a
+  file off the list with **×** or **Clear**. A video can always be compressed again, even right
+  after replacing it, without clearing the list first.
 - Everything works from the keyboard too: **Tab** moves a ring from one button to the next, and
   **Enter** or **Space** presses it; on the **Always** line, the arrow keys move the choice. With
   no ring, **Space** pauses and resumes, **Esc** steps back, and **Ctrl+O** chooses files.

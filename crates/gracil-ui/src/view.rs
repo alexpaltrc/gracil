@@ -694,11 +694,6 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
         0 => {}
         n => summary.push_str(&format!("  ·  {}", state.text.ready(n))),
     }
-    // With several files done, how much room they freed together (the drawer has the details).
-    let (total, done) = state.total();
-    if done >= 2 {
-        summary.push_str(&format!("  ·  {}", state.text.less(total)));
-    }
     if state.gathering > 0 {
         summary.push_str(&format!("  ·  {}", state.text.looking_for_more));
     }
@@ -719,25 +714,24 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
         state.text.add_files,
     );
     // Once all is done, the big window already says how it went; the line below only opens the
-    // list.
-    let line = if state.finished().is_some() && state.selected.is_none() {
-        toggle.to_owned()
-    } else {
-        format!("{summary}  ·  {toggle}")
+    // list, and not even that while files failed: what failed already leads there.
+    let line = match state.finished() {
+        Some(finished) if state.selected.is_none() => {
+            (finished.failed == 0 || state.drawer_open).then(|| toggle.to_owned())
+        }
+        _ => Some(format!("{summary}  ·  {toggle}")),
     };
-    row![
-        keyed(
+    let line: Element<'_, Message> = match line {
+        Some(line) => keyed(
             Scope::Main,
             button(text(line).size(size::CAPTION))
                 .style(style::quiet_button)
                 .width(Fill)
-                .on_press(Message::ToggleDrawer)
+                .on_press(Message::ToggleDrawer),
         ),
-        add,
-    ]
-    .spacing(space::S)
-    .align_y(Center)
-    .into()
+        None => Space::new().width(Fill).into(),
+    };
+    row![line, add].spacing(space::S).align_y(Center).into()
 }
 
 fn drawer(state: &Gracil) -> Element<'_, Message> {

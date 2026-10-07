@@ -93,8 +93,8 @@ pictures) below.
 - **View files**, under it, shows every video and image you added and how each one went: how much
   smaller it became, where it went (for example **−35% · Replaced**), or why it couldn't be
   compressed. With two or more done, a line at its top adds them all up, for example **In all:
-  3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says it in a few words, for
-  example **12 files left · 1.2 GB smaller · View files**. The count goes down as each file
+  3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says how many are left, for
+  example **12 files left · View files**. The count goes down as each file
   finishes, until none are left. Only what is still on the list counts:
   taking files off it, or **Clear**, takes them out of the total.
   The list unfolds gently from under that line and folds away when closed, quickly even with
@@ -105,15 +105,16 @@ pictures) below.
   whenever you are looking at another file while Gracil is working or a result waits for you.
 - When the whole list is done (nothing left waiting, being compressed or waiting for your choice),
   the window says so clearly: the ring stays full, its middle fills with green and a check mark
-  draws itself, and just below, in large letters, how much room the list saved, for example
-  **130 MB smaller**. If nothing came out smaller, or files were left unfinished (by **Stop**, for
-  example), there is no check mark. When nothing came out smaller, the large line says
-  **Nothing to make smaller** (every file was already compressed) or **Nothing was compressed**
-  (something went wrong). Under it, a quiet line says how the list went, for example **22 files
-  compressed · 4 were already compressed**. Files that couldn't be compressed are counted apart,
-  with a **!**: click it and the list opens on the first of them, with what happened. Below that,
-  **Clear the list** takes you back to the empty window, ready for your next files. Pick a file in
-  **View files** to look at it; add more files and Gracil gets back to work.
+  draws itself, and just below, in large letters, how much room the list saved, for example **130 MB
+  smaller**. If nothing came out smaller, or files were left unfinished (by **Stop**, for example),
+  there is no check mark. When nothing came out smaller, the large line says **Nothing to make
+  smaller** (every file was already compressed) or **Nothing was compressed** (something went
+  wrong). Under it, a quiet line says how the list went, for example **22 files compressed · 4 were
+  already compressed**. Files that couldn't be compressed are counted apart, with a **!**: click it
+  and the list opens on the first of them, with what happened. Below that, **Clear the list** takes
+  you back to the empty window, ready for your next files. Pick a file in **View files** to look at
+  it (while files failed, the **!** is the way into the list); add more files and Gracil gets back
+  to work.
 - The **×** beside a file takes it off the list, and **Clear** empties the list. Neither touches
   your original.
 - You can always compress a video again, even one already on the list: if the list is done with
