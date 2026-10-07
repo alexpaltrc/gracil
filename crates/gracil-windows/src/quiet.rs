@@ -4,7 +4,6 @@
 //! on a drive.
 
 use std::mem;
-use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
 use std::time::Duration;
@@ -106,7 +105,7 @@ pub fn saving_energy() -> bool {
 
 /// Space free on the drive that holds `folder`, in bytes, if Windows says.
 pub fn free_space(folder: &Path) -> Option<u64> {
-    let wide: Vec<u16> = folder.as_os_str().encode_wide().chain([0]).collect();
+    let wide = crate::wide_path(folder);
     let mut free = 0_u64;
     // SAFETY: the path is a NUL-terminated UTF-16 buffer that outlives the call; the answer goes
     // in `free`, and the other two answers aren't wanted.

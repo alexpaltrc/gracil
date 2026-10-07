@@ -98,18 +98,23 @@ fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(iter::once(0)).collect()
 }
 
-/// A path as Windows expects it: UTF-16, NUL-terminated, with the long-path prefix when needed.
+/// A path as Windows expects it: UTF-16, NUL-terminated, with the long-path prefix when needed:
+/// `\\?\C:\…` on a drive, `\\?\UNC\server\share\…` on a network share.
 fn wide_path(path: &Path) -> Vec<u16> {
     const MAX_PATH: usize = 260;
     const VERBATIM: &str = r"\\?\";
+    const SHARE: &str = r"\\";
     let text = path.as_os_str();
-    let long = text.len() >= MAX_PATH
-        && path.is_absolute()
-        && !text.to_string_lossy().starts_with(VERBATIM);
-    let prefix = OsStr::new(if long { VERBATIM } else { "" });
-    prefix
+    let lossy = text.to_string_lossy();
+    let long = text.len() >= MAX_PATH && path.is_absolute() && !lossy.starts_with(VERBATIM);
+    let (prefix, skip) = match (long, lossy.starts_with(SHARE)) {
+        (false, _) => ("", 0),
+        (true, false) => (VERBATIM, 0),
+        (true, true) => (r"\\?\UNC\", SHARE.len()),
+    };
+    OsStr::new(prefix)
         .encode_wide()
-        .chain(text.encode_wide())
+        .chain(text.encode_wide().skip(skip))
         .chain(iter::once(0))
         .collect()
 }
@@ -172,5 +177,8 @@ mod tests {
         let starts = |path: &Path| String::from_utf16_lossy(&wide_path(path)).starts_with(r"\\?\");
         assert!(starts(&long));
         assert!(!starts(&short));
+        let share = PathBuf::from(format!(r"\\nas\videos\{}\Clip.mp4", "a".repeat(300)));
+        let wide = String::from_utf16_lossy(&wide_path(&share));
+        assert!(wide.starts_with(r"\\?\UNC\nas\videos\"));
     }
 }
