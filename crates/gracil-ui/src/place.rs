@@ -182,7 +182,8 @@ fn remove_dll_copies(copies: &Path) {
 
 /// This Gracil's `gracil.exe`, when it runs from a whole Gracil folder.
 fn whole_folder() -> Option<PathBuf> {
-    let program = std::env::current_exe().ok()?;
-    let whole = program.parent()?.join(r"ffmpeg\ffmpeg.exe").is_file();
-    whole.then_some(program)
+    let whole = gracil_core::toolchain::bundled_dir()?
+        .join("ffmpeg.exe")
+        .is_file();
+    whole.then(|| std::env::current_exe().ok()).flatten()
 }

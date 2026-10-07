@@ -220,6 +220,7 @@ fn replaced_times(metadata: &fs::Metadata) -> FileTimes {
 mod tests {
     use super::*;
     use crate::plan::output_extension;
+    use crate::testing::fresh_dir;
 
     #[test]
     fn places_copy_beside_source_without_overwriting() {
@@ -240,13 +241,6 @@ mod tests {
         assert_eq!(placed_content, b"compressed");
         assert_eq!(other, b"someone else's");
         assert!(!temp_left);
-    }
-
-    fn fresh_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("gracil-output-{name}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
     }
 
     /// Stands in for the Windows swap: parks the original at `backup`, moves the replacement in.

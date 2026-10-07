@@ -1041,8 +1041,7 @@ impl Gracil {
     /// Whether `job` is shown with the ring: while it is worked on, and, while paused, while it
     /// waits, so Resume is always at hand.
     pub fn shows_dial(&self, job: &Job) -> bool {
-        job.state.is_active()
-            || (self.paused && matches!(job.state, JobState::Pending | JobState::Prepared))
+        job.state.is_active() || (self.paused && job.state.is_waiting())
     }
 
     /// Files on the list that haven't started compressing yet, including those already got ready.
@@ -1072,19 +1071,15 @@ impl Gracil {
                 .map(|job| job.id)
         });
         for job in self.queue.jobs() {
-            match job.state {
-                JobState::Pending | JobState::Prepared => {
-                    summary.waiting_to_compress += 1;
-                    summary.next_to_compress.get_or_insert(job.id);
+            if job.state.is_waiting() {
+                summary.waiting_to_compress += 1;
+                summary.next_to_compress.get_or_insert(job.id);
+            } else if job.state.is_compressing() {
+                summary.compressing.push(job.id);
+                if job.kind == Kind::Video {
+                    video_compressing.get_or_insert(job.id);
                 }
-                JobState::Compressing | JobState::Paused | JobState::Finalizing => {
-                    summary.compressing.push(job.id);
-                    if job.kind == Kind::Video {
-                        video_compressing.get_or_insert(job.id);
-                    }
-                    compressing.get_or_insert(job.id);
-                }
-                _ => {}
+                compressing.get_or_insert(job.id);
             }
             if job.state.is_active() {
                 active.get_or_insert(job.id);
@@ -1576,14 +1571,8 @@ impl Gracil {
             return Task::none();
         };
         let engine = engine.clone();
-        let compressing = |state: JobState| {
-            matches!(
-                state,
-                JobState::Compressing | JobState::Paused | JobState::Finalizing
-            )
-        };
-        let getting_ready =
-            |state: JobState| matches!(state, JobState::Preparing | JobState::Prepared);
+        let compressing = JobState::is_compressing;
+        let getting_ready = JobState::is_getting_ready;
         let mut tasks = Vec::new();
 
         // Videos.

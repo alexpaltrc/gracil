@@ -276,7 +276,7 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
                 .into(),
             match job.state {
                 JobState::Compressing | JobState::Preparing => {
-                    Status::plain(percent(list.fraction))
+                    Status::plain(crate::text::progress(list.fraction))
                 }
                 _ => status(state, job),
             },
@@ -536,10 +536,6 @@ fn format_change(job: &Job, output: &OsStr) -> Option<String> {
 }
 
 /// How far along, in whole percent, rounded down: 100% only once it is truly done.
-fn percent(fraction: f64) -> String {
-    format!("{}%", (fraction.clamp(0.0, 1.0) * 100.0).floor())
-}
-
 fn caption(label: String) -> Element<'static, Message> {
     text(label)
         .size(size::CAPTION)
@@ -578,7 +574,7 @@ fn status(state: &Gracil, job: &Job) -> Status {
         },
         JobState::Preparing => Status::plain(state.text.getting_ready),
         JobState::Compressing => match job.fraction {
-            Some(fraction) => Status::plain(percent(fraction)),
+            Some(fraction) => Status::plain(crate::text::progress(fraction)),
             None => Status::plain(state.text.compressing),
         },
         JobState::Paused => Status::plain(state.text.paused),

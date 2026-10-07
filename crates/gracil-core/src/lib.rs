@@ -16,6 +16,8 @@ pub mod queue;
 pub mod search;
 pub mod share;
 pub mod standard;
+#[cfg(any(test, feature = "test-support"))]
+pub mod testing;
 pub mod toolchain;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

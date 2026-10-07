@@ -125,15 +125,9 @@ fn file() -> Option<PathBuf> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::*;
+    use gracil_core::testing::fresh_dir;
 
-    fn fresh_dir(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("gracil-unfinished-{name}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
+    use super::*;
 
     #[test]
     fn the_list_comes_back_with_its_choices() {

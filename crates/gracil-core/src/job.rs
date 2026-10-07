@@ -89,6 +89,21 @@ impl JobState {
         )
     }
 
+    /// The job hasn't started compressing yet, whether or not it was got ready.
+    pub fn is_waiting(self) -> bool {
+        matches!(self, Self::Pending | Self::Prepared)
+    }
+
+    /// The job is being got ready, or was and waits for its turn to compress.
+    pub fn is_getting_ready(self) -> bool {
+        matches!(self, Self::Preparing | Self::Prepared)
+    }
+
+    /// The job is compressing, including paused and putting its result in place.
+    pub fn is_compressing(self) -> bool {
+        matches!(self, Self::Compressing | Self::Paused | Self::Finalizing)
+    }
+
     /// The job will not change state again, unless a failed one is retried.
     pub fn is_finished(self) -> bool {
         matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
@@ -211,5 +226,19 @@ mod tests {
         for state in ALL_STATES.into_iter().filter(|s| s.is_finished()) {
             assert!(!state.is_active(), "{state:?}");
         }
+    }
+
+    #[test]
+    fn every_unfinished_state_is_waiting_getting_ready_or_compressing() {
+        for state in ALL_STATES.into_iter().filter(|s| !s.is_finished()) {
+            let kinds = [
+                state.is_waiting(),
+                state.is_getting_ready(),
+                state.is_compressing(),
+            ];
+            assert!(kinds.contains(&true), "{state:?}");
+            assert!(!(state.is_waiting() && state.is_compressing()), "{state:?}");
+        }
+        assert!(S::Prepared.is_waiting() && S::Prepared.is_getting_ready());
     }
 }

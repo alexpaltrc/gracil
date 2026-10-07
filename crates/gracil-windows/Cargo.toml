@@ -12,7 +12,7 @@ windows.workspace = true
 windows-sys.workspace = true
 
 [dev-dependencies]
-gracil-core.workspace = true
+gracil-core = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

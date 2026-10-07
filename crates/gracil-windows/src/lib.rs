@@ -126,15 +126,9 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use super::*;
+    use gracil_core::testing::fresh_dir;
 
-    fn fresh_dir(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("gracil-windows-{name}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
+    use super::*;
 
     #[test]
     fn replaces_contents_and_keeps_backup() {

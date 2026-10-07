@@ -10,6 +10,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::capabilities::{Capabilities, VideoEncoder};
+use crate::media;
 use crate::probe::{MediaInfo, Rate, Stream, StreamKind, file_url};
 use crate::share;
 use crate::standard;
@@ -19,10 +20,7 @@ use crate::standard;
 /// Extension for the compressed file: `mp4`, keeping the source's spelling when it already is
 /// one (so `Clip.MP4` stays `Clip.MP4` and is replaced in place rather than renamed).
 pub fn output_extension(source: &Path) -> OsString {
-    match source.extension() {
-        Some(ext) if ext.eq_ignore_ascii_case("mp4") => ext.to_owned(),
-        _ => "mp4".into(),
-    }
+    media::keep_spelling(source, &["mp4"], "mp4")
 }
 
 /// Audio MP4 holds as is; anything else is converted to AAC.

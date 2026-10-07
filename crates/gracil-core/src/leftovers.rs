@@ -240,19 +240,7 @@ fn open_exclusive(path: &Path, create: bool) -> io::Result<File> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn fresh_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "gracil-leftovers-{name}-{}-{:x}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
+    use crate::testing::fresh_dir;
 
     fn ledger(private: &Path) -> Ledger {
         Ledger::open(&ledgers_dir(private)).unwrap()

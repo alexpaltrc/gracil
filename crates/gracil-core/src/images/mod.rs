@@ -29,6 +29,7 @@ use tracing::{info, warn};
 use crate::compress::{Engine, Update, reserve_temp};
 use crate::encode::{EncodeOutcome, JobControl, run_ffmpeg, run_program};
 use crate::leftovers;
+use crate::media::{self, JPEG_EXTENSIONS};
 use crate::share;
 use crate::standard::WORTH_IT;
 use crate::toolchain::hidden_command;
@@ -59,13 +60,9 @@ pub enum Target {
 /// The extension the result gets: the source's own spelling when the format does not change
 /// (`Photo.JPEG` stays `Photo.JPEG`), otherwise `jpg` or `png`.
 pub fn output_extension(source: &Path, target: Target) -> OsString {
-    let (same, default) = match target {
-        Target::Jpeg => (&["jpg", "jpeg", "jpe", "jfif"][..], "jpg"),
-        Target::Png => (&["png"][..], "png"),
-    };
-    match source.extension() {
-        Some(ext) if same.iter().any(|s| ext.eq_ignore_ascii_case(s)) => ext.to_owned(),
-        _ => default.into(),
+    match target {
+        Target::Jpeg => media::keep_spelling(source, JPEG_EXTENSIONS, "jpg"),
+        Target::Png => media::keep_spelling(source, &["png"], "png"),
     }
 }
 

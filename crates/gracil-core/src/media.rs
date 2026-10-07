@@ -5,6 +5,7 @@
 //! decide without opening the file: the file picker's default filter, and File Explorer's menu,
 //! which has to answer at once (spec §59).
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 /// Extensions of common video files, lowercase and without the dot.
@@ -13,7 +14,11 @@ pub const VIDEO_EXTENSIONS: &[&str] = &[
     "mpeg",
 ];
 
-/// Extensions of the images Gracil compresses (ADR 0034), lowercase and without the dot.
+/// The ways a JPEG file's extension is spelled, lowercase and without the dot.
+pub const JPEG_EXTENSIONS: &[&str] = &["jpg", "jpeg", "jpe", "jfif"];
+
+/// Extensions of the images Gracil compresses (ADR 0034), lowercase and without the dot. It
+/// starts with [`JPEG_EXTENSIONS`].
 pub const IMAGE_EXTENSIONS: &[&str] = &[
     "jpg", "jpeg", "jpe", "jfif", "png", "heic", "heif", "avif", "webp", "tif", "tiff", "bmp",
 ];
@@ -121,6 +126,16 @@ fn walk(dir: &Path, wanted: &dyn Fn(&Path) -> bool, found: &mut dyn FnMut(Vec<Pa
     }
 }
 
+/// The extension a result in a format known by `same` gets: the source's own spelling when it
+/// already is one of them (so `Clip.MP4` stays `Clip.MP4` and replaces the original in place
+/// rather than being renamed), otherwise `default`.
+pub fn keep_spelling(source: &Path, same: &[&str], default: &str) -> OsString {
+    match source.extension() {
+        Some(ext) if same.iter().any(|s| ext.eq_ignore_ascii_case(s)) => ext.to_owned(),
+        _ => default.into(),
+    }
+}
+
 fn has_extension(path: &Path, known: &[&str]) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
@@ -151,6 +166,11 @@ mod tests {
         for name in ["d.mov", "e", "f.txt"] {
             assert_eq!(kind_of(Path::new(name)), Kind::Video, "{name}");
         }
+    }
+
+    #[test]
+    fn every_jpeg_spelling_is_an_image() {
+        assert_eq!(IMAGE_EXTENSIONS[..JPEG_EXTENSIONS.len()], *JPEG_EXTENSIONS);
     }
 
     #[test]

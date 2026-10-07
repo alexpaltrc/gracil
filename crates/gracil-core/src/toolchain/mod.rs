@@ -122,6 +122,12 @@ pub fn own_folder() -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
+/// Where the FFmpeg that comes with Gracil is kept: the `ffmpeg` folder beside the running
+/// executable.
+pub fn bundled_dir() -> Option<PathBuf> {
+    own_folder().map(|folder| folder.join("ffmpeg"))
+}
+
 /// Whether Gracil can keep files in `dir`, creating it if needed.
 fn writable(dir: &Path) -> bool {
     let probe = dir.join(format!(".write-test-{}", std::process::id()));
@@ -133,8 +139,7 @@ fn writable(dir: &Path) -> bool {
 /// A usable FFmpeg: the copy that comes with Gracil, then one installed on the computer. Gracil
 /// never downloads one.
 pub fn find() -> Option<Resolved> {
-    let bundled =
-        own_folder().and_then(|folder| Toolchain::in_dir(&folder.join("ffmpeg"), Origin::Bundled));
+    let bundled = bundled_dir().and_then(|dir| Toolchain::in_dir(&dir, Origin::Bundled));
     let system = std::env::var_os("PATH")
         .into_iter()
         .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>())

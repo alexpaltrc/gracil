@@ -373,7 +373,7 @@ static ENGLISH: Text = Text {
     in_line: |_, written| format!("{written} more waiting"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
-        TrayState::Processing(done) => format!("Gracil · compressing {}%", percent(done)),
+        TrayState::Processing(done) => format!("Gracil · compressing {}", progress(done.into())),
         TrayState::Paused => "Gracil · paused".to_owned(),
         TrayState::Error => "Gracil · something needs your attention".to_owned(),
     },
@@ -522,7 +522,7 @@ static SPANISH: Text = Text {
     },
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
-        TrayState::Processing(done) => format!("Gracil · comprimiendo {}%", percent(done)),
+        TrayState::Processing(done) => format!("Gracil · comprimiendo {}", progress(done.into())),
         TrayState::Paused => "Gracil · en pausa".to_owned(),
         TrayState::Error => "Gracil · algo necesita tu atención".to_owned(),
     },
@@ -589,9 +589,10 @@ fn rounded_percent(share: f64) -> u32 {
     (share * 100.0).round() as u32
 }
 
-/// A share from 0 to 1 as a whole percentage, never above 100.
-fn percent(share: f32) -> u32 {
-    (share.clamp(0.0, 1.0) * 100.0).floor() as u32
+/// How far the work has gone, from 0 to 1, as a whole percentage: `42%`. It rounds down, so
+/// 100% only shows once the work is done.
+pub fn progress(share: f64) -> String {
+    format!("{}%", (share.clamp(0.0, 1.0) * 100.0).floor())
 }
 
 #[cfg(test)]
