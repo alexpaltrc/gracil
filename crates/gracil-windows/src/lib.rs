@@ -49,8 +49,11 @@ use std::ptr;
 
 use windows_sys::Win32::Globalization::GetUserDefaultUILanguage;
 use windows_sys::Win32::Storage::FileSystem::{
+    FILE_ATTRIBUTE_ARCHIVE, FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_NOT_CONTENT_INDEXED,
+    FILE_ATTRIBUTE_OFFLINE, FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_SYSTEM,
+    FILE_ATTRIBUTE_TEMPORARY, FILE_ATTRIBUTE_UNPINNED, GetFileAttributesW, INVALID_FILE_ATTRIBUTES,
     REPLACEFILE_IGNORE_ACL_ERRORS, REPLACEFILE_IGNORE_MERGE_ERRORS, REPLACEFILE_WRITE_THROUGH,
-    ReplaceFileW,
+    ReplaceFileW, SetFileAttributesW,
 };
 
 /// Puts `replacement` in place of `original` in one step with `ReplaceFileW` (spec §39).
@@ -80,6 +83,38 @@ pub fn replace_file(original: &Path, replacement: &Path, backup: &Path) -> io::R
         )
     };
     if replaced == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// Lets a cloud drive (OneDrive and the like) free up `path` again, as "Free up space" does, once
+/// Gracil is done with a file that was kept only online before (ADR 0064). Best effort: nothing
+/// else about the file changes, and its read-only mark is never touched.
+pub fn unpin(path: &Path) -> io::Result<()> {
+    // The attributes `SetFileAttributesW` accepts, besides the two pin marks.
+    const SETTABLE: u32 = FILE_ATTRIBUTE_READONLY
+        | FILE_ATTRIBUTE_HIDDEN
+        | FILE_ATTRIBUTE_SYSTEM
+        | FILE_ATTRIBUTE_ARCHIVE
+        | FILE_ATTRIBUTE_TEMPORARY
+        | FILE_ATTRIBUTE_OFFLINE
+        | FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
+    let wide = wide_path(path);
+    // SAFETY: the name is a NUL-terminated UTF-16 buffer that outlives the call.
+    #[allow(unsafe_code)]
+    let now = unsafe { GetFileAttributesW(wide.as_ptr()) };
+    if now == INVALID_FILE_ATTRIBUTES {
+        return Err(io::Error::last_os_error());
+    }
+    let wanted = (now & SETTABLE) | FILE_ATTRIBUTE_UNPINNED;
+    if wanted == now {
+        return Ok(());
+    }
+    // SAFETY: as above; the attributes are ones the call accepts.
+    #[allow(unsafe_code)]
+    let set = unsafe { SetFileAttributesW(wide.as_ptr(), wanted) };
+    if set == 0 {
         return Err(io::Error::last_os_error());
     }
     Ok(())

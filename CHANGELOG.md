@@ -213,3 +213,24 @@ with it.
 - Gracil comes with FFmpeg, the free tool it uses to compress video, so there is nothing else to
   download. If that part of Gracil ever goes missing, files say **Can't start** with a "!"
   explaining it: download Gracil again from where you got it and it works as before.
+- If a file changes while Gracil compresses it, Gracil leaves the file as it is now and lets the
+  compressed version go, with a "!" saying so. Add it again to compress the new version.
+- A read-only file is never replaced, and Gracil never takes the mark off: **Replace** is turned
+  off for it, with a "!" saying why, and **Save copy** still works.
+- Gracil checks that it can save files in a folder before compressing, so a folder that doesn't
+  take new files is found out at once, not after the whole compression.
+- If FFmpeg stops answering, for example on a damaged file or a stalled network drive, Gracil
+  stops it after a few minutes and tries another way, instead of waiting forever.
+- Finished files are put in place one at a time, in the order you chose them, and files you let
+  go are deleted in the background, so the window never waits on a slow drive.
+- Folders bring in only your own files: hidden and system files, the Recycle Bin and the extra
+  files a Mac leaves on USB drives are left out.
+- A file kept only online by OneDrive or a similar drive needs room for its download too, and
+  once Gracil is done with it, the cloud drive may free up that room again.
+- Shutting down, restarting or signing out of Windows is never held up by Gracil, and the files
+  left unfinished are remembered for next time.
+- Opened straight from inside its zip, Gracil asks you to extract it to a folder first, instead
+  of saying its video tool is missing.
+- Files with very long names compress and save like any other, even on older USB drives.
+- Gracil's diary of what it did stops growing at about 20 MB a day.
+- Images waiting their turn never crowd your computer's memory.

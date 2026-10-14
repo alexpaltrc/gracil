@@ -114,8 +114,16 @@ impl Gracil {
             tasks.push(self.start_compressing(&engine, id));
             images += 1;
         }
-        // Reading is mostly waiting on a network or cloud drive, so a few more are read ahead.
+        // Reading is mostly waiting on a network or cloud drive, so a few more are read ahead,
+        // as long as the images read and waiting their turn hold no more than a quarter of the
+        // memory images may take (ADR 0064). How big the next one is isn't known until it is
+        // read, so the last one read ahead can go past that a little.
+        let read_ahead = room.memory_for_images() / 4;
         while self.queue.count(Kind::Image, getting_ready) < at_once + pace::READ_AHEAD {
+            let waiting: u64 = self.prepared.values().map(work::Prepared::bytes).sum();
+            if waiting > read_ahead {
+                break;
+            }
             let Some(id) = self.queue.start_preparing(Kind::Image).map(|job| job.id) else {
                 break;
             };
@@ -152,8 +160,9 @@ impl Gracil {
         if !self.running.contains_key(&id) {
             // Stopped already (ADR 0044): a result made meanwhile is deleted, away from the
             // window, since it may be on a slow drive.
-            if let Report::Done(Outcome::Ready { temp, .. }) = report {
-                std::thread::spawn(move || work::discard(&temp));
+            if let Report::Done(Outcome::Ready { temp, original, .. }) = report {
+                let source = self.queue.get(id).map(|job| job.path.clone());
+                work::discard_later(temp, source, Some(original));
             }
             return Task::none();
         }

@@ -17,7 +17,7 @@ mod score;
 
 use std::ffi::OsString;
 use std::fs;
-use std::io::{self, Cursor};
+use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread;
@@ -173,6 +173,11 @@ impl PreparedImage {
     pub fn pixels(&self) -> Option<u64> {
         self.pixels
     }
+
+    /// How many bytes of the file are held in memory, waiting to be compressed.
+    pub fn bytes(&self) -> u64 {
+        self.data.len() as u64
+    }
 }
 
 /// Compresses the image at `source` into a temporary file next to it. The source is never touched.
@@ -192,13 +197,28 @@ pub fn prepare(source: &Path) -> Result<PreparedImage, ImageError> {
     if crate::media::is_refused_image(source) {
         return Err(ImageError::NotAccepted);
     }
-    let data = fs::read(source).map_err(|e| ImageError::Unreadable(e.to_string()))?;
+    let data = read_whole(source)?;
     let pixels = ImageReader::new(Cursor::new(&data))
         .with_guessed_format()
         .ok()
         .and_then(|reader| reader.into_dimensions().ok())
         .map(|(width, height)| u64::from(width) * u64::from(height));
     Ok(PreparedImage { data, pixels })
+}
+
+/// Reads all of `source`, with the memory for it asked for first, so a file too large for what is
+/// free fails quietly with [`ImageError::TooLarge`] instead of ending Gracil (ADR 0064).
+fn read_whole(source: &Path) -> Result<Vec<u8>, ImageError> {
+    let unreadable = |error: io::Error| ImageError::Unreadable(error.to_string());
+    let mut file = fs::File::open(source).map_err(unreadable)?;
+    let len = file.metadata().map_err(unreadable)?.len();
+    let mut data = Vec::new();
+    reserve(
+        &mut data,
+        usize::try_from(len).map_err(|_| ImageError::TooLarge)?,
+    )?;
+    file.read_to_end(&mut data).map_err(unreadable)?;
+    Ok(data)
 }
 
 /// The second stage: compresses an image [`prepare`] read.
@@ -496,6 +516,9 @@ impl Job<'_> {
                 warn!(%error, %log, "FFmpeg could not read the image");
                 return Err(ImageError::Unreadable(error));
             }
+            EncodeOutcome::Stalled => {
+                return Err(ImageError::Failed("FFmpeg stopped answering".into()));
+            }
         }
         Ok(fs::read(&output)?)
     }
@@ -524,6 +547,9 @@ impl Job<'_> {
             EncodeOutcome::Failed { error, .. } => {
                 warn!(%error, %log, "jpegli failed");
                 return Err(ImageError::Failed(error));
+            }
+            EncodeOutcome::Stalled => {
+                return Err(ImageError::Failed("jpegli stopped answering".into()));
             }
         }
         let encoded = fs::read(&output)?;
@@ -791,10 +817,10 @@ impl Scratch {
         static COUNTER: AtomicU32 = AtomicU32::new(0);
         let id = COUNTER.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
-            "gracil-image-{:x}-{id:x}-{name}",
-            std::process::id()
+            "gracil-image-{}-{id:x}-{name}",
+            leftovers::run_tag()
         ));
-        leftovers::record_temp(&path);
+        leftovers::record_scratch(&path);
         self.files.push(path.clone());
         Ok(path)
     }

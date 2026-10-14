@@ -1,13 +1,13 @@
 //! Inspecting a video with FFprobe. Only the few facts Gracil decides on are kept.
 
 use std::collections::BTreeMap;
-use std::io;
+use std::ffi::OsString;
 use std::path::Path;
-use std::process::Stdio;
 use std::time::Duration;
 
 use serde::Deserialize;
 
+use crate::encode::{self, EncodeOutcome, JobControl};
 use crate::toolchain::Toolchain;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -84,36 +84,49 @@ impl MediaInfo {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProbeError {
-    #[error("could not run FFprobe")]
-    Spawn(#[from] io::Error),
     #[error("FFprobe could not read the file: {0}")]
     Unreadable(String),
     #[error("FFprobe returned unexpected output")]
     Parse(#[from] serde_json::Error),
+    #[error("cancelled")]
+    Cancelled,
 }
 
 pub fn probe(toolchain: &Toolchain, path: &Path) -> Result<MediaInfo, ProbeError> {
-    let output = toolchain
-        .ffprobe()
-        .args([
-            "-v",
-            "error",
-            "-print_format",
-            "json",
-            "-show_format",
-            "-show_streams",
-        ])
-        // `file:` stops FFprobe from treating a name like `http:...` or `pipe:` as a protocol.
-        .arg(file_url(path))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
-    if !output.status.success() {
-        return Err(ProbeError::Unreadable(
-            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-        ));
+    probe_under(toolchain, path, &JobControl::default())
+}
+
+/// [`probe`] under `control`, like any other tool: it can be paused and cancelled, and it is
+/// stopped if it goes silent (ADR 0064).
+pub fn probe_under(
+    toolchain: &Toolchain,
+    path: &Path,
+    control: &JobControl,
+) -> Result<MediaInfo, ProbeError> {
+    let args = [
+        "-v",
+        "error",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+    ];
+    let mut args: Vec<OsString> = args.map(OsString::from).to_vec();
+    // `file:` stops FFprobe from treating a name like `http:...` or `pipe:` as a protocol.
+    args.push(file_url(path));
+    let mut json = String::new();
+    let (outcome, _) = encode::run_program(toolchain.ffprobe(), args, control, &mut |line| {
+        json.push_str(line);
+        json.push('\n');
+    });
+    match outcome {
+        EncodeOutcome::Finished => parse(json.as_bytes()),
+        EncodeOutcome::Cancelled => Err(ProbeError::Cancelled),
+        EncodeOutcome::Failed { error, .. } => Err(ProbeError::Unreadable(error)),
+        EncodeOutcome::Stalled => Err(ProbeError::Unreadable(
+            "FFprobe stopped answering".to_owned(),
+        )),
     }
-    parse(&output.stdout)
 }
 
 /// Prefixes `file:` so FFmpeg tools never interpret a path as a protocol or device.

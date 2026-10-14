@@ -29,7 +29,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     PostMessageW, RegisterClassExW, RegisterWindowMessageW, SM_CXSMICON,
     SPI_SETCLIENTAREAANIMATION, SPI_SETHIGHCONTRAST, SetForegroundWindow, SetMenuDefaultItem,
     TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP, WM_CONTEXTMENU,
-    WM_NULL, WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPED,
+    WM_ENDSESSION, WM_NULL, WM_QUERYENDSESSION, WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPED,
 };
 
 use crate::wide;
@@ -69,6 +69,9 @@ pub enum TrayEvent {
     /// Windows changed how apps should look or move: light or dark, the accent color, a contrast
     /// theme, or animation effects.
     Colors,
+    /// Windows is shutting down, restarting or signing out (ADR 0064). Windows waits only a few
+    /// seconds once this is handed over, so whatever must be kept is kept at once.
+    EndSession,
 }
 
 /// The words of the icon's menu, in the interface's language.
@@ -370,6 +373,14 @@ unsafe extern "system" fn window_procedure(
             }
             refresh(window);
             notify(TrayEvent::Colors);
+            0
+        }
+        // Gracil never holds up shutting down or signing out (ADR 0064).
+        WM_QUERYENDSESSION => 1,
+        WM_ENDSESSION => {
+            if wparam != 0 {
+                notify(TrayEvent::EndSession);
+            }
             0
         }
         _ if message == TASKBAR_CREATED.load(Ordering::Relaxed) && message != 0 => {

@@ -356,13 +356,20 @@ impl<'a> Search<'a> {
         // A sample can fail because the computer slept under it; it is tried again, once
         // (ADR 0063).
         let mut tried_again = false;
+        // Measuring above 4K can go much longer between words on a slow computer (ADR 0064).
+        let patience = if standard::measured_size(self.picture).is_some() {
+            encode::PATIENCE_ABOVE_4K
+        } else {
+            encode::PATIENCE
+        };
         loop {
             let sleeps = share::sleeps();
             let mut frame_sizes = Vec::with_capacity(256);
-            let (outcome, log) = encode::run_ffmpeg(
+            let (outcome, log) = encode::run_ffmpeg_patient(
                 self.toolchain,
                 self.sample_args(start, level),
                 self.control,
+                patience,
                 &mut |line| frame_sizes.extend(frame_size(line)),
             );
             match outcome {
@@ -377,11 +384,15 @@ impl<'a> Search<'a> {
                     info!("the computer slept during a sample; measuring it again");
                     tried_again = true;
                 }
-                // GPU decoding may not take this video; the samples then decode on the CPU.
-                EncodeOutcome::Failed { .. } if self.attempt.hw_decode => {
+                // GPU decoding may not take this video, or may hang on it; the samples then
+                // decode on the CPU.
+                EncodeOutcome::Failed { .. } | EncodeOutcome::Stalled if self.attempt.hw_decode => {
                     self.attempt.hw_decode = false;
                 }
                 EncodeOutcome::Failed { error, .. } => return Err(Halt::Failed(error)),
+                EncodeOutcome::Stalled => {
+                    return Err(Halt::Failed("FFmpeg stopped answering".to_owned()));
+                }
             }
         }
     }

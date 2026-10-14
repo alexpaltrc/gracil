@@ -269,11 +269,9 @@ impl Gracil {
             prepare_to_delete: text.prepare_to_delete.to_owned(),
             exit: text.exit.to_owned(),
         };
-        let tray = Tray::start(menu, &text.tray_tip(TrayState::Idle), |event| {
-            outside::send(Outside::Tray(event));
-        })
-        .inspect_err(|error| warn!(%error, "no tray icon; closing the window will exit"))
-        .ok();
+        let tray = Tray::start(menu, &text.tray_tip(TrayState::Idle), outside::from_tray)
+            .inspect_err(|error| warn!(%error, "no tray icon; closing the window will exit"))
+            .ok();
         if let Some(tray) = &tray {
             tray.check_explorer_mini_window(settings.explorer_mini_window);
             tray.check_explorer_menu(settings.explorer_menu);
@@ -677,6 +675,15 @@ impl Gracil {
                 self.follow_windows_look(Instant::now());
                 Task::none()
             }
+            // Windows shuts down or signs out: the list of unfinished files is kept and the work
+            // stops, at once and without asking (ADR 0064). Never held up.
+            Message::Outside(Outside::EndSession(done)) => {
+                info!("Windows is shutting down");
+                self.exit_now();
+                let _ = done.send(());
+                Task::none()
+            }
+            Message::Outside(Outside::Tray(TrayEvent::EndSession)) => Task::none(),
         }
     }
 

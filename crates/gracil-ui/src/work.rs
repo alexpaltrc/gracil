@@ -4,9 +4,11 @@
 use std::ffi::OsString;
 use std::fs;
 use std::io;
+use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
+use std::time::{Duration, SystemTime};
 
 use gracil_core::compress::{self, CompressError, Compressed, Engine, PreparedVideo};
 use gracil_core::encode::JobControl;
@@ -53,6 +55,11 @@ pub enum Failure {
     NoRoom,
     /// An image too large for this computer's memory (ADR 0049).
     TooLarge,
+    /// The original changed while it was being compressed, so the result was let go (ADR 0064).
+    Changed,
+    /// The original is marked read-only, so it can't be replaced; a copy still can be saved (ADR
+    /// 0064).
+    ReadOnly,
 }
 
 /// What the user chooses to do with a finished result (spec §37.1).
@@ -90,6 +97,53 @@ impl std::ops::Add for Sizes {
     }
 }
 
+/// What the original was like when Gracil started on it, to tell whether it changed meanwhile
+/// (ADR 0064).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Snapshot {
+    len: u64,
+    modified: Option<SystemTime>,
+    /// Kept only online by a cloud drive before Gracil read it, so it is let go back there once
+    /// Gracil is done with it.
+    online_only: bool,
+}
+
+impl Snapshot {
+    /// How `source` is now, if it can be told.
+    fn of(source: &Path) -> Option<Self> {
+        let metadata = fs::metadata(source).ok()?;
+        Some(Self {
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+            online_only: online_only(&metadata),
+        })
+    }
+
+    /// Whether `source` is still the file this snapshot was taken of: same size, same time it
+    /// was last changed.
+    fn unchanged(self, source: &Path) -> bool {
+        Self::of(source).is_some_and(|now| now.len == self.len && now.modified == self.modified)
+    }
+}
+
+/// Whether a cloud drive keeps the file only online, downloading it when it is read.
+fn online_only(metadata: &fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const OFFLINE: u32 = 0x1000;
+    const RECALL_ON_OPEN: u32 = 0x4_0000;
+    const RECALL_ON_DATA_ACCESS: u32 = 0x40_0000;
+    metadata.file_attributes() & (OFFLINE | RECALL_ON_OPEN | RECALL_ON_DATA_ACCESS) != 0
+}
+
+/// Lets the cloud drive free up `path` again if it was kept only online, best effort.
+fn give_back(path: &Path, original: Snapshot) {
+    if original.online_only
+        && let Err(error) = gracil_windows::unpin(path)
+    {
+        warn!(%error, "could not let the cloud drive free up a file again");
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Outcome {
     /// Compressed and validated, waiting in `temp` for the user to choose.
@@ -98,6 +152,8 @@ pub enum Outcome {
         /// The extension the result is saved with: `mp4`, or `jpg` or `png` for an image.
         extension: OsString,
         sizes: Sizes,
+        /// The original as it was when Gracil started on it.
+        original: Snapshot,
         placing: bool,
         /// Why the last attempt to place it failed, if it did.
         problem: Option<Failure>,
@@ -135,9 +191,17 @@ pub enum Report {
     Done(Outcome),
 }
 
+/// What background work reports when it stops unexpectedly.
+fn report_failure() -> Report {
+    Report::Done(Outcome::Failed(Failure::CouldNotCompress))
+}
+
 /// A file got ready, handed from the thread that got it ready to the one that compresses it.
 #[derive(Debug, Clone)]
-pub struct Prepared(Arc<Mutex<Option<Stage>>>);
+pub struct Prepared {
+    stage: Arc<Mutex<Option<Stage>>>,
+    original: Snapshot,
+}
 
 #[derive(Debug)]
 enum Stage {
@@ -146,46 +210,71 @@ enum Stage {
 }
 
 impl Prepared {
-    fn new(stage: Stage) -> Self {
-        Self(Arc::new(Mutex::new(Some(stage))))
+    fn new(stage: Stage, original: Snapshot) -> Self {
+        Self {
+            stage: Arc::new(Mutex::new(Some(stage))),
+            original,
+        }
     }
 
     /// For an image, how many pixels it has, when its header told.
     pub fn pixels(&self) -> Option<u64> {
-        match self.0.lock().ok()?.as_ref()? {
+        match self.stage.lock().ok()?.as_ref()? {
             Stage::Image(image) => image.pixels(),
             Stage::Video(_) => None,
         }
     }
 
+    /// For an image, how many bytes of it are held in memory, waiting their turn.
+    pub fn bytes(&self) -> u64 {
+        let Ok(stage) = self.stage.lock() else {
+            return 0;
+        };
+        match stage.as_ref() {
+            Some(Stage::Image(image)) => image.bytes(),
+            Some(Stage::Video(_)) | None => 0,
+        }
+    }
+
     fn take(&self) -> Option<Stage> {
-        self.0.lock().ok()?.take()
+        self.stage.lock().ok()?.take()
     }
 }
 
 /// Finds FFmpeg and detects the hardware.
 pub fn start_engine() -> Task<Option<Arc<Engine>>> {
-    on_thread(|mut sender: Sender<Option<Arc<Engine>>>| {
-        if let Some(dir) = toolchain::default_private_dir() {
-            tidy_leftovers(&dir);
-        }
-        let engine = Engine::start();
-        if engine.is_none() {
-            error!("no usable FFmpeg; Gracil's ffmpeg folder is missing or broken");
-        }
-        let _ = block_on(sender.send(engine.map(Arc::new)));
-    })
+    on_thread(
+        || None,
+        |mut sender: Sender<Option<Arc<Engine>>>| {
+            if let Some(dir) = toolchain::default_private_dir() {
+                tidy_leftovers(dir);
+            }
+            let engine = Engine::start();
+            if engine.is_none() {
+                error!("no usable FFmpeg; Gracil's ffmpeg folder is missing or broken");
+            }
+            let _ = block_on(sender.send(engine.map(Arc::new)));
+        },
+    )
 }
 
-/// Starts noting this run's temporary files, and settles those an earlier run left behind
-/// (ADR 0017). Runs before any compression can start.
-fn tidy_leftovers(private_dir: &Path) {
-    if let Err(e) = leftovers::track(private_dir) {
+/// Starts noting this run's temporary files before any compression can start, then settles
+/// those an earlier run left behind on a thread of its own, so a slow or unplugged drive never
+/// holds up the start (ADR 0017, ADR 0064).
+fn tidy_leftovers(private_dir: PathBuf) {
+    if let Err(e) = leftovers::track(&private_dir) {
         warn!(error = %e, "temporary files will not be tracked");
     }
-    let swept = leftovers::sweep(private_dir);
-    if swept != leftovers::Swept::default() {
-        info!(?swept, "files left by an earlier run");
+    let sweeping = thread::Builder::new()
+        .name("gracil-sweep".into())
+        .spawn(move || {
+            let swept = leftovers::sweep(&private_dir);
+            if swept != leftovers::Swept::default() {
+                info!(?swept, "files left by an earlier run");
+            }
+        });
+    if let Err(error) = sweeping {
+        warn!(%error, "files left by an earlier run stay until the next start");
     }
 }
 
@@ -201,35 +290,96 @@ pub enum Found {
 /// Looks through `paths` away from the window, which a slow folder (on a network or cloud drive)
 /// would otherwise freeze, handing over each folder's files as soon as they are known.
 pub fn gather(paths: Vec<PathBuf>, only: Option<Kind>) -> Task<Found> {
-    on_thread(move |mut sender: Sender<Found>| {
-        media::gather_each(paths, only, &mut |files| {
-            let _ = block_on(sender.send(Found::Files(files)));
-        });
-        let _ = block_on(sender.send(Found::Done));
-    })
+    on_thread(
+        || Found::Done,
+        move |mut sender: Sender<Found>| {
+            media::gather_each(paths, only, &mut |files| {
+                let _ = block_on(sender.send(Found::Files(files)));
+            });
+            let _ = block_on(sender.send(Found::Done));
+        },
+    )
 }
 
 /// Gets `source` ready, the first stage of compressing it (ADR 0040): for a video, the short test
 /// samples that choose its compression; for an image, reading it. Reports
 /// [`Report::Prepared`], or [`Report::Done`] when it can go no further.
+///
+/// First it makes sure the folder takes new files, once per folder, so nothing is compressed only
+/// to find it can't be saved; and a file kept only online needs room to be downloaded as well as
+/// room for its result (ADR 0064).
 pub fn prepare_file(engine: Arc<Engine>, source: PathBuf, control: JobControl) -> Task<Report> {
-    on_thread(move |mut sender: Sender<Report>| {
-        let report = match media::kind_of(&source) {
-            Kind::Video => match compress::prepare(&engine, &source, &control, &mut |_| {}) {
-                Ok(video) => Report::Prepared(Prepared::new(Stage::Video(video))),
-                Err(error) => Report::Done(video_outcome(Err(error), &source)),
-            },
-            Kind::Image => {
-                // Images are read in the background, below everything else (ADR 0063).
-                gracil_windows::work_in_background();
-                match images::prepare(&source) {
-                    Ok(image) => Report::Prepared(Prepared::new(Stage::Image(image))),
-                    Err(error) => Report::Done(image_outcome(Err(error), &source)),
-                }
-            }
-        };
+    on_thread(report_failure, move |mut sender: Sender<Report>| {
+        let report = prepare(&engine, &source, &control);
         let _ = block_on(sender.send(report));
     })
+}
+
+fn prepare(engine: &Engine, source: &Path, control: &JobControl) -> Report {
+    let Some(original) = Snapshot::of(source) else {
+        warn!("the file is no longer there");
+        return Report::Done(Outcome::Failed(Failure::Gone));
+    };
+    if !folder_takes_files(source) {
+        return Report::Done(Outcome::Failed(Failure::CouldNotSave));
+    }
+    // Held while it downloads, so files downloading at once onto the same drive each count the
+    // room the others take.
+    let download = if original.online_only {
+        match reserve_room(source, original.len, original.len) {
+            Some(room) => Some(room),
+            None => return Report::Done(Outcome::Failed(Failure::NoRoom)),
+        }
+    } else {
+        None
+    };
+    let report = match media::kind_of(source) {
+        Kind::Video => match compress::prepare(engine, source, control, &mut |_| {}) {
+            Ok(video) => Report::Prepared(Prepared::new(Stage::Video(video), original)),
+            Err(error) => Report::Done(video_outcome(Err(error), source, original)),
+        },
+        Kind::Image => {
+            // Images are read in the background, below everything else (ADR 0063).
+            gracil_windows::work_in_background();
+            match images::prepare(source) {
+                Ok(image) => Report::Prepared(Prepared::new(Stage::Image(image), original)),
+                Err(error) => Report::Done(image_outcome(Err(error), source, original)),
+            }
+        }
+    };
+    drop(download);
+    if matches!(report, Report::Done(_)) {
+        give_back(source, original);
+    }
+    report
+}
+
+/// Folders already found to take new files this run.
+static WRITABLE: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+/// Whether files can be saved beside `source`, tried once per folder (ADR 0064). Only a folder
+/// that took a file is remembered, so one that refused is tried again next time.
+fn folder_takes_files(source: &Path) -> bool {
+    let Some(folder) = source.parent() else {
+        return true;
+    };
+    let known = |writable: &Vec<PathBuf>| writable.iter().any(|known| known == folder);
+    if known(&WRITABLE.lock().unwrap_or_else(|p| p.into_inner())) {
+        return true;
+    }
+    match compress::can_write_beside(source) {
+        Ok(()) => {
+            let mut writable = WRITABLE.lock().unwrap_or_else(|p| p.into_inner());
+            if !known(&writable) {
+                writable.push(folder.to_path_buf());
+            }
+            true
+        }
+        Err(error) => {
+            warn!(%error, "the folder doesn't take new files");
+            false
+        }
+    }
 }
 
 /// Compresses a file [`prepare_file`] got ready, leaving the result beside it for the user to
@@ -240,22 +390,24 @@ pub fn compress_file(
     prepared: Prepared,
     control: JobControl,
 ) -> Task<Report> {
-    on_thread(move |mut sender: Sender<Report>| {
+    on_thread(report_failure, move |mut sender: Sender<Report>| {
         let mut progress = sender.clone();
         let mut on_update = |update: gracil_core::compress::Update| {
             // Progress is best effort: when the window is busy, a skipped update costs nothing.
             let _ = progress.try_send(Report::Progress(update.fraction));
         };
+        let original = prepared.original;
         let stage = prepared.take();
         // Held until the result is written, so files compressing at once onto the same drive
         // each count the room the others will take (ADR 0063).
-        let room = reserve_room(&source);
+        let room = reserve_room(&source, original.len, 0);
         let outcome = match stage {
             _ if room.is_none() => Outcome::Failed(Failure::NoRoom),
             Some(Stage::Image(image)) if too_large(&image) => Outcome::Failed(Failure::TooLarge),
             Some(Stage::Video(video)) => video_outcome(
                 compress::compress_prepared(&engine, &source, video, &control, &mut on_update),
                 &source,
+                original,
             ),
             Some(Stage::Image(image)) => {
                 // Images compress in the background, below everything else (ADR 0063).
@@ -263,11 +415,15 @@ pub fn compress_file(
                 image_outcome(
                     images::compress_prepared(&engine, &source, image, &control, &mut on_update),
                     &source,
+                    original,
                 )
             }
             None => Outcome::Failed(Failure::CouldNotCompress),
         };
         drop(room);
+        if !matches!(outcome, Outcome::Ready { .. }) {
+            give_back(&source, original);
+        }
         let _ = block_on(sender.send(Report::Done(outcome)));
     })
 }
@@ -295,11 +451,12 @@ impl Drop for Reservation {
     }
 }
 
-/// Keeps room on the drive holding `source` for its compressed version, which is never larger
-/// than the original, if the drive has that room and [`ROOM_TO_SPARE`] besides, after what the
-/// other files compressing onto it will take. A drive that doesn't say has room.
-fn reserve_room(source: &Path) -> Option<Reservation> {
-    let (Some(folder), Ok(metadata)) = (source.parent(), fs::metadata(source)) else {
+/// Keeps `need` bytes on the drive holding `source`, if the drive has that room, `later` bytes
+/// more for what comes after, and [`ROOM_TO_SPARE`] besides, after what the other files on it
+/// will take. A compressed version is never larger than the original, so the original's size is
+/// what it needs. A drive that doesn't say has room.
+fn reserve_room(source: &Path, need: u64, later: u64) -> Option<Reservation> {
+    let Some(folder) = source.parent() else {
         return Some(Reservation(None));
     };
     let Some(free) = gracil_windows::free_space(folder) else {
@@ -314,8 +471,8 @@ fn reserve_room(source: &Path) -> Option<Reservation> {
         .filter(|(other, _)| *other == drive)
         .map(|(_, bytes)| bytes)
         .sum();
-    let need = metadata.len();
-    if free.saturating_sub(taken) < need.saturating_add(ROOM_TO_SPARE) {
+    let wanted = need.saturating_add(later).saturating_add(ROOM_TO_SPARE);
+    if free.saturating_sub(taken) < wanted {
         warn!("the drive is too full to compress onto");
         return None;
     }
@@ -334,7 +491,11 @@ fn too_large(image: &PreparedImage) -> bool {
     large
 }
 
-fn video_outcome(result: Result<Compressed, CompressError>, source: &Path) -> Outcome {
+fn video_outcome(
+    result: Result<Compressed, CompressError>,
+    source: &Path,
+    original: Snapshot,
+) -> Outcome {
     match result {
         Ok(compressed) => {
             info!(?compressed.attempt, "compressed");
@@ -343,6 +504,7 @@ fn video_outcome(result: Result<Compressed, CompressError>, source: &Path) -> Ou
                 compressed.size,
                 output_extension(source),
                 source,
+                original,
             )
         }
         Err(CompressError::Cancelled) => Outcome::Cancelled,
@@ -368,13 +530,18 @@ fn video_outcome(result: Result<Compressed, CompressError>, source: &Path) -> Ou
     }
 }
 
-fn image_outcome(result: Result<images::CompressedImage, ImageError>, source: &Path) -> Outcome {
+fn image_outcome(
+    result: Result<images::CompressedImage, ImageError>,
+    source: &Path,
+    original: Snapshot,
+) -> Outcome {
     match result {
         Ok(compressed) => ready(
             compressed.temp,
             compressed.size,
             compressed.extension,
             source,
+            original,
         ),
         Err(ImageError::Cancelled) => Outcome::Cancelled,
         Err(ImageError::AsSmallAsItGets) => {
@@ -403,11 +570,28 @@ fn image_outcome(result: Result<images::CompressedImage, ImageError>, source: &P
     }
 }
 
-/// Keeps the result for the user, unless it is not smaller (spec §40.1).
-fn ready(temp: PathBuf, size: u64, extension: OsString, source: &Path) -> Outcome {
-    let original = fs::metadata(source).map_or(0, |metadata| metadata.len());
-    info!(original, compressed = size, "ready");
-    if size >= original {
+/// Keeps the result for the user, unless it is not smaller (spec §40.1), or the original is gone
+/// or changed while it was compressed (ADR 0064).
+fn ready(
+    temp: PathBuf,
+    size: u64,
+    extension: OsString,
+    source: &Path,
+    original: Snapshot,
+) -> Outcome {
+    let Ok(metadata) = fs::metadata(source) else {
+        warn!("the file is no longer there");
+        discard(&temp);
+        return Outcome::Failed(Failure::Gone);
+    };
+    if !original.unchanged(source) {
+        warn!("the file changed while it was compressed");
+        discard(&temp);
+        return Outcome::Failed(Failure::Changed);
+    }
+    let original_size = metadata.len();
+    info!(original = original_size, compressed = size, "ready");
+    if size >= original_size {
         discard(&temp);
         return Outcome::Failed(Failure::NotSmaller);
     }
@@ -415,9 +599,10 @@ fn ready(temp: PathBuf, size: u64, extension: OsString, source: &Path) -> Outcom
         temp,
         extension,
         sizes: Sizes {
-            original,
+            original: original_size,
             compressed: size,
         },
+        original,
         placing: false,
         problem: None,
     }
@@ -425,25 +610,78 @@ fn ready(temp: PathBuf, size: u64, extension: OsString, source: &Path) -> Outcom
 
 /// Puts a result in place of the original or beside it, saved with `extension`. Returns where it
 /// ended up.
+///
+/// Results are placed one after another, in the order chosen, by one worker that stays for the
+/// whole run (ADR 0064). An original that changed since it was compressed is left as it is and
+/// its result let go; a read-only original is never replaced, and its result stays for Save a
+/// copy.
 pub fn place(
     temp: PathBuf,
     source: PathBuf,
     extension: OsString,
+    original: Snapshot,
     choice: Choice,
 ) -> Task<Result<PathBuf, Failure>> {
-    on_thread(move |mut sender: Sender<Result<PathBuf, Failure>>| {
-        let placed = match choice {
-            Choice::Replace => {
-                replace_original(&temp, &source, &extension, gracil_windows::replace_file)
-            }
-            Choice::SaveCopy => save_as_new(&temp, &source, &extension),
-        }
-        .map_err(|e| {
-            warn!(error = %e, ?choice, "could not place result");
-            placing_failure(&e, &source)
-        });
+    let (mut sender, receiver) = mpsc::channel(1);
+    let errand = Box::new(move || {
+        let placed = place_now(&temp, &source, &extension, original, choice);
         let _ = block_on(sender.send(placed));
-    })
+    });
+    match PLACER.run(errand) {
+        Ok(()) => Task::stream(receiver),
+        Err(_) => {
+            error!("could not start putting results in place");
+            Task::done(Err(Failure::CouldNotPlace))
+        }
+    }
+}
+
+fn place_now(
+    temp: &Path,
+    source: &Path,
+    extension: &OsString,
+    original: Snapshot,
+    choice: Choice,
+) -> Result<PathBuf, Failure> {
+    if !source.exists() {
+        warn!("the file is no longer there");
+        return Err(Failure::Gone);
+    }
+    if !original.unchanged(source) {
+        warn!("the file changed after it was compressed");
+        discard(temp);
+        give_back(source, original);
+        return Err(Failure::Changed);
+    }
+    if choice == Choice::Replace && read_only(source) {
+        warn!("the file is read-only, so it isn't replaced");
+        return Err(Failure::ReadOnly);
+    }
+    let placed = match choice {
+        Choice::Replace => replace_original(temp, source, extension, gracil_windows::replace_file),
+        Choice::SaveCopy => save_as_new(temp, source, extension),
+    }
+    .map_err(|e| {
+        warn!(error = %e, ?choice, "could not place result");
+        placing_failure(&e, source)
+    });
+    if let Ok(path) = &placed {
+        // The original, or the file that took its place.
+        give_back(
+            if choice == Choice::Replace {
+                path
+            } else {
+                source
+            },
+            original,
+        );
+    }
+    placed
+}
+
+/// Whether `source` is marked read-only. Gracil never clears the mark.
+fn read_only(source: &Path) -> bool {
+    fs::metadata(source).is_ok_and(|metadata| metadata.permissions().readonly())
 }
 
 /// Why a result couldn't be put in place, in the user's terms.
@@ -451,6 +689,7 @@ fn placing_failure(error: &io::Error, source: &Path) -> Failure {
     // Windows' "being used by another process", "locked by another process", and ReplaceFile's
     // "couldn't remove the original", which is nearly always the same thing.
     const IN_USE: [i32; 3] = [32, 33, 1175];
+    const ACCESS_DENIED: i32 = 5;
     if error.kind() == io::ErrorKind::AlreadyExists {
         Failure::NameTaken
     } else if !source.exists() {
@@ -460,21 +699,120 @@ fn placing_failure(error: &io::Error, source: &Path) -> Failure {
         .is_some_and(|code| IN_USE.contains(&code))
     {
         Failure::InUse
+    } else if error.raw_os_error() == Some(ACCESS_DENIED) && read_only(source) {
+        Failure::ReadOnly
     } else {
         Failure::CouldNotPlace
     }
 }
 
-/// Deletes a result the user did not keep. The original is never involved.
+/// Deletes a result the user did not keep, here and now. The original is never involved.
 pub fn discard(temp: &Path) {
     if let Err(error) = fs::remove_file(temp) {
         warn!(%error, ?temp, "could not remove an unused result");
     }
 }
 
-/// Runs `work` on its own thread; whatever it sends becomes the task's output.
-fn on_thread<T: Send + 'static>(work: impl FnOnce(Sender<T>) + Send + 'static) -> Task<T> {
+/// Deletes a result nobody chose for away from the window, which a slow drive would otherwise
+/// freeze (ADR 0064), and lets the cloud drive free up its original again if it was kept only
+/// online. Deleting waits its turn behind the others; Gracil waits for them all on leaving.
+pub fn discard_later(temp: PathBuf, source: Option<PathBuf>, original: Option<Snapshot>) {
+    let errand: Errand = Box::new(move || {
+        discard(&temp);
+        if let (Some(source), Some(original)) = (source, original) {
+            give_back(&source, original);
+        }
+    });
+    if let Err(errand) = CLEANER.run(errand) {
+        errand();
+    }
+}
+
+/// Waits, at most `within`, for every result [`discard_later`] was given to be deleted.
+pub fn finish_discarding(within: Duration) {
+    let (done, finished) = std::sync::mpsc::channel();
+    let errand: Errand = Box::new(move || {
+        let _ = done.send(());
+    });
+    if CLEANER.run(errand).is_ok() {
+        let _ = finished.recv_timeout(within);
+    }
+}
+
+/// One piece of work for an [`Errands`] worker.
+type Errand = Box<dyn FnOnce() + Send>;
+
+/// One worker that stays for the whole run, doing its errands one after another, in the order
+/// they came.
+struct Errands {
+    name: &'static str,
+    line: OnceLock<Option<std::sync::mpsc::Sender<Errand>>>,
+}
+
+/// Puts results in place.
+static PLACER: Errands = Errands::new("gracil-placer");
+/// Deletes results nobody chose for.
+static CLEANER: Errands = Errands::new("gracil-cleaner");
+
+impl Errands {
+    const fn new(name: &'static str) -> Self {
+        Self {
+            name,
+            line: OnceLock::new(),
+        }
+    }
+
+    /// Hands `errand` to the worker, starting it the first time. Gives the errand back when there
+    /// is no worker to do it. An errand that fails unexpectedly is logged, and the next one goes
+    /// ahead.
+    fn run(&self, errand: Errand) -> Result<(), Errand> {
+        let name = self.name;
+        let line = self.line.get_or_init(|| {
+            let (sender, receiver) = std::sync::mpsc::channel::<Errand>();
+            let started = thread::Builder::new().name(name.into()).spawn(move || {
+                for errand in receiver {
+                    if panic::catch_unwind(AssertUnwindSafe(errand)).is_err() {
+                        error!(worker = name, "an errand stopped unexpectedly");
+                    }
+                }
+            });
+            match started {
+                Ok(_) => Some(sender),
+                Err(error) => {
+                    error!(%error, worker = name, "could not start a worker");
+                    None
+                }
+            }
+        });
+        match line {
+            Some(sender) => sender.send(errand).map_err(|unsent| unsent.0),
+            None => Err(errand),
+        }
+    }
+}
+
+/// Runs `work` on its own thread; whatever it sends becomes the task's output. If the thread
+/// can't start, or `work` stops unexpectedly, `fallback` is sent instead, so nothing is left
+/// waiting forever (ADR 0064).
+fn on_thread<T: Send + 'static>(
+    fallback: fn() -> T,
+    work: impl FnOnce(Sender<T>) + Send + 'static,
+) -> Task<T> {
     let (sender, receiver) = mpsc::channel(1);
-    thread::spawn(move || work(sender));
-    Task::stream(receiver)
+    let mut last_word = sender.clone();
+    let started = thread::Builder::new()
+        .name("gracil-work".into())
+        .spawn(move || {
+            if panic::catch_unwind(AssertUnwindSafe(|| work(sender))).is_err() {
+                error!("background work stopped unexpectedly");
+                let _ = block_on(last_word.send(fallback()));
+            }
+        });
+    match started {
+        Ok(_) => Task::stream(receiver),
+        Err(error) => {
+            error!(%error, "could not start background work");
+            Task::done(fallback())
+        }
+    }
 }

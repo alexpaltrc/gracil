@@ -557,9 +557,12 @@ fn exit_question(state: &Gracil) -> Element<'_, Message> {
 }
 
 /// Whether `choice` can be made now: not while a result is being put in place, and not Replace
-/// again once another file turned out to have the new name, since it would fail the same way.
+/// again once another file turned out to have the new name, or the original turned out to be
+/// read-only, since it would fail the same way.
 fn can_choose(enabled: bool, problem: Option<Failure>, choice: Choice) -> bool {
-    enabled && !(choice == Choice::Replace && problem == Some(Failure::NameTaken))
+    enabled
+        && !(choice == Choice::Replace
+            && matches!(problem, Some(Failure::NameTaken | Failure::ReadOnly)))
 }
 
 /// Replace and Save copy, the two things to do with a finished result (ADR 0009).
@@ -689,7 +692,11 @@ fn status(state: &Gracil, job: &Job) -> Status {
             EngineState::Ready(_) => Status::plain(state.text.waiting),
             EngineState::Unavailable => Status {
                 label: state.text.cannot_start.into(),
-                notice: Some(state.text.ffmpeg_missing),
+                notice: Some(if crate::place::inside_zip() {
+                    state.text.inside_zip
+                } else {
+                    state.text.ffmpeg_missing
+                }),
             },
         },
         JobState::Preparing => Status::plain(state.text.getting_ready),

@@ -18,7 +18,9 @@ install. Gracil comes as a zip; unpack it wherever you like, even on a USB drive
 `gracil.exe`. Everything it needs comes inside, and it keeps its settings and its diary in a `data`
 folder next to itself, and nowhere else, so they go wherever the folder goes. If Gracil is on a
 drive it can't write to, it still compresses, it just doesn't remember your settings. To remove
-Gracil, delete its folder (see [Questions and answers](faq.md)).
+Gracil, delete its folder (see [Questions and answers](faq.md)). If you open Gracil straight from
+inside its zip, without unpacking it, it says so and asks you to extract it to a folder first, and
+it leaves Windows as it is until you open it from there.
 
 ## English and Spanish
 
@@ -458,13 +460,29 @@ Gracil never writes over your video while it works.
 - If the compressed file isn't smaller than the original, Gracil doesn't keep it. It shows
   **Already compressed**, with no buttons, since there is nothing to choose, and says why just
   below.
+- If you (or another program) change a file while Gracil compresses it, Gracil notices before
+  putting anything in its place. It leaves your file as it is now, lets the compressed version go,
+  and says so with a "!". Add the file again to compress the new version.
+- A file marked read-only is never replaced, and Gracil never takes the mark off. **Replace** is
+  turned off for it, with a "!" saying why, and you can still **Save copy**.
+- Before compressing, Gracil makes sure it can save files in the folder, by making an empty file
+  there and removing it at once. If the folder doesn't take new files, Gracil says so straight
+  away instead of after the whole compression.
+- If FFmpeg stops answering (a damaged file, a network drive that stalled), Gracil waits five
+  minutes (ten for a check of a video larger than 4K), then stops it and tries the next way of
+  compressing. Time paused, resting or asleep doesn't count.
+- Results are put in place one at a time, in the order you chose them. Finished files you let go
+  (with **×**, **Clear**, or when **Undo** goes away) are deleted in the background, so the window
+  never waits on a slow drive.
+- Very long names still work: when a name is near Windows' limit, Gracil shortens the end of the
+  temporary, copy and backup names so they fit, never cutting a letter in two.
 
 ## Saving a copy
 
 When you choose **Save copy**, the compressed copy is saved next to it with
 `Gracil-` in front of the name: `Vacation.mp4` becomes `Gracil-Vacation.mp4`. If that name is
 already taken, Gracil uses `Gracil-Vacation (2).mp4`, and so on. Gracil never overwrites an
-existing file.
+existing file, even on older USB drives where Windows moves files differently.
 
 ## Only one Gracil
 
@@ -507,9 +525,15 @@ folder by folder, and compressing starts with the first ones found while Gracil 
 it finds the first, the window says **Looking through the folder…**, and after that the line with
 **View files** says **looking for more**. Looking only reads the names of the files. On a cloud
 drive, each file is still downloaded when its turn comes to be compressed, and the smaller version
-is uploaded when it is saved, so that part goes as fast as your connection. Each image is read from
-the drive only once, and a few are read ahead while others compress, so the waiting overlaps with
-the work.
+is uploaded when it is saved, so that part goes as fast as your connection. A file that was kept
+only online needs room on your drive for its download as well as for its smaller version, and once
+Gracil is done with it, the cloud drive may free up that room again, as **Free up space** does.
+Each image is read from the drive only once, and a few are read ahead while others compress, so
+the waiting overlaps with the work, but never so many that they crowd your computer's memory.
+
+A folder brings in only your own files: hidden and system files, the Recycle Bin, Windows'
+`System Volume Information` and the extra files a Mac leaves on USB drives (names starting with
+`._`, and `.Trashes`) are left out. A hidden file you add by itself is still taken.
 
 If Gracil is already running, the files join its list. If Gracil wasn't running, it starts for
 that, and when it worked without opening the big window, it closes by itself once the work is
@@ -588,6 +612,9 @@ is always finished first.
 When Gracil quits, finished files you didn't choose for are deleted; their originals stay as
 they were, and they are on the list to carry on with.
 
+Gracil never holds up Windows shutting down, restarting or signing out. When Windows ends, Gracil
+writes down the files that were left at once and stops its work, so you can carry on next time.
+
 ## Carrying on after closing
 
 If Gracil closes before its list is done, because you chose **Exit** while it worked, because
@@ -604,4 +631,5 @@ on your computer, in Gracil's `data` folder, and is gone once everything on it i
 
 Gracil keeps a simple diary of what it did, such as which way it compressed each video, so
 problems can be understood later. It stays on your computer, in Gracil's `data` folder, and only
-the last seven days are kept.
+the last seven days are kept. Each day's diary stops growing at about 20 MB: past that, one line
+says so, and only problems are written down, briefly.

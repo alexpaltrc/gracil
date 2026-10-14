@@ -3,13 +3,17 @@
 use std::ffi::OsString;
 use std::io::{self, BufRead, BufReader, Read};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use tracing::{debug, warn};
 
 use crate::plan::EncodePlan;
 use crate::progress::{Progress, ProgressParser};
+use crate::share;
 use crate::toolchain::Toolchain;
 
 /// Suspends (`true`) or resumes (`false`) a process by id. Provided by the Windows layer; a
@@ -90,10 +94,21 @@ pub enum EncodeOutcome {
         /// Whether any part of the video had been encoded before it failed.
         made_progress: bool,
     },
+    /// The tool went silent for longer than its patience while it was meant to be working, and
+    /// was stopped (ADR 0064). Treated like a failure of that attempt.
+    Stalled,
 }
 
 /// Bytes of FFmpeg's error output kept for the log.
 const ERROR_TAIL: usize = 4096;
+
+/// How long a tool may go without a word, while it is meant to be working, before it is taken as
+/// stuck and stopped (ADR 0064). FFmpeg reports progress about twice a second.
+pub(crate) const PATIENCE: Duration = Duration::from_secs(5 * 60);
+
+/// The patience for measuring the quality of a video above 4K, whose samples can go far longer
+/// between words on a slow computer.
+pub(crate) const PATIENCE_ABOVE_4K: Duration = Duration::from_secs(10 * 60);
 
 /// Runs `plan` to completion, calling `on_progress` after every progress block.
 pub fn run(
@@ -131,12 +146,35 @@ pub(crate) fn run_ffmpeg(
     run_program(toolchain.ffmpeg(), args, control, on_line)
 }
 
+/// [`run_ffmpeg`] with its own patience instead of [`PATIENCE`].
+pub(crate) fn run_ffmpeg_patient(
+    toolchain: &Toolchain,
+    args: Vec<OsString>,
+    control: &JobControl,
+    patience: Duration,
+    on_line: &mut dyn FnMut(&str),
+) -> (EncodeOutcome, String) {
+    run_program_patient(toolchain.ffmpeg(), args, control, patience, on_line)
+}
+
 /// Runs `command` with `args` under `control`, so another program (jpegli) can be paused, resumed
 /// and cancelled exactly like FFmpeg. Same reporting as [`run_ffmpeg`].
 pub(crate) fn run_program(
+    command: Command,
+    args: Vec<OsString>,
+    control: &JobControl,
+    on_line: &mut dyn FnMut(&str),
+) -> (EncodeOutcome, String) {
+    run_program_patient(command, args, control, PATIENCE, on_line)
+}
+
+/// [`run_program`], stopping the program if it says nothing for `patience` while it is meant to
+/// be working. Time paused, resting or asleep doesn't count.
+pub(crate) fn run_program_patient(
     mut command: Command,
     args: Vec<OsString>,
     control: &JobControl,
+    patience: Duration,
     on_line: &mut dyn FnMut(&str),
 ) -> (EncodeOutcome, String) {
     let failed = |error: String| {
@@ -185,11 +223,27 @@ pub(crate) fn run_program(
         slot.child = Some(child);
     }
 
+    // Anything the tool says, on either output, counts as a sign of life.
+    let watch = Arc::new(Watch::new());
+    let (finished, done) = mpsc::channel::<()>();
+    let watchdog = {
+        let (watch, control) = (Arc::clone(&watch), control.clone());
+        thread::Builder::new()
+            .name("gracil-watch".into())
+            .spawn(move || watch_over(&watch, &control, patience, &done))
+            .inspect_err(|error| warn!(%error, "could not watch over a tool"))
+            .ok()
+    };
+
     // Drained on its own thread so a chatty FFmpeg never blocks on a full pipe.
-    let stderr_reader = thread::spawn(move || tail(stderr, ERROR_TAIL));
+    let stderr_reader = {
+        let watch = Arc::clone(&watch);
+        thread::spawn(move || tail(stderr, ERROR_TAIL, &mut || watch.heard()))
+    };
 
     for line in BufReader::new(stdout).lines() {
         let Ok(line) = line else { break };
+        watch.heard();
         on_line(&line);
     }
 
@@ -200,9 +254,17 @@ pub(crate) fn run_program(
         (status, slot.cancelled)
     };
     let log = stderr_reader.join().unwrap_or_default();
+    drop(finished);
+    if let Some(watchdog) = watchdog {
+        let _ = watchdog.join();
+    }
 
     let outcome = match status {
         _ if cancelled => EncodeOutcome::Cancelled,
+        _ if watch.stalled.load(Ordering::Relaxed) => {
+            warn!(?patience, error = %log, "a tool stopped answering and was stopped");
+            EncodeOutcome::Stalled
+        }
         Some(Ok(status)) if status.success() => EncodeOutcome::Finished,
         Some(Ok(status)) => {
             warn!(%status, error = %log, "FFmpeg failed");
@@ -221,14 +283,75 @@ pub(crate) fn run_program(
     (outcome, log)
 }
 
-/// Reads `reader` to the end and returns its last `limit` bytes as text.
-fn tail(mut reader: impl Read, limit: usize) -> String {
+/// When a running tool was last heard from, and whether it was stopped for going silent.
+struct Watch {
+    last: Mutex<Instant>,
+    stalled: AtomicBool,
+}
+
+impl Watch {
+    fn new() -> Self {
+        Self {
+            last: Mutex::new(Instant::now()),
+            stalled: AtomicBool::new(false),
+        }
+    }
+
+    fn heard(&self) {
+        *self.last.lock().unwrap_or_else(PoisonError::into_inner) = Instant::now();
+    }
+
+    fn quiet_for(&self) -> Duration {
+        self.last
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .elapsed()
+    }
+}
+
+/// Stops the tool under `control` once it has been silent for `patience` while meant to be
+/// working, until `done` says it has ended. Paused or resting, and after a sleep, the wait starts
+/// again: nothing is expected of a tool that isn't running.
+fn watch_over(watch: &Watch, control: &JobControl, patience: Duration, done: &Receiver<()>) {
+    let tick = (patience / 10).clamp(Duration::from_millis(10), Duration::from_secs(5));
+    let mut sleeps = share::sleeps();
+    loop {
+        match done.recv_timeout(tick) {
+            Err(RecvTimeoutError::Timeout) => {}
+            Ok(()) | Err(RecvTimeoutError::Disconnected) => return,
+        }
+        if control.is_paused() || share::sleeps() != sleeps {
+            sleeps = share::sleeps();
+            watch.heard();
+            continue;
+        }
+        if watch.quiet_for() < patience {
+            continue;
+        }
+        let mut slot = control.lock();
+        if slot.cancelled {
+            return;
+        }
+        // Only a tool still running is stopped; one that just ended is left to report itself.
+        if let Some(child) = slot.child.as_mut()
+            && child.kill().is_ok()
+        {
+            watch.stalled.store(true, Ordering::Relaxed);
+        }
+        return;
+    }
+}
+
+/// Reads `reader` to the end and returns its last `limit` bytes as text, calling `on_read` each
+/// time something arrives.
+fn tail(mut reader: impl Read, limit: usize, on_read: &mut dyn FnMut()) -> String {
     let mut kept = Vec::with_capacity(limit);
     let mut buffer = [0; 4096];
     while let Ok(read) = reader.read(&mut buffer) {
         if read == 0 {
             break;
         }
+        on_read();
         kept.extend_from_slice(&buffer[..read]);
         if kept.len() > limit {
             kept.drain(..kept.len() - limit);
@@ -244,7 +367,7 @@ mod tests {
     #[test]
     fn tail_keeps_the_end() {
         let input = "a".repeat(10_000) + "the end";
-        let kept = tail(input.as_bytes(), 16);
+        let kept = tail(input.as_bytes(), 16, &mut || {});
         assert_eq!(kept.len(), 16);
         assert!(kept.ends_with("the end"));
     }
@@ -276,5 +399,58 @@ mod tests {
         control.cancel();
         control.pause(never_called).unwrap();
         assert!(!control.is_paused());
+    }
+
+    /// A tool that says nothing at all, for far longer than the patience.
+    fn silent_tool() -> Command {
+        let mut command = Command::new("powershell");
+        command.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Start-Sleep -Seconds 60",
+        ]);
+        command
+    }
+
+    #[test]
+    fn a_silent_tool_is_stopped_as_stalled() {
+        let control = JobControl::default();
+        let started = Instant::now();
+        let (outcome, _) = run_program_patient(
+            silent_tool(),
+            Vec::new(),
+            &control,
+            Duration::from_secs(2),
+            &mut |_| {},
+        );
+        assert_eq!(outcome, EncodeOutcome::Stalled);
+        assert!(started.elapsed() < Duration::from_secs(30));
+    }
+
+    fn pretend_suspend(_: u32, _: bool) -> io::Result<()> {
+        Ok(())
+    }
+
+    #[test]
+    fn a_paused_tool_is_never_stalled() {
+        let control = JobControl::default();
+        control.pause(pretend_suspend).unwrap();
+        let stopper = {
+            let control = control.clone();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_secs(3));
+                control.cancel();
+            })
+        };
+        let (outcome, _) = run_program_patient(
+            silent_tool(),
+            Vec::new(),
+            &control,
+            Duration::from_millis(500),
+            &mut |_| {},
+        );
+        stopper.join().unwrap();
+        assert_eq!(outcome, EncodeOutcome::Cancelled);
     }
 }

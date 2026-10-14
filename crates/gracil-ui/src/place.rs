@@ -8,6 +8,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -180,10 +181,61 @@ fn remove_dll_copies(copies: &Path) {
     let _ = fs::remove_dir(copies);
 }
 
-/// This Gracil's `gracil.exe`, when it runs from a whole Gracil folder.
+/// This Gracil's `gracil.exe`, when it runs from a whole Gracil folder, and not from inside its
+/// zip.
 fn whole_folder() -> Option<PathBuf> {
+    if inside_zip() {
+        return None;
+    }
     let whole = gracil_core::toolchain::bundled_dir()?
         .join("ffmpeg.exe")
         .is_file();
     whole.then(|| std::env::current_exe().ok()).flatten()
+}
+
+/// Whether Gracil was opened from inside its zip (ADR 0064). File Explorer then runs it from a
+/// temporary copy, without FFmpeg beside it, that is gone once the zip is closed; so Windows is
+/// left as it is, and the window asks for the zip to be extracted first. Asked once per run.
+pub fn inside_zip() -> bool {
+    static INSIDE: OnceLock<bool> = OnceLock::new();
+    *INSIDE.get_or_init(|| {
+        std::env::current_exe().is_ok_and(|exe| inside_zip_at(&exe, &std::env::temp_dir()))
+    })
+}
+
+/// Whether `exe` is in the temporary folder `temp`, or in a folder whose name ends in `.zip`.
+fn inside_zip_at(exe: &Path, temp: &Path) -> bool {
+    let lower = |path: &Path| PathBuf::from(path.to_string_lossy().to_lowercase());
+    let folder = lower(exe.parent().unwrap_or(exe));
+    folder.starts_with(lower(temp))
+        || folder
+            .components()
+            .any(|part| part.as_os_str().to_string_lossy().ends_with(".zip"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_gracil_opened_from_its_zip_is_told_apart() {
+        let temp = Path::new(r"C:\Users\Someone\AppData\Local\Temp");
+        let inside = [
+            r"C:\Users\Someone\AppData\Local\Temp\Temp1_Gracil.zip\Gracil\gracil.exe",
+            r"C:\Users\Someone\AppData\Local\Temp\7zO1234\gracil.exe",
+            r"C:\Users\Someone\Downloads\Gracil.ZIP\gracil.exe",
+        ];
+        let outside = [
+            r"C:\Tools\Gracil\gracil.exe",
+            r"C:\Projects\Gracil\target\debug\gracil.exe",
+            r"C:\Projects\Gracil\target\release\gracil.exe",
+            r"C:\Tools\Gracil.zip.d\more\gracil.exe",
+        ];
+        for exe in inside {
+            assert!(inside_zip_at(Path::new(exe), temp), "{exe}");
+        }
+        for exe in outside {
+            assert!(!inside_zip_at(Path::new(exe), temp), "{exe}");
+        }
+    }
 }
