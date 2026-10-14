@@ -34,3 +34,24 @@ GPU (`libvmaf_cuda`). It needs libvmaf built with NVIDIA's CUDA compiler.
   built or installed themselves; it is written against FFmpeg's documented filters and checked
   with a stand-in, not with `libvmaf_cuda` itself.
 - Each machine uses what it has: NVENC and CUDA when the GPU offers them, the CPU otherwise.
+
+*Update (2026-10-14):* looked at again, with the same answer: Gracil keeps measuring on the CPU
+with the bundled build, and still uses `libvmaf_cuda` on its own whenever the bundled FFmpeg has it.
+
+- No reputable Windows build has `libvmaf_cuda`. BtbN declined it several times because of the
+  CUDA SDK's license (https://github.com/BtbN/FFmpeg-Builds/issues/328). Neither gyan.dev
+  (https://www.gyan.dev/ffmpeg/builds/) nor jellyfin-ffmpeg has it. Netflix and NVIDIA give no
+  Windows support, and community attempts failed
+  (https://forums.developer.nvidia.com/t/ffmpeg-vmaf-cuda-windows-support/348373).
+- FFmpeg itself is not the obstacle. Its `libvmaf_cuda`, `scale_cuda` and `hwupload_cuda` need
+  only `ffnvcodec` (and clang for `scale_cuda`), not `--enable-nonfree`
+  (https://ffmpeg.org/pipermail/ffmpeg-devel/2023-August/313645.html).
+- The obstacle is libvmaf's GPU code. Built with NVIDIA's compiler and headers, it falls where
+  FFmpeg and BtbN treat a build as not redistributable
+  (https://docs.nvidia.com/cuda/pdf/EULA.pdf). Built with clang alone, it is probably
+  redistributable but uncertain, its build still calls a CUDA Toolkit tool (`bin2c`), and one
+  attempt was reported as not fully correct.
+- Building our own would be an ongoing project: a clang-only build, GPU scores checked against
+  CPU scores, and a rebuild with every FFmpeg update, with the license still uncertain. The
+  speed round (ADR 0065) shortens the CPU measurement instead.
+- If BtbN ever ships `libvmaf_cuda`, updating the bundled FFmpeg is enough: no code changes.
