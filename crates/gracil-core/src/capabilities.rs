@@ -11,6 +11,7 @@ use std::thread;
 
 use tracing::info;
 
+use crate::plan;
 use crate::probe::{MediaInfo, StreamKind};
 use crate::standard::{self, HardwareLevel};
 use crate::toolchain::Toolchain;
@@ -125,8 +126,9 @@ impl VideoEncoder {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Capabilities {
     pub encoder: VideoEncoder,
-    /// NVDEC decoding through CUDA. Only used together with NVENC.
-    pub cuda_decode: bool,
+    /// The card decodes for its own encoder: NVIDIA through CUDA; Quick Sync and AMF once a test
+    /// frame went through their decoding and encoding (ADR 0065).
+    pub card_decode: bool,
     /// The settings this card and driver accept for `encoder` (ADR 0028, ADR 0052); `Legacy` for
     /// x265.
     pub hardware: HardwareLevel,
@@ -184,18 +186,32 @@ impl Capabilities {
             .find_map(|(encoder, level)| level.map(|level| (encoder, level)));
         let (encoder, hardware) =
             on_the_card.unwrap_or((VideoEncoder::X265, HardwareLevel::Legacy));
-        let cuda_decode = encoder == VideoEncoder::Nvenc
-            && hwaccels.is_ok_and(|listing| listing.lines().any(|line| line.trim() == "cuda"));
         let filters = filters.unwrap_or_default();
+        let hwaccels = hwaccels.unwrap_or_default();
+        let lists_hwaccel = |name| hwaccels.lines().any(|line| line.trim() == name);
+        // Quick Sync and AMF decode for their encoder only once a frame went through both on
+        // this card (ADR 0065); NVIDIA's decoding has been relied on since the start.
+        let card_decode = match plan::card_decoding(encoder) {
+            Some(decoding) if encoder == VideoEncoder::Nvenc => lists_hwaccel(decoding.hwaccel),
+            Some(decoding) => {
+                lists_hwaccel(decoding.hwaccel)
+                    && decoding
+                        .converter
+                        .is_none_or(|converter| lists_filter(&filters, converter))
+                    && card_decodes(toolchain, encoder, hardware)
+            }
+            None => false,
+        };
         let x265_10bit = x265_help.is_ok_and(|help| help.contains("yuv420p10le"));
 
         let capabilities = Self {
             encoder,
-            cuda_decode,
+            card_decode,
             hardware,
             x265_10bit,
             vmaf: lists_filter(&filters, "libvmaf"),
-            vmaf_cuda: cuda_decode
+            vmaf_cuda: encoder == VideoEncoder::Nvenc
+                && card_decode
                 && ["libvmaf_cuda", "scale_cuda", "hwupload_cuda"]
                     .iter()
                     .all(|name| lists_filter(&filters, name)),
@@ -247,6 +263,71 @@ fn card_encodes(toolchain: &Toolchain, encoder: VideoEncoder, level: HardwareLev
         ?level,
         ?status,
         "graphics card test encode"
+    );
+    works
+}
+
+/// Decodes one frame of H.264, the most common kind of video, on the card that encodes with
+/// `encoder`, and encodes it there with `level`'s settings, the frames staying on the card as
+/// Gracil would keep them (ADR 0065). Fails where the card, its driver or FFmpeg can't, as on a
+/// computer without that card: nothing changes there.
+fn card_decodes(toolchain: &Toolchain, encoder: VideoEncoder, level: HardwareLevel) -> bool {
+    let Some(decoding) = plan::card_decoding(encoder) else {
+        return false;
+    };
+    // The frame to decode, made on the processor.
+    let mut maker = toolchain.ffmpeg();
+    maker
+        .args(["-hide_banner", "-v", "error", "-f", "lavfi", "-i"])
+        .arg("testsrc2=s=256x256:r=30")
+        .args(["-frames:v", "1", "-pix_fmt", "yuv420p", "-c:v", "libx264"])
+        .args(["-f", "h264", "pipe:1"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    let Ok(mut made) = maker.spawn() else {
+        return false;
+    };
+    let Some(frame) = made.stdout.take() else {
+        let _ = made.kill();
+        let _ = made.wait();
+        return false;
+    };
+
+    let mut command = toolchain.ffmpeg();
+    command
+        .args(["-hide_banner", "-v", "error"])
+        .args(["-hwaccel", decoding.hwaccel])
+        .args(["-hwaccel_output_format", decoding.frames])
+        .args(["-f", "h264", "-i", "pipe:0"]);
+    if let Some(conversion) = plan::card_conversion(encoder, level.ten_bit()) {
+        command.args(["-vf", &conversion]);
+    }
+    command.args(["-c:v", encoder.name()]);
+    let level_options = standard::level_options(encoder, standard::fallback_level(encoder));
+    let options = level
+        .options(encoder)
+        .iter()
+        .map(|&(n, v)| (n, v.to_owned()));
+    for (name, value) in options.chain(level_options) {
+        command.arg(format!("-{name}:v")).arg(value);
+    }
+    let status = command
+        .args(["-f", "null", "-"])
+        .stdin(Stdio::from(frame))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    // Gracil's own end of the pipe goes with the command, so the first FFmpeg never waits on
+    // a reader that is gone.
+    drop(command);
+    let _ = made.wait();
+    let works = status.as_ref().is_ok_and(|s| s.success());
+    info!(
+        works,
+        ?encoder,
+        ?level,
+        ?status,
+        "graphics card test decode"
     );
     works
 }
@@ -328,6 +409,29 @@ Codecs:
         assert!(lists_filter(listing, "scale"));
         assert!(!lists_filter(listing, "scale_cuda"));
         assert!(!lists_filter(listing, "Timeline"));
+    }
+
+    /// Where a card can't encode, as Intel's and AMD's on a computer without them, decoding on it
+    /// fails too, by itself and quickly, so nothing changes there.
+    #[test]
+    fn the_card_decode_test_fails_cleanly_without_the_card() {
+        let Some(found) = crate::toolchain::find() else {
+            eprintln!("skipped: no FFmpeg installed");
+            return;
+        };
+        for encoder in [VideoEncoder::Qsv, VideoEncoder::Amf] {
+            let level = HardwareLevel::Full;
+            if found.encoders.contains(encoder.name())
+                && !card_encodes(&found.toolchain, encoder, level)
+            {
+                let started = std::time::Instant::now();
+                assert!(
+                    !card_decodes(&found.toolchain, encoder, level),
+                    "{encoder:?}"
+                );
+                assert!(started.elapsed() < std::time::Duration::from_secs(30));
+            }
+        }
     }
 
     #[test]

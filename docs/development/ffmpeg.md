@@ -43,7 +43,11 @@ best first, and the first card in the order below whose test passed is used (ADR
   tier's options, best first, and the first that succeeds is used. For NVENC, `Full` is 10-bit
   with lookahead, B-frame references and multipass; `Basic` drops the B-frame settings; `Legacy`
   is the original 8-bit p6 setting. No tier uses adaptive quantization or the temporal filter (ADR 0029).
-- **CUDA decoding**: NVENC works and `-hwaccels` lists `cuda`.
+- **Card decoding** (`card_decode`): for NVENC, `-hwaccels` lists `cuda`. For Quick Sync and AMF
+  (ADR 0065), `-hwaccels` lists `qsv` or `d3d11va`, the conversion filter is listed (`scale_qsv`),
+  and a one-frame test passes: an H.264 frame made on the processor with `libx264` is piped into
+  a second FFmpeg that decodes it on the card, keeps the frames there and encodes them with the
+  chosen tier. On a computer without that card the test fails at once and nothing changes.
 - **Filters**: `-filters` lists `libvmaf` (the quality search); the bundled build has it.
   `libvmaf_cuda` with `scale_cuda` and `hwupload_cuda` (VMAF on the GPU, ADR 0030) is used when
   present; no public Windows build has it.
@@ -67,8 +71,13 @@ best first, and the first card in the order below whose test passed is used (ADR
 | 4 | x265 | software | video + AAC audio |
 
 With Quick Sync or AMF it is the card (software decoding) with all streams, then essential, then
-x265 essential. Without a card encoder it is x265 with all streams, then x265 essential. A failed attempt moves on to the
-next one only if it used CUDA or got nowhere. A failure partway through a software decode means
+x265 essential, after a first attempt decoding on the card where its test passed (ADR 0065):
+Quick Sync with `-hwaccel qsv -hwaccel_output_format qsv` and `scale_qsv=format=p010` (`nv12` for
+the 8-bit tier) before the encoder; AMF with `-hwaccel d3d11va -hwaccel_output_format d3d11`, the
+frames taken as they are (`scale_d3d11` couldn't create its output picture with the bundled build
+on the NVIDIA test computer, even for `nv12`). Neither was tried on Intel or AMD hardware. Without
+a card encoder it is x265 with all streams, then x265 essential. A failed attempt moves on to the
+next one only if it decoded on the card or got nowhere. A failure partway through a software decode means
 the source is damaged at that point, and the next attempt would stop there too.
 
 The output is accepted when FFprobe reads it, it holds HEVC video, and its length matches the

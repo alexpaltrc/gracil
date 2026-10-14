@@ -197,6 +197,11 @@ exists: it runs a tiny test compression to be sure.
   card, an Intel one (including the graphics built into most Intel processors) or an AMD one. That
   is usually many times faster than the processor, and the computer stays responsive. If a
   computer has more than one, NVIDIA comes first, then Intel, then AMD.
+- **The graphics card also reads the video** when it can, which leaves the processor free for
+  everything else. NVIDIA cards have always done this. Intel and AMD graphics do it too once a
+  tiny test at start shows that they can; otherwise the processor reads the video, as before. This
+  hasn't been tried on Intel or AMD computers yet, so if the card has any trouble with a video,
+  Gracil simply reads it with the processor instead.
 - **Without one**, Gracil uses the processor. It is slower but just as good.
 
 You never choose between these. Gracil picks the best one available. The test also tells Gracil

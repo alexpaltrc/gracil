@@ -61,7 +61,7 @@ pub fn attempts(capabilities: Capabilities) -> Vec<Attempt> {
     match capabilities.encoder {
         Nvenc => {
             let mut list = Vec::with_capacity(4);
-            if capabilities.cuda_decode {
+            if capabilities.card_decode {
                 list.push(attempt(Nvenc, true, Full));
             }
             list.extend([
@@ -71,12 +71,20 @@ pub fn attempts(capabilities: Capabilities) -> Vec<Attempt> {
             ]);
             list
         }
-        // Quick Sync and AMF read frames decoded by the processor (ADR 0052).
-        card @ (VideoEncoder::Qsv | VideoEncoder::Amf) => vec![
-            attempt(card, false, Full),
-            attempt(card, false, Essential),
-            attempt(X265, false, Essential),
-        ],
+        // Quick Sync and AMF read frames decoded by the processor (ADR 0052), after their own
+        // card's decoding where its test passed (ADR 0065).
+        card @ (VideoEncoder::Qsv | VideoEncoder::Amf) => {
+            let mut list = Vec::with_capacity(4);
+            if capabilities.card_decode {
+                list.push(attempt(card, true, Full));
+            }
+            list.extend([
+                attempt(card, false, Full),
+                attempt(card, false, Essential),
+                attempt(X265, false, Essential),
+            ]);
+            list
+        }
         X265 => vec![attempt(X265, false, Full), attempt(X265, false, Essential)],
     }
 }
@@ -186,8 +194,11 @@ impl EncodePlan {
         // Keep the pixels as recorded and carry the rotation over as metadata (spec §41). It also
         // keeps a rotation filter from running on GPU frames, which it cannot do.
         push(&["-noautorotate"]);
-        if self.attempt.hw_decode {
-            push(&["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]);
+        if let Some(decoding) =
+            card_decoding(self.attempt.encoder).filter(|_| self.attempt.hw_decode)
+        {
+            push(&["-hwaccel", decoding.hwaccel]);
+            push(&["-hwaccel_output_format", decoding.frames]);
         }
         push(&["-i"]);
         args.push(file_url(&self.input));
@@ -224,6 +235,7 @@ impl EncodePlan {
             StreamAction::EncodeVideo(rate) => {
                 let (encoder, capabilities) = (self.attempt.encoder, &self.capabilities);
                 let filters = video_filters(rate, self.attempt.hw_decode, encoder, capabilities);
+                let filters: Vec<String> = filters.rate.into_iter().chain(filters.format).collect();
                 if !filters.is_empty() {
                     option(args, "filter", &filters.join(","));
                 }
@@ -245,26 +257,72 @@ impl EncodePlan {
     }
 }
 
-/// Frame rate and pixel format for one encoded video, as FFmpeg filters in order.
-/// `gpu_frames` means the frames are still on the GPU, where NVENC reads them as they are.
+/// The filters for one encoded video, in order: its frame rate, then its pixel format.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct VideoFilters {
+    pub rate: Option<String>,
+    pub format: Option<String>,
+}
+
+/// Frame rate and pixel format for one encoded video. `gpu_frames` means the frames are still on
+/// the card that decoded them: NVENC reads them as they are, Quick Sync and AMF have them changed
+/// to the pixel format they encode there (ADR 0065).
 pub(crate) fn video_filters(
     rate: Option<Rate>,
     gpu_frames: bool,
     encoder: VideoEncoder,
     capabilities: &Capabilities,
-) -> Vec<String> {
-    let mut filters = Vec::new();
-    if let Some(rate) = rate {
-        filters.push(format!("fps={}/{}", rate.num, rate.den));
+) -> VideoFilters {
+    let ten_bit = capabilities.ten_bit(encoder);
+    VideoFilters {
+        rate: rate.map(|rate| format!("fps={}/{}", rate.num, rate.den)),
+        format: if gpu_frames {
+            card_conversion(encoder, ten_bit)
+        } else {
+            Some(format!(
+                "format={}",
+                standard::pixel_format(ten_bit, encoder)
+            ))
+        },
     }
-    if !gpu_frames {
-        let ten_bit = capabilities.ten_bit(encoder);
-        filters.push(format!(
-            "format={}",
-            standard::pixel_format(ten_bit, encoder)
-        ));
-    }
-    filters
+}
+
+/// How a graphics card decodes video for its own encoder (ADR 0065).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CardDecoding {
+    /// FFmpeg's `-hwaccel`.
+    pub hwaccel: &'static str,
+    /// FFmpeg's `-hwaccel_output_format`, which keeps the frames on the card.
+    pub frames: &'static str,
+    /// The filter that changes the frames' pixel format on the card, when its encoder needs that.
+    pub converter: Option<&'static str>,
+}
+
+/// How the card that encodes with `encoder` decodes for it: CUDA for NVENC, Quick Sync's own,
+/// and Direct3D 11 for AMF. `None` for x265.
+pub(crate) fn card_decoding(encoder: VideoEncoder) -> Option<CardDecoding> {
+    let (hwaccel, frames, converter) = match encoder {
+        VideoEncoder::Nvenc => ("cuda", "cuda", None),
+        VideoEncoder::Qsv => ("qsv", "qsv", Some("scale_qsv")),
+        // AMF takes Direct3D 11 frames as they are: `scale_d3d11` couldn't create its picture with
+        // the bundled FFmpeg on the NVIDIA computer it could be tried on, even for 8-bit; the test
+        // decode tells whether AMF takes them (ADR 0065).
+        VideoEncoder::Amf => ("d3d11va", "d3d11", None),
+        VideoEncoder::X265 => return None,
+    };
+    Some(CardDecoding {
+        hwaccel,
+        frames,
+        converter,
+    })
+}
+
+/// The filter that brings frames decoded on the card to the pixel format `encoder` encodes there,
+/// 10-bit or not; `None` when they need none, as for NVENC (`-highbitdepth` takes care of it).
+pub(crate) fn card_conversion(encoder: VideoEncoder, ten_bit: bool) -> Option<String> {
+    let converter = card_decoding(encoder)?.converter?;
+    let format = if ten_bit { "p010" } else { "nv12" };
+    Some(format!("{converter}=format={format}"))
 }
 
 /// The video encoder and its options for output stream `out`, at `level`, for a picture of
@@ -368,7 +426,7 @@ mod tests {
     fn capabilities(nvenc: HardwareLevel) -> Capabilities {
         Capabilities {
             encoder: VideoEncoder::Nvenc,
-            cuda_decode: true,
+            card_decode: true,
             hardware: nvenc,
             x265_10bit: true,
             vmaf: true,
@@ -666,7 +724,7 @@ mod tests {
     fn attempt_order_without_nvidia() {
         let caps = Capabilities {
             encoder: VideoEncoder::X265,
-            cuda_decode: false,
+            card_decode: false,
             ..capabilities(HardwareLevel::Legacy)
         };
         let list = attempts(caps);
@@ -678,11 +736,54 @@ mod tests {
     }
 
     #[test]
+    fn intel_and_amd_cards_decode_first_where_their_test_passed() {
+        let info = info(vec![stream(0, StreamKind::Video, "h264")]);
+        for (encoder, decoding, conversion) in [
+            (
+                VideoEncoder::Qsv,
+                "-hwaccel qsv -hwaccel_output_format qsv",
+                Some("scale_qsv=format=p010"),
+            ),
+            (
+                VideoEncoder::Amf,
+                "-hwaccel d3d11va -hwaccel_output_format d3d11",
+                None,
+            ),
+        ] {
+            let caps = Capabilities {
+                encoder,
+                ..capabilities(HardwareLevel::Full)
+            };
+            let list = attempts(caps);
+            assert_eq!(list.len(), 4);
+            assert!(list[0].hw_decode && list[0].encoder == encoder);
+            assert!(!list[1].hw_decode && list[1].encoder == encoder);
+            assert_eq!(list[3].encoder, VideoEncoder::X265);
+
+            let mut plan = plan(&info, list[0]);
+            plan.capabilities = caps;
+            let args = joined(&plan);
+            assert!(args.contains(&format!("-noautorotate {decoding} -i file:")));
+            match conversion {
+                Some(conversion) => assert!(args.contains(&format!("-filter:0 {conversion} -c:0"))),
+                None => assert!(!args.contains("-filter"), "{args}"),
+            }
+
+            // 8-bit settings get 8-bit frames from Quick Sync.
+            if conversion.is_none() {
+                continue;
+            }
+            plan.capabilities.hardware = HardwareLevel::Legacy;
+            assert!(joined(&plan).contains("=format=nv12 -c:0"));
+        }
+    }
+
+    #[test]
     fn intel_and_amd_cards_fall_back_to_the_processor() {
         for encoder in [VideoEncoder::Qsv, VideoEncoder::Amf] {
             let caps = Capabilities {
                 encoder,
-                cuda_decode: false,
+                card_decode: false,
                 ..capabilities(HardwareLevel::Full)
             };
             let list = attempts(caps);

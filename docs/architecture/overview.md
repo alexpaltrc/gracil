@@ -73,8 +73,9 @@ shrink that way is searched again at a slightly lower quality target (ADR 0033).
 `gracil_core::standard` decides frame rate (to 30) and audio conversion; the picture size is never
 changed. Each job then walks a ladder of attempts, from fastest to most forgiving: NVENC with CUDA
 decoding → NVENC with software decoding → NVENC keeping only essential streams → `libx265` keeping
-only essential streams (Quick Sync and AMF: the card with software decoding, full then essential,
-then `libx265` essential; without a card: `libx265` full, then essential). See
+only essential streams (Quick Sync and AMF: the card decoding too where its one-frame test passed,
+ADR 0065, then the card with software decoding, full then essential, then `libx265` essential;
+without a card: `libx265` full, then essential). See
 [`../development/ffmpeg.md`](../development/ffmpeg.md).
 
 **The window.** `gracil-ui` is an Iced daemon. `app` holds the state and reacts to messages; it is a

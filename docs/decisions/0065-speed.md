@@ -1,8 +1,8 @@
 # 0065 — Speed: getting ready sooner, and a window that keeps up with any list
 
-**Status:** Accepted, being built (2026-10-14). Decided by the product owner after a measured
-review of where time goes on a strong graphics card with an older processor (RTX 5060 with a
-Ryzen 5 5600G, 6 cores / 12 threads).
+**Status:** Accepted, built (2026-10-14); item 7 not tried on Intel or AMD hardware. Decided by
+the product owner after a measured review of where time goes on a strong graphics card with an
+older processor (RTX 5060 with a Ryzen 5 5600G, 6 cores / 12 threads).
 
 **Context.** On that computer the graphics card compresses a video in a fraction of the time the
 processor needs to measure it: getting a video ready (ADR 0028, ADR 0030) is most of the wait. The
@@ -50,6 +50,16 @@ and every safeguard of ADRs 0049, 0051, 0063 and 0064 still holds.
    one whose encoder couldn't be opened (the card had no room for another) makes the samples go
    one at a time for as long as Gracil runs, without being taken for a decoding failure. The
    scores are added up in the samples' order, exactly as before.
+7. **Intel and AMD graphics decode too** (changes ADR 0052, item 4). Where a one-frame test
+   passes at start (an H.264 frame decoded on the card, kept there and encoded with the chosen
+   settings), the first attempt for Quick Sync and AMF decodes on the card: Quick Sync's own
+   decoding, its frames changed to 10-bit on the card for the encoder; Direct3D 11 for AMF, the
+   frames taken as they are, since FFmpeg's Direct3D 11 scaler failed to start here. Decoding on
+   the processor stays as the next attempt, and the quality measure's samples decode the same way,
+   copying out only the reference, as in item 2. Without such a card the test fails at once, as
+   on the NVIDIA computer this was built on, and nothing changes. **Not tried on Intel or AMD
+   hardware**: the arguments are covered by tests, and logs from such computers should be looked
+   at before relying on it.
 
 **Considered and not done**, measured on the reference computer:
 

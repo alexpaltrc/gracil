@@ -155,8 +155,8 @@ pub fn find_level(
         attempt: plan.attempt,
         capabilities: &plan.capabilities,
         picture: plan.picture,
-        cuda_frames: pixel_format
-            .and_then(|format| cuda_download(format, plan.capabilities.ten_bit(encoder))),
+        card_frames: pixel_format
+            .and_then(|format| card_download(format, plan.capabilities.ten_bit(encoder))),
         starts: sample_starts(duration),
         duration,
         control,
@@ -377,8 +377,8 @@ struct Search<'a> {
     /// The video's width and height as stored, when the source says.
     picture: Option<(u32, u32)>,
     /// How decoded frames are copied out of the graphics card for the reference, when they can
-    /// stay there for the encoder (see [`cuda_download`]).
-    cuda_frames: Option<&'static str>,
+    /// stay there for the encoder (see [`card_download`]).
+    card_frames: Option<&'static str>,
     starts: Vec<Duration>,
     duration: Duration,
     control: &'a JobControl,
@@ -555,9 +555,8 @@ impl<'a> Search<'a> {
         let on_gpu = self.attempt.hw_decode && self.capabilities.vmaf_cuda;
         // Otherwise, decoded on the card, the frames stay there for the encoder, as in the real
         // encode, and only the reference is copied out (ADR 0065).
-        let download = self
-            .cuda_frames
-            .filter(|_| self.attempt.hw_decode && !on_gpu);
+        let decoding = plan::card_decoding(encoder).filter(|_| self.attempt.hw_decode);
+        let download = self.card_frames.filter(|_| decoding.is_some() && !on_gpu);
         let mut args: Vec<OsString> = Vec::with_capacity(64);
         let mut push = |values: &[&str]| args.extend(values.iter().map(OsString::from));
         push(&["-hide_banner", "-nostdin", "-nostats", "-v", "info"]);
@@ -566,10 +565,11 @@ impl<'a> Search<'a> {
             push(&["-init_hw_device", "cuda=gpu", "-filter_hw_device", "gpu"]);
             push(&["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]);
             push(&["-hwaccel_device", "gpu"]);
-        } else if download.is_some() {
-            push(&["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]);
-        } else if self.attempt.hw_decode {
-            push(&["-hwaccel", "cuda"]);
+        } else if let Some(decoding) = decoding {
+            push(&["-hwaccel", decoding.hwaccel]);
+            if download.is_some() {
+                push(&["-hwaccel_output_format", decoding.frames]);
+            }
         }
         let (start, length) = (start.as_secs_f64(), SAMPLE.as_secs_f64());
         push(&["-ss", &format!("{start:.3}"), "-t", &format!("{length:.3}")]);
@@ -579,15 +579,12 @@ impl<'a> Search<'a> {
         // The source, changed in size and rate as the real encode will be, feeds both the
         // encoder and the reference.
         let gpu_frames = on_gpu || download.is_some();
-        let mut changes = plan::video_filters(self.rate, gpu_frames, encoder, self.capabilities);
-        let format = if gpu_frames {
-            String::new()
-        } else {
-            changes.pop().unwrap_or_default()
-        };
+        let filters = plan::video_filters(self.rate, gpu_frames, encoder, self.capabilities);
+        // The pixel format the encoder needs is changed on its branch alone.
+        let format = filters.format.unwrap_or_else(|| "null".to_owned());
         let mut graph = format!("[0:{}]", self.stream);
-        for change in &changes {
-            graph.push_str(change);
+        if let Some(rate) = &filters.rate {
+            graph.push_str(rate);
             graph.push(',');
         }
         graph.push_str("split[source][reference];");
@@ -608,7 +605,7 @@ impl<'a> Search<'a> {
                 "[reference]scale_cuda={scale_gpu}format=yuv420p[ref]"
             ));
         } else if let Some(download) = download {
-            graph.push_str("[source]null[encode];");
+            graph.push_str(&format!("[source]{format}[encode];"));
             graph.push_str(&format!(
                 "[reference]hwdownload,format={download},{scale_cpu}format=yuv420p[ref]"
             ));
@@ -762,11 +759,11 @@ fn card_was_full(log: &str) -> bool {
 
 /// The format to copy frames of `pixel_format` out of the graphics card in, for a source whose
 /// frames can stay on the card for the encoder: 8-bit or 10-bit 4:2:0, as nearly every camera and
-/// phone records, the 10-bit kind only when the encoder writes 10-bit (`ten_bit`). The card hands
-/// such frames to the encoder exactly as FFmpeg's own conversion would, so the samples encode
-/// and score the same, to the last bit (measured on 8-bit, 10-bit and 4K clips). Anything else
-/// is copied out as before, before both branches.
-fn cuda_download(pixel_format: &str, ten_bit: bool) -> Option<&'static str> {
+/// phone records, the 10-bit kind only when the encoder writes 10-bit (`ten_bit`). An NVIDIA card
+/// hands such frames to the encoder exactly as FFmpeg's own conversion would, so the samples
+/// encode and score the same, to the last bit (measured on 8-bit, 10-bit and 4K clips; Intel and
+/// AMD cards couldn't be tried). Anything else is copied out first, before both branches.
+fn card_download(pixel_format: &str, ten_bit: bool) -> Option<&'static str> {
     match pixel_format {
         "yuv420p" | "nv12" => Some("nv12"),
         "yuv420p10le" | "p010le" if ten_bit => Some("p010le"),
@@ -966,15 +963,55 @@ mod tests {
 
     /// The arguments of one NVENC sample of a 1080p video, joined.
     fn sample_line(
-        cuda_frames: Option<&'static str>,
+        card_frames: Option<&'static str>,
+        hw_decode: bool,
+        rate: Option<Rate>,
+    ) -> String {
+        sample_on(VideoEncoder::Nvenc, card_frames, hw_decode, rate)
+    }
+
+    #[test]
+    fn intel_and_amd_cards_keep_their_frames_too() {
+        let intel = sample_on(VideoEncoder::Qsv, Some("nv12"), true, None);
+        assert!(
+            intel.contains("-hwaccel qsv -hwaccel_output_format qsv -ss"),
+            "{intel}"
+        );
+        assert!(intel.contains(
+            "[0:0]split[source][reference];[source]scale_qsv=format=p010[encode];\
+             [reference]hwdownload,format=nv12,format=yuv420p[ref]"
+        ));
+        let amd = sample_on(VideoEncoder::Amf, Some("p010le"), true, None);
+        assert!(amd.contains("-hwaccel d3d11va -hwaccel_output_format d3d11 -ss"));
+        assert!(amd.contains(
+            "[source]null[encode];[reference]hwdownload,format=p010le,format=yuv420p[ref]"
+        ));
+        // Other sources: copied out of the card first; then converted on the processor.
+        let other = sample_on(VideoEncoder::Amf, None, true, None);
+        assert!(
+            other.contains("-noautorotate -hwaccel d3d11va -ss"),
+            "{other}"
+        );
+        assert!(other.contains("[source]format=p010le[encode]"));
+        assert!(!other.contains("scale_d3d11"));
+        // Decoding on the processor after the card failed.
+        let processor = sample_on(VideoEncoder::Qsv, Some("nv12"), false, None);
+        assert!(!processor.contains("hwaccel"));
+        assert!(processor.contains("[source]format=p010le[encode]"));
+    }
+
+    /// The arguments of one sample of a 1080p video with `encoder`, joined.
+    fn sample_on(
+        encoder: VideoEncoder,
+        card_frames: Option<&'static str>,
         hw_decode: bool,
         rate: Option<Rate>,
     ) -> String {
         let toolchain = Toolchain::stand_in();
         let control = JobControl::default();
         let capabilities = Capabilities {
-            encoder: VideoEncoder::Nvenc,
-            cuda_decode: true,
+            encoder,
+            card_decode: true,
             hardware: standard::HardwareLevel::Full,
             x265_10bit: true,
             vmaf: true,
@@ -986,13 +1023,13 @@ mod tests {
             stream: 0,
             rate,
             attempt: Attempt {
-                encoder: VideoEncoder::Nvenc,
+                encoder,
                 hw_decode,
                 preservation: plan::Preservation::Full,
             },
             capabilities: &capabilities,
             picture: Some((1920, 1080)),
-            cuda_frames,
+            card_frames,
             starts: Vec::new(),
             duration: Duration::from_secs(60),
             control: &control,
@@ -1009,7 +1046,7 @@ mod tests {
     #[test]
     fn decoded_on_the_card_the_frames_stay_there_for_the_encoder() {
         for (pixel_format, download) in [("yuv420p", "nv12"), ("yuv420p10le", "p010le")] {
-            let frames = cuda_download(pixel_format, true);
+            let frames = card_download(pixel_format, true);
             assert_eq!(frames, Some(download));
             let line = sample_line(frames, true, None);
             assert!(
@@ -1033,9 +1070,9 @@ mod tests {
     #[test]
     fn other_sources_are_copied_out_of_the_card_first() {
         // 4:4:4, 12-bit, and 10-bit for an 8-bit encoder.
-        assert_eq!(cuda_download("yuv444p", true), None);
-        assert_eq!(cuda_download("yuv420p12le", true), None);
-        assert_eq!(cuda_download("yuv420p10le", false), None);
+        assert_eq!(card_download("yuv444p", true), None);
+        assert_eq!(card_download("yuv420p12le", true), None);
+        assert_eq!(card_download("yuv420p10le", false), None);
         let line = sample_line(None, true, None);
         assert!(line.contains("-noautorotate -hwaccel cuda -ss"), "{line}");
         assert!(line.contains("[source]format=p010le[encode];[reference]format=yuv420p[ref]"));

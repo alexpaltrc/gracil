@@ -360,6 +360,11 @@ initialization fails, a driver problem exists, or FFmpeg reports hardware decodi
 proceed, gracefully retry using software decoding. If NVENC remains usable, continue using NVENC.
 Do not fail an otherwise valid compression merely because GPU decoding was unavailable.
 
+*Update (ADR 0065):* Intel (Quick Sync) and AMD graphics decode for their own encoder too, where
+a one-frame test passes at start, with the same fallback to software decoding. The quality
+measure's samples keep decoded frames on the card for the encoder, copying out only the
+reference, with bit-identical results.
+
 # 25. Capability detection
 
 Use FFmpeg itself as an authoritative source (`-encoders`, `-decoders`, `-hwaccels`). Perform

@@ -9,6 +9,10 @@ nobody needs it (no full-screen program, presentation or screen kept on) and its
 read; the next video gets ready beside one compressing only with 4 GB free and never on 8 GB of
 memory or less; a battery below 30 % starts nothing new.
 
+*Update (2026-10-14):* by [ADR 0065](0065-speed.md), a desktop computer (no battery) in use,
+plugged in, not saving energy and not warm, compresses a sixth of the processor's threads in
+images at once instead of an eighth.
+
 **Context.** Gracil compressed one file at a time, and each file's two stages followed each other:
 first the short samples that choose a video's compression (mostly on the processor), then the
 compression itself (mostly on the graphics card). While one ran, the other sat idle, and a long
