@@ -210,26 +210,39 @@ straining.
   Gracil works with what is left free. Gracil's own window still answers at once.
 - Gracil never uses the whole processor. Windows itself keeps Gracil, and every tool it uses, to
   part of it: half while you are using the computer, three quarters when you have left it alone,
-  and a quarter on a laptop running on its battery or when Windows is saving energy. The rest is
+  and a quarter on a laptop running on its battery or when Windows is saving energy. A laptop,
+  even plugged in, never gives Gracil more than half. The rest is
   always free for you, which also keeps the computer cooler and its fans quieter, even on a
   simple laptop. On top of that, the video encoder and the quality measure each use at most half
   of what Gracil may use.
-- While you are using the computer, and always on battery, the tools Gracil uses run in Windows'
+- Gracil counts the computer as left alone only when nobody needs it: not while a film, a game, a
+  presentation or a call is on, even if the keyboard and mouse are untouched. If it can't tell how
+  the computer is doing, it treats it as in use.
+- While you are using the computer, and always on a laptop, the tools Gracil uses run in Windows'
   efficiency mode, the one Task Manager marks with a green leaf: Windows runs them at the
   processor's calmest speed, so the computer stays cooler and quieter. When you have left a
-  plugged-in computer alone, Windows lets them go at full speed. Gracil's own window never uses
+  plugged-in desktop computer alone, Windows lets them go at full speed. Gracil's own window never uses
   efficiency mode, so it always answers at once.
 - On battery, Gracil also takes on fewer images at once. The work goes slower, and the battery
-  lasts longer.
+  lasts longer. Below 30 % battery, the files under way finish and no new one starts; below 15 %,
+  everything waits. Each waiting file says **Low battery · waiting**. Plug the laptop in and
+  Gracil carries on by itself.
+- Gracil only checks the computer while it is working, and only the graphics card it is using.
+  With nothing to do, it leaves the computer alone.
+- If the computer goes to sleep, Gracil rests with it, and once it wakes up it tries again
+  whatever sleep interrupted.
 - While you are using the computer, Gracil takes on fewer images at once. When you have left it
   alone for a minute, it takes on more, and fewer again as soon as you come back.
 - Large images need more memory, so Gracil starts fewer of them at once and always leaves at least
   half of the free memory for your programs.
-- No part of Gracil may ever take more than three quarters of the computer's memory: Windows
-  refuses it more, so the computer never slows to a crawl. An image so large it would need more
+- Gracil and all its tools together may never take more than about two thirds of the computer's
+  memory: Windows refuses them more, so the computer never slows to a crawl. On a computer with
+  8 GB of memory or less, or little of it free, the next video waits for the current one to finish
+  before getting ready. An image so large it would need more
   than half of all the memory is left as it is, with a small "!".
 - Gracil only compresses a file when its drive has room for the result and 2 GB to spare, so the
-  drive never fills up. Otherwise the file is left as it is, and a small "!" says the drive is
+  drive never fills up. When several files go to the same drive, each one counts the room the
+  others will take. Otherwise the file is left as it is, and a small "!" says the drive is
   almost full.
 - The window stays quick to answer however long the list is and however long Gracil has been
   working, even with tens of thousands of files and hours of work: pause, stop and **View files**
@@ -301,7 +314,9 @@ Full HD video.
 ## Size and smoothness
 
 - Every video keeps its picture size: a 4K video stays 4K and a 480p video stays 480p. Gracil
-  never makes the picture smaller.
+  never makes the picture smaller. For videos larger than 4K, the quality check looks at the
+  picture at 4K size, which is what a person sees anyway and needs far less memory; the video
+  itself keeps its full size.
 - Videos with more than 30 frames per second (60 fps, or slow motion recorded at 120 or 240)
   become 30 frames per second. Videos at 30 or fewer keep exactly the rate they had. Slow-motion
   clips that your phone plays slowed down lose that effect, because the extra frames that made it

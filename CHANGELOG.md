@@ -43,13 +43,23 @@ with it.
   there is no wait between them, and images compress a few at a time alongside it. Two videos are
   never compressed at the same time.
 - Gracil never gets in your way: it works below your other programs, and Windows itself keeps it
-  to part of the processor, half while you use the computer and a quarter on battery, so the
+  to part of the processor, half while you use the computer, never more than half on a laptop and
+  a quarter on battery, so the
   computer stays responsive, cool and quiet, even a simple laptop. It never fills your drive or
   your memory. While you use the computer, and always on battery, Windows runs Gracil's work at
   the processor's calmest speed, so the computer stays cooler and quieter. It takes on more when
   you leave the computer alone and less as soon as you come back, and fewer large images at once
   so memory never runs short. The window stays quick to answer even after hours of work on tens
   of thousands of files.
+- While a film, a game, a presentation or a call is on, Gracil takes as little of the computer as
+  while you are using it. With nothing to do, it no longer checks the computer every second.
+- On battery below 30 %, the files under way finish and no new one starts; below 15 %, everything
+  waits, saying **Low battery · waiting**. Plugging in carries on by itself.
+- A video interrupted by the computer going to sleep is no longer left uncompressed: Gracil waits
+  for the computer to wake up and tries again.
+- Videos larger than 4K have their quality checked with much less memory, and several files
+  compressing onto the same nearly full drive leave room for each other.
+- Gracil's window opens even on computers whose graphics card can't draw it.
 - Images on a network or cloud drive compress much faster: each one is read from the drive only
   once, and the next few are read while others compress.
 - Stop stops the whole list at once, even on a slow network or cloud drive. Nothing is lost: the
