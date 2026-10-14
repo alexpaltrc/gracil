@@ -138,11 +138,55 @@ impl HardwareLevel {
 }
 
 /// x265 options, without the quality level. It may use `threads` of the processor (ADR 0040).
-pub fn x265_options(threads: usize) -> [(&'static str, String); 2] {
+/// `lean` keeps its memory down for a picture larger than 4K when memory is short (ADR 0063):
+/// one frame encoded at a time instead of several. The result is about the same; only the
+/// encoding takes longer.
+pub fn x265_options(threads: usize, lean: bool) -> [(&'static str, String); 2] {
+    let lean = if lean { ":frame-threads=1" } else { "" };
     [
         ("preset", "medium".to_owned()),
-        ("x265-params", format!("log-level=error:pools={threads}")),
+        (
+            "x265-params",
+            format!("log-level=error:pools={threads}{lean}"),
+        ),
     ]
+}
+
+/// About how much memory x265 takes for each pixel of a picture, encoding several frames at once
+/// as it usually does.
+pub const X265_BYTES_PER_PIXEL: u64 = 250;
+
+/// Whether a picture of `width` by `height` is larger than 4K (cinema 4K, 4096 across, included
+/// in 4K), lying down or standing up.
+pub fn above_4k(width: u32, height: u32) -> bool {
+    let (long, short) = (width.max(height), width.min(height));
+    long > 4096 || short > 2160
+}
+
+/// The size a picture of `size` is measured at, when not its own (ADR 0063): one larger than 4K
+/// is scaled down to fit in 3840 by 2160, standing up if it stands up, keeping its shape, with
+/// even sides.
+pub fn measured_size(size: Option<(u32, u32)>) -> Option<(u32, u32)> {
+    let (width, height) = size.filter(|&(width, height)| above_4k(width, height))?;
+    let (fit_w, fit_h) = if height > width {
+        (2160, 3840)
+    } else {
+        (3840, 2160)
+    };
+    let scale = (f64::from(fit_w) / f64::from(width)).min(f64::from(fit_h) / f64::from(height));
+    let even = |side: u32| ((f64::from(side) * scale / 2.0).floor() as u32 * 2).max(2);
+    Some((even(width), even(height)))
+}
+
+/// Whether x265 should keep its memory down for a picture of `size` (see [`x265_options`]):
+/// larger than 4K, when the memory free now, `free`, is less than it would usually take, or isn't
+/// known.
+pub fn x265_lean(size: Option<(u32, u32)>, free: Option<u64>) -> bool {
+    let Some((width, height)) = size.filter(|&(width, height)| above_4k(width, height)) else {
+        return false;
+    };
+    let pixels = u64::from(width) * u64::from(height);
+    free.is_none_or(|free| free < pixels * X265_BYTES_PER_PIXEL)
 }
 
 /// The pixel format frames are converted to before a software-fed encoder.
@@ -259,5 +303,37 @@ mod tests {
         assert!(!audio_is_heavy(&audio("aac", Some(2), Some(256_000))));
         assert!(!audio_is_heavy(&audio("ac3", Some(6), Some(640_000))));
         assert!(!audio_is_heavy(&audio("opus", Some(2), None)));
+    }
+
+    #[test]
+    fn pictures_above_4k_are_measured_at_4k() {
+        assert_eq!(measured_size(None), None);
+        assert_eq!(measured_size(Some((1920, 1080))), None);
+        assert_eq!(measured_size(Some((3840, 2160))), None);
+        assert_eq!(measured_size(Some((4096, 2160))), None);
+        assert_eq!(measured_size(Some((2160, 3840))), None);
+        assert_eq!(measured_size(Some((7680, 4320))), Some((3840, 2160)));
+        assert_eq!(measured_size(Some((4320, 7680))), Some((2160, 3840)));
+        assert_eq!(measured_size(Some((5760, 2880))), Some((3840, 1920)));
+        // Even sides, never larger than 4K.
+        let (w, h) = measured_size(Some((5312, 2988))).unwrap_or_default();
+        assert!(
+            w % 2 == 0 && h % 2 == 0 && w <= 3840 && h <= 2160,
+            "{w}x{h}"
+        );
+    }
+
+    #[test]
+    fn x265_keeps_memory_down_only_above_4k_when_short() {
+        const GB: u64 = 1 << 30;
+        assert!(!x265_lean(Some((3840, 2160)), None));
+        assert!(!x265_lean(None, Some(GB)));
+        assert!(x265_lean(Some((7680, 4320)), Some(4 * GB)));
+        assert!(x265_lean(Some((7680, 4320)), None));
+        assert!(!x265_lean(Some((7680, 4320)), Some(16 * GB)));
+        let [_, (_, params)] = x265_options(4, true);
+        assert_eq!(params, "log-level=error:pools=4:frame-threads=1");
+        let [_, (_, params)] = x265_options(4, false);
+        assert_eq!(params, "log-level=error:pools=4");
     }
 }

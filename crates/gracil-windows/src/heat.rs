@@ -16,8 +16,9 @@ use std::ptr;
 
 use windows_sys::Wdk::Graphics::Direct3D::{
     D3DKMT_ADAPTER_PERFDATA, D3DKMT_ADAPTERINFO, D3DKMT_CLOSEADAPTER, D3DKMT_ENUMADAPTERS2,
-    D3DKMT_QUERYADAPTERINFO, D3DKMTCloseAdapter, D3DKMTEnumAdapters2, D3DKMTQueryAdapterInfo,
-    KMTQAITYPE_ADAPTERPERFDATA, KMTQAITYPE_PHYSICALADAPTERCOUNT, KMTQUERYADAPTERINFOTYPE,
+    D3DKMT_QUERY_DEVICE_IDS, D3DKMT_QUERYADAPTERINFO, D3DKMTCloseAdapter, D3DKMTEnumAdapters2,
+    D3DKMTQueryAdapterInfo, KMTQAITYPE_ADAPTERPERFDATA, KMTQAITYPE_PHYSICALADAPTERCOUNT,
+    KMTQAITYPE_PHYSICALADAPTERDEVICEIDS, KMTQUERYADAPTERINFOTYPE,
 };
 use windows_sys::Win32::Foundation::HMODULE;
 use windows_sys::Win32::System::LibraryLoader::{
@@ -52,38 +53,63 @@ pub struct Heat {
     pub processor_limit: Option<f64>,
 }
 
-/// Reads [`Heat`]. Keep one and read it from the same thread.
+/// The maker of the graphics card a tool is working on (ADR 0063), so that card's temperature is
+/// the one watched.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Card {
+    Nvidia,
+    Intel,
+    Amd,
+}
+
+impl Card {
+    /// The maker's number on the PCI bus, as drivers report it.
+    fn vendor(self) -> u32 {
+        match self {
+            Self::Nvidia => 0x10DE,
+            Self::Intel => 0x8086,
+            Self::Amd => 0x1002,
+        }
+    }
+}
+
+/// Reads [`Heat`]. Keep one and read it from the same thread. Nothing is loaded or opened until
+/// it is first needed.
+#[derive(Default)]
 pub struct Thermometer {
-    nvml: Option<Nvml>,
-    processor: Option<Counter>,
+    /// NVML, once tried: `Some(None)` when it isn't there.
+    nvml: Option<Option<Nvml>>,
+    /// The processor's counter, once tried.
+    processor: Option<Option<Counter>>,
 }
 
 impl Thermometer {
     /// Gets ready to read. Whatever can't be read is simply left out.
     pub fn new() -> Self {
-        Self {
-            nvml: Nvml::load(),
-            processor: Counter::open(r"\Processor Information(_Total)\% Performance Limit"),
-        }
+        Self::default()
     }
 
-    /// Reads the computer now.
-    pub fn read(&mut self) -> Heat {
-        Heat {
-            graphics: self
+    /// Reads the computer now: the processor, and the graphics card `card` when a tool is working
+    /// on one. Without a card, no graphics card is read.
+    pub fn read(&mut self, card: Option<Card>) -> Heat {
+        let graphics = match card {
+            None => Vec::new(),
+            Some(Card::Nvidia) => self
                 .nvml
+                .get_or_insert_with(Nvml::load)
                 .as_ref()
                 .map(Nvml::read)
                 .filter(|cards| !cards.is_empty())
-                .unwrap_or_else(reported_by_drivers),
-            processor_limit: self.processor.as_ref().and_then(Counter::read),
+                .unwrap_or_else(|| reported_by_drivers(Card::Nvidia.vendor())),
+            Some(card) => reported_by_drivers(card.vendor()),
+        };
+        let processor = self.processor.get_or_insert_with(|| {
+            Counter::open(r"\Processor Information(_Total)\% Performance Limit")
+        });
+        Heat {
+            graphics,
+            processor_limit: processor.as_ref().and_then(Counter::read),
         }
-    }
-}
-
-impl Default for Thermometer {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -183,9 +209,10 @@ impl Nvml {
     }
 }
 
-/// The temperature of every graphics card whose driver tells Windows, as Task Manager reads it.
-/// Cards are looked up each time, so one added or a driver updated is followed.
-fn reported_by_drivers() -> Vec<GraphicsHeat> {
+/// The temperature of every graphics card made by `vendor` whose driver tells Windows, as Task
+/// Manager reads it. A card whose maker isn't said is counted in. Cards are looked up each time,
+/// so one added or a driver updated is followed.
+fn reported_by_drivers(vendor: u32) -> Vec<GraphicsHeat> {
     let mut list = D3DKMT_ENUMADAPTERS2::default();
     // SAFETY: with no buffer, Windows only answers how many adapters there are.
     #[allow(unsafe_code)]
@@ -213,6 +240,22 @@ fn reported_by_drivers() -> Vec<GraphicsHeat> {
             )
         };
         for index in 0..if count { physical } else { 1 } {
+            let mut ids = D3DKMT_QUERY_DEVICE_IDS {
+                PhysicalAdapterIndex: index,
+                ..Default::default()
+            };
+            // SAFETY: Windows answers this kind with a `D3DKMT_QUERY_DEVICE_IDS`.
+            #[allow(unsafe_code)]
+            let named = unsafe {
+                query(
+                    adapter.hAdapter,
+                    KMTQAITYPE_PHYSICALADAPTERDEVICEIDS,
+                    &mut ids,
+                )
+            };
+            if named && ids.DeviceIds.VendorID != 0 && ids.DeviceIds.VendorID != vendor {
+                continue;
+            }
             let mut data = D3DKMT_ADAPTER_PERFDATA {
                 PhysicalAdapterIndex: index,
                 ..Default::default()
@@ -340,21 +383,26 @@ mod tests {
 
     #[test]
     fn drivers_report_sensible_temperatures() {
-        for card in reported_by_drivers() {
-            println!("{card:?}");
-            assert!(card.celsius < 150);
+        for card in [Card::Nvidia, Card::Intel, Card::Amd] {
+            for heat in reported_by_drivers(card.vendor()) {
+                println!("{card:?}: {heat:?}");
+                assert!(heat.celsius < 150);
+            }
         }
     }
 
     #[test]
     fn reads_without_failing() {
         let mut thermometer = Thermometer::new();
-        let heat = thermometer.read();
-        for card in &heat.graphics {
-            assert!(card.celsius < 150);
-        }
-        if let Some(limit) = heat.processor_limit {
-            assert!(limit >= 0.0);
+        assert!(thermometer.read(None).graphics.is_empty());
+        for card in [Card::Nvidia, Card::Intel, Card::Amd] {
+            let heat = thermometer.read(Some(card));
+            for card in &heat.graphics {
+                assert!(card.celsius < 150);
+            }
+            if let Some(limit) = heat.processor_limit {
+                assert!(limit >= 0.0);
+            }
         }
     }
 }

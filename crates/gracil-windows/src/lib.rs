@@ -20,7 +20,7 @@ mod tray;
 pub use appear::{park, unpark};
 pub use drawing::draw_with_direct3d;
 pub use flyout::place_near_tray;
-pub use heat::{GraphicsHeat, Heat, Thermometer};
+pub use heat::{Card, GraphicsHeat, Heat, Thermometer};
 pub use icon::{set_icon_theme, set_window_icon};
 pub use instance::{claim, forward, is_running, serve};
 pub use integration::{
@@ -28,11 +28,14 @@ pub use integration::{
     remove_former_menus, remove_from_send_to, remove_main_menu, run_as_administrator,
     start_with_windows, stop_starting_with_windows,
 };
-pub use lifetime::{end_children_with_this_process, use_efficiency_mode, use_processors};
+pub use lifetime::{
+    end_children_with_this_process, quiet_tool, usable_threads, use_efficiency_mode, use_processors,
+};
 pub use numbers::{NumberSettings, number_settings};
 pub use process::set_suspended;
 pub use quiet::{
-    free_memory, free_space, idle_for, own_memory, saving_energy, total_memory, work_quietly,
+    Power, free_memory, free_space, idle_for, on_sleep, own_memory, person_busy, power,
+    saving_energy, total_memory, volume_of, work_in_background, work_quietly,
 };
 pub use theme::{Accent, Contrast, accent, animations, contrast, light_apps};
 pub use tray::{Tray, TrayEvent, TrayMenu, TrayState};

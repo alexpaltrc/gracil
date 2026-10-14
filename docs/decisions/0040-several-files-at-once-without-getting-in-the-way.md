@@ -4,6 +4,11 @@
 of more than 15,000 files (spec §77.3). Replaces the one-file-at-a-time rule of the queue (spec
 §33) and the "images go first" order of ADR 0034, item 13.
 
+*Update (2026-10-14):* by [ADR 0063](0063-safe-on-any-computer.md), the computer is idle only if
+nobody needs it (no full-screen program, presentation or screen kept on) and its warmth can be
+read; the next video gets ready beside one compressing only with 4 GB free and never on 8 GB of
+memory or less; a battery below 30 % starts nothing new.
+
 **Context.** Gracil compressed one file at a time, and each file's two stages followed each other:
 first the short samples that choose a video's compression (mostly on the processor), then the
 compression itself (mostly on the graphics card). While one ran, the other sat idle, and a long

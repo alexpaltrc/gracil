@@ -6,40 +6,45 @@
 //! never keep running, or keep a temporary file in use, after Gracil is gone.
 //!
 //! The same job holds Gracil and everything it starts to some of the processor's threads, and
-//! keeps any one of them from taking most of the computer's memory. The tools in it can also be
-//! put in Windows' efficiency mode (EcoQoS), as Task Manager does.
+//! keeps all of them together from taking most of the computer's memory. The tools in it can also
+//! be put in Windows' efficiency mode (EcoQoS), as Task Manager does, and their memory is the
+//! first Windows gives back when others need it (ADR 0063).
 
 use std::io;
 use std::mem;
 use std::ptr;
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_AFFINITY,
-    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_PROCESS_MEMORY,
+    JOB_OBJECT_LIMIT_JOB_MEMORY, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     JOBOBJECT_BASIC_PROCESS_ID_LIST, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
     JobObjectBasicProcessIdList, JobObjectExtendedLimitInformation, QueryInformationJobObject,
     SetInformationJobObject,
 };
 use windows_sys::Win32::System::Threading::{
-    GetCurrentProcess, GetCurrentProcessId, GetProcessAffinityMask, OpenProcess,
-    PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
-    PROCESS_POWER_THROTTLING_STATE, PROCESS_SET_INFORMATION, ProcessPowerThrottling,
-    SetProcessInformation,
+    GetCurrentProcess, GetCurrentProcessId, GetProcessAffinityMask, MEMORY_PRIORITY_INFORMATION,
+    MEMORY_PRIORITY_LOW, OpenProcess, PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+    PROCESS_POWER_THROTTLING_EXECUTION_SPEED, PROCESS_POWER_THROTTLING_STATE,
+    PROCESS_SET_INFORMATION, ProcessMemoryPriority, ProcessPowerThrottling, SetProcessInformation,
 };
 
-/// The share of the computer's memory any one process in the job may hold. Past it, the process
-/// is refused more memory instead of pushing the whole computer into the swap file.
-const MEMORY_SHARE: u64 = 4;
-const MEMORY_SHARE_OF: u64 = 3;
+/// The share of the computer's memory Gracil and every tool it runs may hold together, in
+/// hundredths (ADR 0063). Past it, a process is refused more memory, and its file fails quietly,
+/// instead of pushing the whole computer into the swap file.
+const MEMORY_PERCENT: u64 = 65;
+
+/// Whether the tools should run in efficiency mode, for those started from now on.
+static EFFICIENT: AtomicBool = AtomicBool::new(false);
 
 /// Gracil's job, once made.
 struct Job {
     handle: usize,
     /// The processor threads Gracil was allowed when it started.
     threads: usize,
-    /// The most memory one process may hold, if the computer's memory is known.
+    /// The most memory the whole job may hold, if the computer's memory is known.
     memory: Option<usize>,
 }
 
@@ -61,7 +66,7 @@ pub fn end_children_with_this_process() -> io::Result<()> {
         handle: handle as usize,
         threads: if read != 0 { process } else { 0 },
         memory: crate::total_memory()
-            .and_then(|total| usize::try_from(total / MEMORY_SHARE * MEMORY_SHARE_OF).ok()),
+            .and_then(|total| usize::try_from(total / 100 * MEMORY_PERCENT).ok()),
     };
     limit(&job, None)?;
 
@@ -75,6 +80,15 @@ pub fn end_children_with_this_process() -> io::Result<()> {
     }
     let _ = JOB.set(job);
     Ok(())
+}
+
+/// How many processor threads Gracil was allowed when it started, as Windows counts them for this
+/// process, once [`end_children_with_this_process`] has run. Unlike Rust's own count, it keeps to
+/// the threads the process may really use.
+pub fn usable_threads() -> Option<usize> {
+    JOB.get()
+        .map(|job| job.threads.count_ones() as usize)
+        .filter(|&count| count > 0)
 }
 
 /// Lets Gracil and everything it starts run on `count` of the processor's threads at most, the
@@ -91,48 +105,71 @@ pub fn use_processors(count: usize) -> io::Result<()> {
 /// Puts every tool Gracil runs (FFmpeg, jpegli) in Windows' efficiency mode, or lets Windows decide
 /// again: in it, Windows runs them on its efficient cores and at lower clock speeds, cooler and
 /// quieter but slower. Gracil's own process, which draws the window, is left alone. Applies to
-/// the tools running now; call it again for those started later. Does nothing before
-/// [`end_children_with_this_process`].
+/// the tools running now, and to those [`quiet_tool`] is told of later; call it only when the
+/// answer changes. Does nothing before [`end_children_with_this_process`].
 pub fn use_efficiency_mode(on: bool) -> io::Result<()> {
+    EFFICIENT.store(on, Ordering::Relaxed);
     let Some(job) = JOB.get() else {
         return Ok(());
     };
     // SAFETY: takes no arguments.
     #[allow(unsafe_code)]
     let own = unsafe { GetCurrentProcessId() };
+    for id in processes_in(job)?.into_iter().filter(|&id| id != own) {
+        quiet(id, on);
+    }
+    Ok(())
+}
+
+/// Quiets a tool Gracil has just started, by its process id: efficiency mode as last asked of
+/// [`use_efficiency_mode`], and memory Windows gives back first when others need it.
+pub fn quiet_tool(id: u32) {
+    quiet(id, EFFICIENT.load(Ordering::Relaxed));
+}
+
+/// Sets one process's efficiency mode, and lowers its memory priority. A process that has just
+/// ended is skipped.
+fn quiet(id: u32, efficient: bool) {
     let state = PROCESS_POWER_THROTTLING_STATE {
         Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
-        ControlMask: if on {
+        ControlMask: if efficient {
             PROCESS_POWER_THROTTLING_EXECUTION_SPEED
         } else {
             0
         },
-        StateMask: if on {
+        StateMask: if efficient {
             PROCESS_POWER_THROTTLING_EXECUTION_SPEED
         } else {
             0
         },
     };
-    for id in processes_in(job)?.into_iter().filter(|&id| id != own) {
-        // SAFETY: asks only for the right to change the process's information; the handle is
-        // checked before use and closed right after.
-        #[allow(unsafe_code)]
-        unsafe {
-            let process = OpenProcess(PROCESS_SET_INFORMATION, 0, id);
-            if process.is_null() {
-                // It has just ended.
-                continue;
-            }
-            SetProcessInformation(
-                process,
-                ProcessPowerThrottling,
-                (&raw const state).cast(),
-                mem::size_of::<PROCESS_POWER_THROTTLING_STATE>() as u32,
-            );
-            CloseHandle(process);
+    let memory = MEMORY_PRIORITY_INFORMATION {
+        MemoryPriority: MEMORY_PRIORITY_LOW,
+    };
+    // SAFETY: asks only for the right to change the process's information; the handle is checked
+    // before use and closed right after. Each pointer and size describe a local structure that
+    // outlives its call, of the kind its information class takes (both documented classes of
+    // `SetProcessInformation`).
+    #[allow(unsafe_code)]
+    unsafe {
+        let process = OpenProcess(PROCESS_SET_INFORMATION, 0, id);
+        if process.is_null() {
+            return;
         }
+        SetProcessInformation(
+            process,
+            ProcessPowerThrottling,
+            (&raw const state).cast(),
+            mem::size_of::<PROCESS_POWER_THROTTLING_STATE>() as u32,
+        );
+        SetProcessInformation(
+            process,
+            ProcessMemoryPriority,
+            (&raw const memory).cast(),
+            mem::size_of::<MEMORY_PRIORITY_INFORMATION>() as u32,
+        );
+        CloseHandle(process);
     }
-    Ok(())
 }
 
 /// The processes in the job right now, Gracil's own included.
@@ -190,8 +227,8 @@ fn limit(job: &Job, threads: Option<usize>) -> io::Result<()> {
     let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { mem::zeroed() };
     limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
     if let Some(memory) = job.memory {
-        limits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_PROCESS_MEMORY;
-        limits.ProcessMemoryLimit = memory;
+        limits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_JOB_MEMORY;
+        limits.JobMemoryLimit = memory;
     }
     if let Some(threads) = threads.filter(|&threads| threads != 0) {
         limits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_AFFINITY;
@@ -262,7 +299,10 @@ mod tests {
                 .contains(&child.id())
         );
         use_efficiency_mode(true).unwrap();
+        quiet_tool(child.id());
         use_efficiency_mode(false).unwrap();
+        // One that has ended is skipped.
+        quiet_tool(u32::MAX - 3);
         child.kill().unwrap();
         child.wait().unwrap();
     }

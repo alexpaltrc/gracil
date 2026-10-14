@@ -54,6 +54,8 @@ pub struct Text {
     pub ffmpeg_missing: &'static str,
     pub compressing: &'static str,
     pub paused: &'static str,
+    /// A laptop's battery is low: the file waits to be plugged in (ADR 0063).
+    pub low_battery: &'static str,
     /// What the dial's bottom button does, shown in place of its square under the pointer.
     pub stop_all: &'static str,
     pub saving: &'static str,
@@ -320,6 +322,7 @@ static ENGLISH: Text = Text {
     ffmpeg_missing: "Gracil is missing its video tool. Download Gracil again from where you got it",
     compressing: "Compressing",
     paused: "Paused",
+    low_battery: "Low battery · waiting",
     stop_all: "Stop all",
     saving: "Saving",
     not_compressed: "Not compressed",
@@ -466,6 +469,7 @@ static SPANISH: Text = Text {
     ffmpeg_missing: "A Gracil le falta su herramienta de video. Vuelve a descargarlo de donde lo obtuviste",
     compressing: "Comprimiendo",
     paused: "En pausa",
+    low_battery: "Batería baja · en espera",
     stop_all: "Detener todo",
     saving: "Guardando",
     not_compressed: "Sin comprimir",
