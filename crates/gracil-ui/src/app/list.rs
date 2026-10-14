@@ -281,7 +281,10 @@ impl Gracil {
         }
         self.clears += 1;
         self.cleared = Some(taken);
-        after(UNDO_FOR, Message::UndoGone(self.clears))
+        Task::batch([
+            after(UNDO_FOR, Message::UndoGone(self.clears)),
+            crate::focus::restart(crate::focus::Scope::Main),
+        ])
     }
 
     /// Undo: what Clear took off the list comes back where it was.
@@ -308,7 +311,10 @@ impl Gracil {
                 self.prepared.insert(id, prepared);
             }
         }
-        self.schedule()
+        Task::batch([
+            self.schedule(),
+            crate::focus::restart(crate::focus::Scope::Main),
+        ])
     }
 
     /// Undo is gone: what Clear took off the list is let go for good.

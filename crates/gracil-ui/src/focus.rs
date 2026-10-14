@@ -175,6 +175,46 @@ impl Operation for Give {
     }
 }
 
+/// After a press that changes what the window shows, a ring still held moves to the new view's
+/// first control. Rings are kept by position, so it would otherwise land on whatever control
+/// took the pressed one's place. With no ring, nothing changes.
+pub fn restart<Message: Send + 'static>(scope: Scope) -> Task<Message> {
+    iced::advanced::widget::operate(Restart { scope, held: false }).discard()
+}
+
+struct Restart {
+    scope: Scope,
+    held: bool,
+}
+
+impl Operation for Restart {
+    fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation)) {
+        operate(self);
+    }
+
+    fn custom(
+        &mut self,
+        _id: Option<&iced::advanced::widget::Id>,
+        _: Rectangle,
+        state: &mut dyn Any,
+    ) {
+        if let Some(ring) = state.downcast_mut::<Ring>() {
+            self.held |= ring.scope == self.scope && ring.held;
+        }
+    }
+
+    fn finish(&self) -> operation::Outcome<()> {
+        if !self.held {
+            return operation::Outcome::None;
+        }
+        operation::Outcome::Chain(Box::new(Give {
+            scope: self.scope,
+            to: 0,
+            at: 0,
+        }))
+    }
+}
+
 /// Whether `event` is a key that presses a control holding the ring.
 pub fn is_press(event: &Event) -> bool {
     matches!(
