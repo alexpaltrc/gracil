@@ -1,6 +1,12 @@
 //! What the window and the tray show about the list, worked out from it.
 
+use std::collections::BTreeSet;
+
 use super::*;
+
+/// Lists up to this long have their counts checked against a full count after every change in
+/// debug builds; longer ones would make those builds crawl.
+const CHECKED_UP_TO: usize = 2048;
 
 /// How the whole list went, once it is done.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -25,10 +31,11 @@ pub struct ListProgress {
     pub fraction: f64,
 }
 
-/// Counts and picks over the whole list, worked out in one pass after each change rather than each
-/// time the window is drawn: with thousands of files on the list, going through it again for
-/// every frame and every bit of progress kept the window from keeping up.
-#[derive(Debug, Clone, Default)]
+/// Counts and picks over the whole list, worked out after each change rather than each time the
+/// window is drawn: with thousands of files on the list, going through it again for every frame
+/// and every bit of progress kept the window from keeping up. Kept up to date from the files that
+/// changed alone (see [`Tally`], ADR 0065).
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Summary {
     /// Files not finished yet: waiting, getting ready or compressing.
     pub left: usize,
@@ -56,6 +63,234 @@ pub struct Summary {
     pub(super) round_done: usize,
     /// Files being compressed, whose progress moves the ring between whole files.
     pub(super) compressing: Vec<JobId>,
+    /// Results not put in place yet, chosen for or not.
+    pub(super) ready: usize,
+    /// Files that can leave the list now (see [`Gracil::can_remove`]).
+    pub(super) removable: usize,
+}
+
+/// The results of the files on the list, by file. Remembers which ones changed, so the
+/// [`Summary`] is kept up to date from those alone.
+#[derive(Debug, Default)]
+pub struct Outcomes {
+    map: HashMap<JobId, Outcome>,
+    touched: Vec<JobId>,
+}
+
+impl Outcomes {
+    pub fn get(&self, id: &JobId) -> Option<&Outcome> {
+        self.map.get(id)
+    }
+
+    pub fn values(&self) -> impl Iterator<Item = &Outcome> {
+        self.map.values()
+    }
+
+    pub(super) fn get_mut(&mut self, id: &JobId) -> Option<&mut Outcome> {
+        self.touched.push(*id);
+        self.map.get_mut(id)
+    }
+
+    pub(super) fn insert(&mut self, id: JobId, outcome: Outcome) {
+        self.touched.push(id);
+        self.map.insert(id, outcome);
+    }
+
+    pub(super) fn remove(&mut self, id: &JobId) -> Option<Outcome> {
+        self.touched.push(*id);
+        self.map.remove(id)
+    }
+
+    fn take_touched(&mut self) -> Vec<JobId> {
+        std::mem::take(&mut self.touched)
+    }
+}
+
+/// What one file adds to the [`Summary`].
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct Part {
+    kind: Option<Kind>,
+    state: Option<JobState>,
+    in_round: bool,
+    /// A result waiting for a choice.
+    choosing: bool,
+    /// A result not put in place yet.
+    ready: bool,
+    removable: bool,
+    /// Its sizes, when it came out smaller.
+    smaller: Option<Sizes>,
+    placed: Option<Sizes>,
+    already: bool,
+    failed: bool,
+}
+
+impl Part {
+    fn of(job: &Job, outcome: Option<&Outcome>, round_from: Option<JobId>) -> Self {
+        Self {
+            kind: Some(job.kind),
+            state: Some(job.state),
+            in_round: round_from.is_some_and(|from| job.id >= from),
+            choosing: outcome.is_some_and(Outcome::is_waiting),
+            ready: matches!(outcome, Some(Outcome::Ready { .. })),
+            removable: can_remove(job, outcome),
+            smaller: outcome.and_then(Outcome::sizes),
+            placed: match outcome {
+                Some(Outcome::Placed { sizes, .. }) => Some(*sizes),
+                _ => None,
+            },
+            already: matches!(
+                outcome,
+                Some(Outcome::Failed(
+                    Failure::AsSmallAsItGets | Failure::NotSmaller
+                ))
+            ),
+            failed: matches!(
+                outcome,
+                Some(Outcome::Failed(failure))
+                    if !matches!(failure, Failure::AsSmallAsItGets | Failure::NotSmaller)
+            ),
+        }
+    }
+
+    fn is(&self, test: fn(JobState) -> bool) -> bool {
+        self.state.is_some_and(test)
+    }
+}
+
+/// Counts that add up over the files.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct Counts {
+    left: usize,
+    waiting: usize,
+    choosing: usize,
+    ready: usize,
+    removable: usize,
+    round: usize,
+    round_done: usize,
+    total: (Sizes, usize),
+    finished: Finished,
+}
+
+impl Counts {
+    /// Adds `part`, or takes it off again.
+    fn count(&mut self, part: &Part, add: bool) {
+        let step = |count: &mut usize, yes: bool| {
+            if yes {
+                *count = if add { *count + 1 } else { *count - 1 };
+            }
+        };
+        let sizes = |total: &mut Sizes, sizes: Option<Sizes>| {
+            if let Some(sizes) = sizes {
+                *total = if add { *total + sizes } else { *total - sizes };
+            }
+        };
+        let finished = part.is(JobState::is_finished);
+        step(&mut self.left, part.state.is_some() && !finished);
+        step(&mut self.waiting, part.is(JobState::is_waiting));
+        step(&mut self.choosing, part.choosing);
+        step(&mut self.ready, part.ready);
+        step(&mut self.removable, part.removable);
+        step(&mut self.round, part.in_round);
+        step(&mut self.round_done, part.in_round && finished);
+        sizes(&mut self.total.0, part.smaller);
+        step(&mut self.total.1, part.smaller.is_some());
+        sizes(&mut self.finished.saved, part.placed);
+        step(&mut self.finished.compressed, part.placed.is_some());
+        step(&mut self.finished.already, part.already);
+        step(&mut self.finished.failed, part.failed);
+    }
+}
+
+/// The [`Summary`]'s counts, kept up to date file by file (ADR 0065): after a change, only the
+/// files that changed are counted again, however long the list.
+#[derive(Debug, Default, PartialEq)]
+pub(super) struct Tally {
+    parts: HashMap<JobId, Part>,
+    counts: Counts,
+    /// The files in each of these situations, in list order, for the first or last of them.
+    compressing: BTreeSet<JobId>,
+    video_compressing: BTreeSet<JobId>,
+    active: BTreeSet<JobId>,
+    choosing: BTreeSet<JobId>,
+    finished: BTreeSet<JobId>,
+    /// The first file of the round the parts were counted for.
+    round_from: Option<JobId>,
+}
+
+impl Tally {
+    /// Counts the whole list again.
+    fn of(queue: &Queue, outcomes: &Outcomes, round_from: Option<JobId>) -> Self {
+        let mut tally = Self {
+            round_from,
+            ..Self::default()
+        };
+        for job in queue.jobs() {
+            tally.set(
+                job.id,
+                Some(Part::of(job, outcomes.get(&job.id), round_from)),
+            );
+        }
+        tally
+    }
+
+    /// Counts again the files in `ids`, as they are now.
+    fn recount(
+        &mut self,
+        queue: &Queue,
+        outcomes: &Outcomes,
+        ids: impl IntoIterator<Item = JobId>,
+    ) {
+        let round_from = self.round_from;
+        for id in ids {
+            let part = queue
+                .get(id)
+                .map(|job| Part::of(job, outcomes.get(&id), round_from));
+            self.set(id, part);
+        }
+    }
+
+    /// Puts `part` in place of what file `id` added before; `None` when it left the list.
+    fn set(&mut self, id: JobId, part: Option<Part>) {
+        if let Some(old) = self.parts.remove(&id) {
+            if part == Some(old) {
+                self.parts.insert(id, old);
+                return;
+            }
+            self.counts.count(&old, false);
+            for set in [
+                &mut self.compressing,
+                &mut self.video_compressing,
+                &mut self.active,
+                &mut self.choosing,
+                &mut self.finished,
+            ] {
+                set.remove(&id);
+            }
+        }
+        let Some(part) = part else { return };
+        self.counts.count(&part, true);
+        let compressing = part.is(JobState::is_compressing);
+        for (set, yes) in [
+            (&mut self.compressing, compressing),
+            (
+                &mut self.video_compressing,
+                compressing && part.kind == Some(Kind::Video),
+            ),
+            (&mut self.active, part.is(JobState::is_active)),
+            (&mut self.choosing, part.choosing),
+            (&mut self.finished, part.is(JobState::is_finished)),
+        ] {
+            if yes {
+                set.insert(id);
+            }
+        }
+        self.parts.insert(id, part);
+    }
+}
+
+/// Whether a file can leave the list now: it is not running and not being put in place.
+fn can_remove(job: &Job, outcome: Option<&Outcome>) -> bool {
+    job.state.is_removable() && !matches!(outcome, Some(Outcome::Ready { placing: true, .. }))
 }
 
 impl Gracil {
@@ -75,75 +310,58 @@ impl Gracil {
         self.summary.left
     }
 
-    /// Goes through the whole list once and works out everything the window and the tray show
-    /// about it (see [`Summary`]).
-    pub(super) fn summarize(&self) -> Summary {
-        let mut summary = Summary::default();
-        let mut busy = !self.running.is_empty() || self.gathering > 0;
-        let mut finished = Finished::default();
-        let (mut video_compressing, mut compressing, mut active) = (None, None, None);
+    /// Works out everything the window and the tray show about the list (see [`Summary`]),
+    /// counting again only the files that changed since the last time (ADR 0065).
+    pub(super) fn summarize(&mut self) -> Summary {
+        let changed = self.queue.take_changed();
+        let touched = self.outcomes.take_touched();
+        let whole = changed.is_none();
+        let ids = changed.into_iter().flatten().chain(touched);
+        self.tally.recount(&self.queue, &self.outcomes, ids);
         // A round starts when work begins with nothing left to do, so every file before the first
         // one not done belongs to an earlier round.
-        let round_from = self.round_from.or_else(|| {
-            self.queue
-                .jobs()
-                .iter()
-                .find(|job| !job.state.is_finished())
-                .map(|job| job.id)
-        });
-        for job in self.queue.jobs() {
-            if job.state.is_waiting() {
-                summary.waiting_to_compress += 1;
-                summary.next_to_compress.get_or_insert(job.id);
-            } else if job.state.is_compressing() {
-                summary.compressing.push(job.id);
-                if job.kind == Kind::Video {
-                    video_compressing.get_or_insert(job.id);
-                }
-                compressing.get_or_insert(job.id);
-            }
-            if job.state.is_active() {
-                active.get_or_insert(job.id);
-            }
-            if round_from.is_some_and(|from| job.id >= from) {
-                summary.round += 1;
-                summary.round_done += usize::from(job.state.is_finished());
-            }
-            if job.state.is_finished() {
-                summary.last_finished = Some(job.id);
-            } else {
-                summary.left += 1;
-                busy = true;
-            }
-            let outcome = self.outcomes.get(&job.id);
-            if let Some(sizes) = outcome.and_then(Outcome::sizes) {
-                summary.total = (summary.total.0 + sizes, summary.total.1 + 1);
-            }
-            match outcome {
-                Some(Outcome::Ready { placing, .. }) => {
-                    busy = true;
-                    if !placing {
-                        summary.waiting_for_choice += 1;
-                        summary.first_waiting_for_choice.get_or_insert(job.id);
-                    }
-                }
-                Some(Outcome::Placed { sizes, .. }) => {
-                    finished.saved = finished.saved + *sizes;
-                    finished.compressed += 1;
-                }
-                Some(Outcome::Failed(Failure::AsSmallAsItGets | Failure::NotSmaller)) => {
-                    finished.already += 1;
-                }
-                Some(Outcome::Failed(_)) => finished.failed += 1,
-                Some(Outcome::Cancelled) | None => {}
-            }
+        let next_to_compress = self.queue.first_waiting();
+        let first_unfinished = next_to_compress
+            .into_iter()
+            .chain(self.tally.active.first().copied())
+            .min();
+        let round_from = self.round_from.or(first_unfinished);
+        if whole || round_from != self.tally.round_from {
+            self.tally = Tally::of(&self.queue, &self.outcomes, round_from);
+        } else if cfg!(debug_assertions) && self.queue.len() <= CHECKED_UP_TO {
+            debug_assert_eq!(
+                self.tally,
+                Tally::of(&self.queue, &self.outcomes, round_from),
+                "the summary drifted from the list"
+            );
         }
-        summary.working = video_compressing.or(compressing).or(active);
-        // Everything done: the next file starts a fresh round.
-        summary.round_from = round_from.filter(|_| summary.left > 0);
-        summary.finished = (!busy && finished.compressed + finished.already + finished.failed > 0)
-            .then_some(finished);
-        summary
+
+        let tally = &self.tally;
+        let counts = tally.counts;
+        let busy =
+            !self.running.is_empty() || self.gathering > 0 || counts.left > 0 || counts.ready > 0;
+        let finished = counts.finished;
+        Summary {
+            left: counts.left,
+            waiting_to_compress: counts.waiting,
+            waiting_for_choice: counts.choosing,
+            total: counts.total,
+            finished: (!busy && finished.compressed + finished.already + finished.failed > 0)
+                .then_some(finished),
+            working: [&tally.video_compressing, &tally.compressing, &tally.active]
+                .into_iter()
+                .find_map(|set| set.first().copied()),
+            first_waiting_for_choice: tally.choosing.first().copied(),
+            next_to_compress,
+            last_finished: tally.finished.last().copied(),
+            // Everything done: the next file starts a fresh round.
+            round_from: round_from.filter(|_| counts.left > 0),
+            round: counts.round,
+            round_done: counts.round_done,
+            compressing: tally.compressing.iter().copied().collect(),
+            ready: counts.ready,
+            removable: counts.removable,
+        }
     }
 
     /// How far along the whole list is, for the ring and the tray, when this round of work has
@@ -247,11 +465,12 @@ impl Gracil {
 
     /// Whether a video can leave the list now: it is not running and not being put in place.
     pub fn can_remove(&self, job: &Job) -> bool {
-        job.state.is_removable()
-            && !matches!(
-                self.outcomes.get(&job.id),
-                Some(Outcome::Ready { placing: true, .. })
-            )
+        can_remove(job, self.outcomes.get(&job.id))
+    }
+
+    /// Whether any file can leave the list now, so Clear has something to do.
+    pub fn any_removable(&self) -> bool {
+        self.summary.removable > 0
     }
 
     /// Whether `id` failed for a reason worth explaining: not merely already small.
@@ -261,5 +480,116 @@ impl Gracil {
             Some(Outcome::Failed(failure))
                 if !matches!(failure, Failure::NotSmaller | Failure::AsSmallAsItGets)
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Counts again only what changed, as [`Gracil::summarize`] does.
+    fn follow(tally: &mut Tally, queue: &mut Queue, outcomes: &mut Outcomes) {
+        let changed = queue.take_changed().unwrap_or_default();
+        let ids = changed.into_iter().chain(outcomes.take_touched());
+        tally.recount(queue, outcomes, ids);
+    }
+
+    fn sizes(original: u64, compressed: u64) -> Sizes {
+        Sizes {
+            original,
+            compressed,
+        }
+    }
+
+    #[test]
+    fn counting_what_changed_matches_counting_everything() {
+        let mut queue = Queue::default();
+        let mut outcomes = Outcomes::default();
+        queue.add((0..30).map(|i| {
+            let extension = if i % 4 == 0 { "jpg" } else { "mp4" };
+            PathBuf::from(format!(r"C:\V\{i}.{extension}"))
+        }));
+        let from = queue.jobs()[3].id;
+        let mut tally = Tally::of(&queue, &outcomes, Some(from));
+        queue.take_changed();
+        let check = |tally: &mut Tally, queue: &mut Queue, outcomes: &mut Outcomes| {
+            follow(tally, queue, outcomes);
+            assert_eq!(*tally, Tally::of(queue, outcomes, Some(from)));
+        };
+
+        let mut done = Vec::new();
+        for (round, kind) in [Kind::Video, Kind::Image, Kind::Video]
+            .into_iter()
+            .enumerate()
+        {
+            let id = queue.start_preparing(kind).unwrap().id;
+            check(&mut tally, &mut queue, &mut outcomes);
+            queue.apply(id, JobEvent::Ready).unwrap();
+            queue.apply(id, JobEvent::BeginCompressing).unwrap();
+            check(&mut tally, &mut queue, &mut outcomes);
+            queue.apply(id, JobEvent::BeginFinalizing).unwrap();
+            queue.apply(id, JobEvent::Complete).unwrap();
+            let outcome = match round {
+                0 => Outcome::Placed {
+                    choice: Choice::Replace,
+                    path: PathBuf::from(r"C:\V\done.mp4"),
+                    sizes: sizes(100, 40),
+                },
+                1 => Outcome::Failed(Failure::NotSmaller),
+                _ => Outcome::Failed(Failure::CouldNotCompress),
+            };
+            outcomes.insert(id, outcome);
+            check(&mut tally, &mut queue, &mut outcomes);
+            done.push(id);
+        }
+        assert_eq!(tally.counts.finished.compressed, 1);
+        assert_eq!(tally.counts.finished.already, 1);
+        assert_eq!(tally.counts.finished.failed, 1);
+        assert_eq!(tally.counts.total, (sizes(100, 40), 1));
+        assert_eq!(tally.finished.last(), done.last());
+
+        // A file leaving the list takes its result with it.
+        queue.remove(done[0]);
+        outcomes.remove(&done[0]);
+        check(&mut tally, &mut queue, &mut outcomes);
+        assert_eq!(tally.counts.total, (Sizes::default(), 0));
+
+        let ids: HashSet<JobId> = queue.jobs()[..10].iter().map(|job| job.id).collect();
+        let taken = queue.remove_all(&ids);
+        check(&mut tally, &mut queue, &mut outcomes);
+        queue.restore(taken);
+        check(&mut tally, &mut queue, &mut outcomes);
+        assert_eq!(tally.counts.removable, queue.len());
+    }
+
+    /// The window's counts over thirty thousand files, kept up to date as each file is got ready
+    /// and compressed: each change costs about the same however long the list is.
+    #[test]
+    fn a_huge_list_is_counted_file_by_file() {
+        let mut queue = Queue::default();
+        let mut outcomes = Outcomes::default();
+        queue.add((0..30_000).map(|i| PathBuf::from(format!(r"C:\P\{i}.jpg"))));
+        let first = queue.first_waiting();
+        let mut tally = Tally::of(&queue, &outcomes, first);
+        queue.take_changed();
+        let started = Instant::now();
+        while let Some(id) = queue.start_preparing(Kind::Image).map(|job| job.id) {
+            follow(&mut tally, &mut queue, &mut outcomes);
+            for event in [
+                JobEvent::Ready,
+                JobEvent::BeginCompressing,
+                JobEvent::BeginFinalizing,
+                JobEvent::Complete,
+            ] {
+                queue.apply(id, event).unwrap();
+            }
+            outcomes.insert(id, Outcome::Failed(Failure::NotSmaller));
+            follow(&mut tally, &mut queue, &mut outcomes);
+        }
+        let took = started.elapsed();
+        assert_eq!(tally.counts.finished.already, 30_000);
+        assert_eq!(tally.counts.round_done, 30_000);
+        // Counting the whole list after each change took minutes in all.
+        assert!(took < Duration::from_secs(2), "{took:?}");
     }
 }

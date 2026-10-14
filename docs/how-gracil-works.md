@@ -197,6 +197,11 @@ exists: it runs a tiny test compression to be sure.
   card, an Intel one (including the graphics built into most Intel processors) or an AMD one. That
   is usually many times faster than the processor, and the computer stays responsive. If a
   computer has more than one, NVIDIA comes first, then Intel, then AMD.
+- **The graphics card also reads the video** when it can, which leaves the processor free for
+  everything else. NVIDIA cards have always done this. Intel and AMD graphics do it too once a
+  tiny test at start shows that they can; otherwise the processor reads the video, as before. This
+  hasn't been tried on Intel or AMD computers yet, so if the card has any trouble with a video,
+  Gracil simply reads it with the processor instead.
 - **Without one**, Gracil uses the processor. It is slower but just as good.
 
 You never choose between these. Gracil picks the best one available. The test also tells Gracil
@@ -234,7 +239,9 @@ straining.
 - If the computer goes to sleep, Gracil rests with it, and once it wakes up it tries again
   whatever sleep interrupted.
 - While you are using the computer, Gracil takes on fewer images at once. When you have left it
-  alone for a minute, it takes on more, and fewer again as soon as you come back.
+  alone for a minute, it takes on more, and fewer again as soon as you come back. A desktop
+  computer, which has no battery and cools better than a laptop, takes on a few more images
+  while you use it than a laptop does, as long as it isn't warm or saving energy.
 - Large images need more memory, so Gracil starts fewer of them at once and always leaves at least
   half of the free memory for your programs.
 - Gracil and all its tools together may never take more than about two thirds of the computer's
@@ -247,8 +254,10 @@ straining.
   others will take. Otherwise the file is left as it is, and a small "!" says the drive is
   almost full.
 - The window stays quick to answer however long the list is and however long Gracil has been
-  working, even with tens of thousands of files and hours of work: pause, stop and **View files**
-  always respond at once.
+  working, even with tens of thousands of files and hours of work: pause, stop, **Clear** and
+  **View files** always respond at once. Gracil keeps its counts of the list up to date as each
+  file changes, instead of going through the whole list again, so a huge list costs the window no
+  more than a short one.
 - Gracil keeps an eye on how hot the computer runs, so a long list never cooks it, even with
   poor cooling:
   - Gracil never stops to let the computer cool down: it keeps it from getting hot in the first
@@ -287,6 +296,17 @@ see a difference. So instead of squeezing every video the same amount, Gracil me
   it normally. Easy videos come out much smaller; demanding ones keep the detail they need.
 - This takes a few seconds to a minute, while Gracil shows that it's getting ready. Stop works
   the whole time.
+- With an NVIDIA graphics card, the short moments stay on the card while they are compressed,
+  and only what they are compared with goes to the processor. That makes getting ready quicker
+  and leaves the processor freer, with exactly the same result.
+- On a desktop computer left alone, Gracil tries several of those short moments at the same
+  time, without using more of the processor than one at a time would. While you use the
+  computer, on a laptop, with little memory free or for videos larger than 1440p, it tries them
+  one at a time.
+- While it runs, Gracil remembers how much compression the last video of the same kind needed
+  (the same size and recorded the same way) and tries that first, so a list of similar videos,
+  such as those from one phone, gets ready quicker. It is never written down, and it never
+  changes how much a video is compressed: that is always measured.
 - Very short videos, and videos the measurement can't handle, use a safe standard amount
   instead.
 

@@ -36,7 +36,7 @@ impl Gracil {
         };
         let activity = if !self.running.is_empty() {
             pace::Activity::Working { card }
-        } else if self.queue.jobs().iter().any(|job| !job.state.is_finished()) {
+        } else if self.queue.count_all(|state| !state.is_finished()) > 0 {
             pace::Activity::Waiting
         } else {
             pace::Activity::Nothing
@@ -279,19 +279,23 @@ impl Gracil {
         }
         self.running.clear();
         self.prepared.clear();
-        let stopped: Vec<(JobId, PathBuf)> = self
+        let stopped: HashSet<JobId> = self
             .queue
             .jobs()
             .iter()
             .filter(|job| !job.state.is_finished())
-            .map(|job| (job.id, job.path.clone()))
+            .map(|job| job.id)
             .collect();
-        for (id, path) in stopped {
+        for &id in &stopped {
             let _ = self.queue.apply(id, JobEvent::Cancel);
-            if self.queue.remove(id) {
-                let choice = self.intents.remove(&id);
-                self.offered.push(Unfinished { path, choice });
-            }
+        }
+        // All at once: one at a time, a list of thousands took seconds to empty.
+        for job in self.queue.remove_all(&stopped) {
+            let choice = self.intents.remove(&job.id);
+            self.offered.push(Unfinished {
+                path: job.path,
+                choice,
+            });
         }
         if self.selected.is_some_and(|id| self.queue.get(id).is_none()) {
             self.selected = None;

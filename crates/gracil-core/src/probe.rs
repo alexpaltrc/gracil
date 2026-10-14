@@ -37,6 +37,9 @@ pub struct Stream {
     pub bit_rate: Option<u64>,
     /// A picture's width and height in pixels, as stored, when the file says.
     pub size: Option<(u32, u32)>,
+    /// How a picture's pixels are stored, by FFmpeg's name (`yuv420p`, `yuv420p10le`), when
+    /// the file says.
+    pub pixel_format: Option<String>,
     /// FFmpeg knows the codec but can't decode it, such as the spatial audio iPhones record
     /// (`apple_apac`). Set by [`crate::capabilities::Decoders::mark`].
     pub undecodable: bool,
@@ -166,6 +169,7 @@ struct RawStream {
     bit_rate: Option<String>,
     width: Option<u32>,
     height: Option<u32>,
+    pix_fmt: Option<String>,
     #[serde(default)]
     disposition: BTreeMap<String, u8>,
 }
@@ -191,6 +195,7 @@ fn parse(json: &[u8]) -> Result<MediaInfo, ProbeError> {
             frame_rate: Rate::parse(&s.avg_frame_rate).or_else(|| Rate::parse(&s.r_frame_rate)),
             bit_rate: s.bit_rate.and_then(|b| b.parse().ok()).filter(|&b| b > 0),
             size: s.width.zip(s.height).filter(|&(w, h)| w > 0 && h > 0),
+            pixel_format: s.pix_fmt.filter(|format| !format.is_empty()),
             undecodable: false,
         })
         .collect();
@@ -215,7 +220,7 @@ mod tests {
     fn parses_streams_duration_and_tags() {
         let json = br#"{
             "streams": [
-                {"index": 0, "codec_type": "video", "codec_name": "h264", "width": 3840, "height": 2160,
+                {"index": 0, "codec_type": "video", "codec_name": "h264", "width": 3840, "height": 2160, "pix_fmt": "yuv420p10le",
                  "avg_frame_rate": "60000/1001", "r_frame_rate": "60/1", "disposition": {"attached_pic": 0}},
                 {"index": 1, "codec_type": "audio", "codec_name": "aac", "channels": 2,
                  "avg_frame_rate": "0/0", "bit_rate": "128000"},
@@ -237,6 +242,7 @@ mod tests {
             })
         );
         assert_eq!(video.size, Some((3840, 2160)));
+        assert_eq!(video.pixel_format.as_deref(), Some("yuv420p10le"));
         assert_eq!(info.streams[1].size, None);
         assert_eq!(info.streams[1].frame_rate, None);
         assert_eq!(info.streams[1].bit_rate, Some(128_000));

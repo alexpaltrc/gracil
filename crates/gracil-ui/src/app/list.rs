@@ -254,26 +254,40 @@ impl Gracil {
         if !self.queue.remove(id) {
             return None;
         }
+        Some(self.taken(job))
+    }
+
+    /// All Gracil knows of `job`, just taken off the list.
+    fn taken(&mut self, job: Job) -> Taken {
+        let id = job.id;
         if self.selected == Some(id) {
             self.selected = None;
         }
         if self.last_placed == Some(id) {
             self.last_placed = None;
         }
-        Some(Taken {
+        Taken {
             job,
             outcome: self.outcomes.remove(&id),
             intent: self.intents.remove(&id),
             prepared: self.prepared.remove(&id),
-        })
+        }
     }
 
     /// Clear: everything not being worked on leaves the list, and for a few seconds Undo puts it
     /// back. Results nobody chose for are deleted only once Undo is gone.
     pub(super) fn clear(&mut self) -> Task<Message> {
         self.let_go_cleared();
-        let ids: Vec<JobId> = self.queue.jobs().iter().map(|job| job.id).collect();
-        let taken: Vec<Taken> = ids.into_iter().filter_map(|id| self.take(id)).collect();
+        // All at once: one at a time, a list of thousands took seconds to empty.
+        let ids: HashSet<JobId> = self
+            .queue
+            .jobs()
+            .iter()
+            .filter(|job| self.can_remove(job))
+            .map(|job| job.id)
+            .collect();
+        let removed = self.queue.remove_all(&ids);
+        let taken: Vec<Taken> = removed.into_iter().map(|job| self.taken(job)).collect();
         if self.queue.is_empty() {
             // The empty window has no list to fold away.
             self.drawer_open = false;

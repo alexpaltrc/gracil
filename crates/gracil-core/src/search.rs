@@ -13,11 +13,14 @@
 //! again loses a little, which is what the user asks for. If even that would not be clearly
 //! smaller, nothing is encoded.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fs;
 use std::ops::RangeInclusive;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::thread;
 use std::time::Duration;
 
 use tracing::{info, warn};
@@ -68,12 +71,56 @@ impl Found {
     }
 }
 
-/// Searches the level for `plan`'s main video, encoded the way `plan.attempt` would.
+/// The levels the last videos were found to need, by encoder, size and source codec, each the
+/// first level tried for the next video of the same kind (ADR 0065). Kept in memory for as long
+/// as Gracil runs, never written down. A hint only decides what is measured first: the level
+/// chosen is always one measured to reach the target.
+#[derive(Debug, Clone, Default)]
+pub struct Hints(Arc<Mutex<HashMap<HintKey, u8>>>);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct HintKey {
+    encoder: VideoEncoder,
+    /// The picture's short side, in steps (see [`size_step`]).
+    size: u8,
+    codec: String,
+    /// The level for compressing again (ADR 0033) rather than for looking the same.
+    again: bool,
+}
+
+impl Hints {
+    fn get(&self, key: &HintKey) -> Option<u8> {
+        self.lock().get(key).copied()
+    }
+
+    fn remember(&self, key: HintKey, level: u8) {
+        self.lock().insert(key, level);
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<HintKey, u8>> {
+        // A plain map of numbers: a panic elsewhere leaves nothing half done in it.
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// Which of a few common sizes a picture of `size` is closest to, by its short side: up to 480,
+/// 720, 1080, 1440, 2160, and above.
+fn size_step(size: Option<(u32, u32)>) -> u8 {
+    let short = size.map_or(0, |(width, height)| width.min(height));
+    [480, 720, 1080, 1440, 2160]
+        .iter()
+        .position(|&step| short <= step)
+        .unwrap_or(5) as u8
+}
+
+/// Searches the level for `plan`'s main video, encoded the way `plan.attempt` would, starting
+/// from what `hints` remember of videos like it.
 pub fn find_level(
     toolchain: &Toolchain,
     plan: &EncodePlan,
     info: &MediaInfo,
     control: &JobControl,
+    hints: &Hints,
 ) -> Found {
     let encoder = plan.attempt.encoder;
     let Some((index, rate)) = plan.main_video() else {
@@ -90,6 +137,16 @@ pub fn find_level(
         return Found::Fallback;
     }
 
+    let source = info.streams.iter().find(|stream| stream.index == index);
+    let pixel_format = source.and_then(|stream| stream.pixel_format.as_deref());
+    let key = HintKey {
+        encoder,
+        size: size_step(plan.picture),
+        codec: source
+            .map(|stream| stream.codec.clone())
+            .unwrap_or_default(),
+        again: false,
+    };
     let mut search = Search {
         toolchain,
         input: &plan.input,
@@ -98,6 +155,8 @@ pub fn find_level(
         attempt: plan.attempt,
         capabilities: &plan.capabilities,
         picture: plan.picture,
+        card_frames: pixel_format
+            .and_then(|format| card_download(format, plan.capabilities.ten_bit(encoder))),
         starts: sample_starts(duration),
         duration,
         control,
@@ -110,7 +169,7 @@ pub fn find_level(
             kept: kept_bytes(info, plan, original, duration),
         }
     });
-    match choose(&mut search, sizes) {
+    match choose(&mut search, sizes, hints, key) {
         Ok(found) => found,
         Err(Halt::Cancelled) => Found::Cancelled,
         Err(Halt::Failed(error)) => {
@@ -122,8 +181,14 @@ pub fn find_level(
 }
 
 /// Picks the level that looks the same. If that is not worth it, the video was already compressed,
-/// and it gets the level that loses a little (ADR 0033), when that one is worth it.
-fn choose(search: &mut Search, sizes: Option<Sizes>) -> Result<Found, Halt> {
+/// and it gets the level that loses a little (ADR 0033), when that one is worth it. Each search
+/// starts from the level `hints` remember for `key`, and leaves the level it found there.
+fn choose(
+    search: &mut Search,
+    sizes: Option<Sizes>,
+    hints: &Hints,
+    key: HintKey,
+) -> Result<Found, Halt> {
     let encoder = search.attempt.encoder;
     let levels = standard::levels(encoder);
     // A level that already misses the target and is still too big: every level that reaches the
@@ -132,9 +197,15 @@ fn choose(search: &mut Search, sizes: Option<Sizes>) -> Result<Found, Halt> {
         measured.score < standard::TARGET_SCORE
             && sizes.is_some_and(|sizes| !sizes.worth_it(sizes.predicted(measured)))
     };
-    let chosen = match search.highest(levels.clone(), standard::TARGET_SCORE, None, &give_up) {
+    let hint = hints.get(&key);
+    let chosen = match search.highest(levels.clone(), standard::TARGET_SCORE, hint, &give_up) {
         // Content that never reaches the target gets the best quality searched.
-        Ok(best) => Some(best.unwrap_or(*levels.start())),
+        Ok(best) => {
+            if let Some(level) = best {
+                hints.remember(key.clone(), level);
+            }
+            Some(best.unwrap_or(*levels.start()))
+        }
         Err(Halt::GaveUp) => None,
         Err(halt) => return Err(halt),
     };
@@ -151,13 +222,20 @@ fn choose(search: &mut Search, sizes: Option<Sizes>) -> Result<Found, Halt> {
         "already compressed; measuring the level for compressing again"
     );
 
+    // The level that looked the same is where losing a little starts, unless a video like this
+    // one was compressed again before.
     let never = |_: &Measured| false;
+    let key = HintKey { again: true, ..key };
+    let hint = hints.get(&key).or(chosen);
     let again = search.highest(
         standard::again_levels(encoder),
         standard::AGAIN_SCORE,
-        None,
+        hint,
         &never,
     )?;
+    if let Some(level) = again {
+        hints.remember(key, level);
+    }
     if let Some(found) = if_worth_it(search, sizes, again, "chose a level for compressing again")? {
         return Ok(found);
     }
@@ -298,6 +376,9 @@ struct Search<'a> {
     capabilities: &'a Capabilities,
     /// The video's width and height as stored, when the source says.
     picture: Option<(u32, u32)>,
+    /// How decoded frames are copied out of the graphics card for the reference, when they can
+    /// stay there for the encoder (see [`card_download`]).
+    card_frames: Option<&'static str>,
     starts: Vec<Duration>,
     duration: Duration,
     control: &'a JobControl,
@@ -337,10 +418,22 @@ impl<'a> Search<'a> {
         if let Some(measured) = self.measured.get(&level) {
             return Ok(*measured);
         }
-        let mut samples = Vec::with_capacity(self.starts.len());
-        for index in 0..self.starts.len() {
-            samples.push(self.sample(self.starts[index], level)?);
-        }
+        let at_once = samples_at_once(
+            self.starts.len(),
+            self.attempt.encoder,
+            standard::measured_size(self.picture).or(self.picture),
+            share::free_memory(),
+            share::easy() || ONE_AT_A_TIME.load(Ordering::Relaxed),
+        );
+        let samples = if at_once > 1 {
+            self.samples_together(level, at_once)?
+        } else {
+            let mut samples = Vec::with_capacity(self.starts.len());
+            for index in 0..self.starts.len() {
+                samples.push(self.sample(self.starts[index], level)?);
+            }
+            samples
+        };
         let measured = Measured::of(&samples, self.duration);
         info!(
             level,
@@ -352,33 +445,89 @@ impl<'a> Search<'a> {
         Ok(measured)
     }
 
-    fn sample(&mut self, start: Duration, level: u8) -> Result<Sample, Halt> {
-        // A sample can fail because the computer slept under it; it is tried again, once
-        // (ADR 0063).
-        let mut tried_again = false;
+    /// Measures the samples at `level`, `at_once` at a time, each with its share of the threads
+    /// the quality measure may use, so all together use no more than one would alone (ADR 0065).
+    /// The scores come back in the samples' order, as one at a time. A sample that fails is
+    /// measured again on its own; if the graphics card couldn't take one more encoder, the
+    /// samples go one at a time from then on.
+    fn samples_together(&mut self, level: u8, at_once: usize) -> Result<Vec<Sample>, Halt> {
+        let threads = (share::threads_for_one() / at_once).max(1);
+        let sleeps = share::sleeps();
+        let starts = self.starts.clone();
+        let mut runs = Vec::with_capacity(starts.len());
+        let this = &*self;
+        for group in starts.chunks(at_once) {
+            thread::scope(|scope| {
+                let running: Vec<_> = group
+                    .iter()
+                    .map(|&start| scope.spawn(move || this.run(start, level, threads)))
+                    .collect();
+                for sample in running {
+                    runs.push(sample.join().unwrap_or_else(|_| Run {
+                        outcome: EncodeOutcome::Failed {
+                            error: "a sample's thread failed".to_owned(),
+                            made_progress: false,
+                        },
+                        log: String::new(),
+                        frame_sizes: Vec::new(),
+                    }));
+                }
+            });
+        }
+
+        let mut samples = Vec::with_capacity(starts.len());
+        for (start, run) in starts.into_iter().zip(runs) {
+            let slept = share::sleeps() != sleeps;
+            match after_together(&run, slept, self.attempt.hw_decode) {
+                Then::Keep => samples.push(run.sample()?),
+                Then::Stop => return Err(Halt::Cancelled),
+                then => {
+                    if then == Then::AloneFromNowOn && !ONE_AT_A_TIME.swap(true, Ordering::Relaxed)
+                    {
+                        info!("the graphics card can't take samples together; one at a time");
+                    }
+                    if then == Then::AloneOnTheProcessor {
+                        self.attempt.hw_decode = false;
+                    }
+                    samples.push(self.sample(start, level)?);
+                }
+            }
+        }
+        Ok(samples)
+    }
+
+    /// Runs one sample once, with `threads` for the quality measure.
+    fn run(&self, start: Duration, level: u8, threads: usize) -> Run {
         // Measuring above 4K can go much longer between words on a slow computer (ADR 0064).
         let patience = if standard::measured_size(self.picture).is_some() {
             encode::PATIENCE_ABOVE_4K
         } else {
             encode::PATIENCE
         };
+        let mut frame_sizes = Vec::with_capacity(256);
+        let (outcome, log) = encode::run_ffmpeg_patient(
+            self.toolchain,
+            self.sample_args(start, level, threads),
+            self.control,
+            patience,
+            &mut |line| frame_sizes.extend(frame_size(line)),
+        );
+        Run {
+            outcome,
+            log,
+            frame_sizes,
+        }
+    }
+
+    fn sample(&mut self, start: Duration, level: u8) -> Result<Sample, Halt> {
+        // A sample can fail because the computer slept under it; it is tried again, once
+        // (ADR 0063).
+        let mut tried_again = false;
         loop {
             let sleeps = share::sleeps();
-            let mut frame_sizes = Vec::with_capacity(256);
-            let (outcome, log) = encode::run_ffmpeg_patient(
-                self.toolchain,
-                self.sample_args(start, level),
-                self.control,
-                patience,
-                &mut |line| frame_sizes.extend(frame_size(line)),
-            );
-            match outcome {
-                EncodeOutcome::Finished => {
-                    return match vmaf_score(&log) {
-                        Some(score) => Ok(Sample { score, frame_sizes }),
-                        None => Err(Halt::Failed(format!("no score in FFmpeg's output: {log}"))),
-                    };
-                }
+            let run = self.run(start, level, share::threads_for_one());
+            match run.outcome {
+                EncodeOutcome::Finished => return run.sample(),
                 EncodeOutcome::Cancelled => return Err(Halt::Cancelled),
                 EncodeOutcome::Failed { .. } if share::sleeps() != sleeps && !tried_again => {
                     info!("the computer slept during a sample; measuring it again");
@@ -397,12 +546,17 @@ impl<'a> Search<'a> {
         }
     }
 
-    /// Encodes one sample at `level` and measures it against the same part of the source.
-    fn sample_args(&self, start: Duration, level: u8) -> Vec<OsString> {
+    /// Encodes one sample at `level` and measures it against the same part of the source, with
+    /// `threads` for the quality measure on the processor.
+    fn sample_args(&self, start: Duration, level: u8, threads: usize) -> Vec<OsString> {
         let encoder = self.attempt.encoder;
         // With VMAF on the GPU too, the frames never leave it; otherwise they are handed over in
         // ordinary memory, where the reference is measured on the CPU (ADR 0030).
         let on_gpu = self.attempt.hw_decode && self.capabilities.vmaf_cuda;
+        // Otherwise, decoded on the card, the frames stay there for the encoder, as in the real
+        // encode, and only the reference is copied out (ADR 0065).
+        let decoding = plan::card_decoding(encoder).filter(|_| self.attempt.hw_decode);
+        let download = self.card_frames.filter(|_| decoding.is_some() && !on_gpu);
         let mut args: Vec<OsString> = Vec::with_capacity(64);
         let mut push = |values: &[&str]| args.extend(values.iter().map(OsString::from));
         push(&["-hide_banner", "-nostdin", "-nostats", "-v", "info"]);
@@ -411,8 +565,11 @@ impl<'a> Search<'a> {
             push(&["-init_hw_device", "cuda=gpu", "-filter_hw_device", "gpu"]);
             push(&["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]);
             push(&["-hwaccel_device", "gpu"]);
-        } else if self.attempt.hw_decode {
-            push(&["-hwaccel", "cuda"]);
+        } else if let Some(decoding) = decoding {
+            push(&["-hwaccel", decoding.hwaccel]);
+            if download.is_some() {
+                push(&["-hwaccel_output_format", decoding.frames]);
+            }
         }
         let (start, length) = (start.as_secs_f64(), SAMPLE.as_secs_f64());
         push(&["-ss", &format!("{start:.3}"), "-t", &format!("{length:.3}")]);
@@ -421,15 +578,13 @@ impl<'a> Search<'a> {
 
         // The source, changed in size and rate as the real encode will be, feeds both the
         // encoder and the reference.
-        let mut changes = plan::video_filters(self.rate, on_gpu, encoder, self.capabilities);
-        let format = if on_gpu {
-            String::new()
-        } else {
-            changes.pop().unwrap_or_default()
-        };
+        let gpu_frames = on_gpu || download.is_some();
+        let filters = plan::video_filters(self.rate, gpu_frames, encoder, self.capabilities);
+        // The pixel format the encoder needs is changed on its branch alone.
+        let format = filters.format.unwrap_or_else(|| "null".to_owned());
         let mut graph = format!("[0:{}]", self.stream);
-        for change in &changes {
-            graph.push_str(change);
+        if let Some(rate) = &filters.rate {
+            graph.push_str(rate);
             graph.push(',');
         }
         graph.push_str("split[source][reference];");
@@ -448,6 +603,11 @@ impl<'a> Search<'a> {
             graph.push_str("[source]null[encode];");
             graph.push_str(&format!(
                 "[reference]scale_cuda={scale_gpu}format=yuv420p[ref]"
+            ));
+        } else if let Some(download) = download {
+            graph.push_str(&format!("[source]{format}[encode];"));
+            graph.push_str(&format!(
+                "[reference]hwdownload,format={download},{scale_cpu}format=yuv420p[ref]"
             ));
         } else {
             graph.push_str(&format!("[source]{format}[encode];"));
@@ -480,7 +640,6 @@ impl<'a> Search<'a> {
                 "[dec:0]{scale_cpu}format=yuv420p,hwupload_cuda[encoded];[encoded][ref]libvmaf_cuda={VMAF_OPTIONS}[vmaf]"
             )
         } else {
-            let threads = share::threads_for_one();
             format!(
                 "[dec:0]{scale_cpu}format=yuv420p[encoded];[encoded][ref]libvmaf=n_threads={threads}:{VMAF_OPTIONS}[vmaf]"
             )
@@ -495,6 +654,122 @@ impl<'a> Search<'a> {
 
 /// How each sample's frames are pooled into one score, and how many are measured.
 const VMAF_OPTIONS: &str = "pool=harmonic_mean:n_subsample=2";
+
+/// One run of one sample: how FFmpeg ended, the end of what it said, and the size of every frame
+/// it encoded.
+struct Run {
+    outcome: EncodeOutcome,
+    log: String,
+    frame_sizes: Vec<u64>,
+}
+
+impl Run {
+    /// The sample a finished run measured.
+    fn sample(self) -> Result<Sample, Halt> {
+        match vmaf_score(&self.log) {
+            Some(score) => Ok(Sample {
+                score,
+                frame_sizes: self.frame_sizes,
+            }),
+            None => Err(Halt::Failed(format!(
+                "no score in FFmpeg's output: {}",
+                self.log
+            ))),
+        }
+    }
+}
+
+/// Most samples of one level measured at once (ADR 0065).
+const MOST_AT_ONCE: usize = 4;
+
+const GIB: u64 = 1 << 30;
+
+/// Set once the graphics card couldn't open one more encoder for samples measured together:
+/// from then on, for as long as Gracil runs, they go one at a time.
+static ONE_AT_A_TIME: AtomicBool = AtomicBool::new(false);
+
+/// How many of a level's `samples` are measured at once (ADR 0065): one with x265 (its samples
+/// take the processor), a picture measured above 1440p (`measured`, or not known), less than
+/// 4 GB free, or when going `easy` (efficiency mode, a battery, or a card that couldn't take
+/// more); otherwise up to [`MOST_AT_ONCE`], with 2 GB free for each. Free memory that isn't known
+/// counts as enough, as elsewhere.
+fn samples_at_once(
+    samples: usize,
+    encoder: VideoEncoder,
+    measured: Option<(u32, u32)>,
+    free: Option<u64>,
+    easy: bool,
+) -> usize {
+    let large = measured.is_none_or(|(width, height)| width.min(height) > 1440);
+    if easy || encoder == VideoEncoder::X265 || large || free.is_some_and(|free| free < 4 * GIB) {
+        return 1;
+    }
+    let room = free.map_or(usize::MAX, |free| {
+        usize::try_from(free / (2 * GIB)).unwrap_or(usize::MAX)
+    });
+    samples.min(MOST_AT_ONCE).min(room).max(1)
+}
+
+/// What becomes of a sample measured together with others.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Then {
+    /// It was measured.
+    Keep,
+    /// The job was stopped.
+    Stop,
+    /// Measured again on its own, as one at a time would, since the computer slept under it.
+    Alone,
+    /// Measured again on its own, decoded on the processor: decoding on the graphics card may
+    /// not take this video, as one at a time would conclude.
+    AloneOnTheProcessor,
+    /// Measured again on its own, and every sample after it too: the graphics card had no room
+    /// for one more encoder. Not a decoding failure.
+    AloneFromNowOn,
+}
+
+/// What becomes of a sample measured together with others that ended as `run`, depending on
+/// whether the computer `slept` meanwhile and the samples were decoded on the card (`hw_decode`).
+fn after_together(run: &Run, slept: bool, hw_decode: bool) -> Then {
+    match run.outcome {
+        EncodeOutcome::Finished => Then::Keep,
+        EncodeOutcome::Cancelled => Then::Stop,
+        EncodeOutcome::Failed { .. } | EncodeOutcome::Stalled => {
+            if card_was_full(&run.log) {
+                Then::AloneFromNowOn
+            } else if hw_decode && !slept {
+                Then::AloneOnTheProcessor
+            } else {
+                Then::Alone
+            }
+        }
+    }
+}
+
+/// Whether a sample failed because its encoder couldn't be opened, as when the graphics card has
+/// no room for one more encoder at once.
+fn card_was_full(log: &str) -> bool {
+    [
+        "OpenEncodeSessionEx",
+        "Error while opening encoder",
+        "Could not open encoder",
+    ]
+    .iter()
+    .any(|sign| log.contains(sign))
+}
+
+/// The format to copy frames of `pixel_format` out of the graphics card in, for a source whose
+/// frames can stay on the card for the encoder: 8-bit or 10-bit 4:2:0, as nearly every camera and
+/// phone records, the 10-bit kind only when the encoder writes 10-bit (`ten_bit`). An NVIDIA card
+/// hands such frames to the encoder exactly as FFmpeg's own conversion would, so the samples
+/// encode and score the same, to the last bit (measured on 8-bit, 10-bit and 4K clips; Intel and
+/// AMD cards couldn't be tried). Anything else is copied out first, before both branches.
+fn card_download(pixel_format: &str, ten_bit: bool) -> Option<&'static str> {
+    match pixel_format {
+        "yuv420p" | "nv12" => Some("nv12"),
+        "yuv420p10le" | "p010le" if ten_bit => Some("p010le"),
+        _ => None,
+    }
+}
 
 /// Where the samples start: one per [`SAMPLE_EVERY`] of video, up to [`MAX_SAMPLES`], each
 /// centred in an equal share of the video.
@@ -543,6 +818,7 @@ fn next_level(
         let guess = f64::from(reached) + share * f64::from(missed - reached);
         return Some((guess.round() as u8).clamp(low, high));
     }
+    let hint = hint.map(|level| level.clamp(*levels.start(), *levels.end()));
     match hint.filter(|level| (low..=high).contains(level) && !scores.contains_key(level)) {
         Some(level) => Some(level),
         // Only a level that reaches the target so far: the score it has to spare, at roughly a
@@ -683,6 +959,261 @@ mod tests {
         assert_eq!(found, Some(35));
         assert_eq!(measured[0], 35);
         assert!(measured.len() <= fresh, "{measured:?}");
+    }
+
+    /// The arguments of one NVENC sample of a 1080p video, joined.
+    fn sample_line(
+        card_frames: Option<&'static str>,
+        hw_decode: bool,
+        rate: Option<Rate>,
+    ) -> String {
+        sample_on(VideoEncoder::Nvenc, card_frames, hw_decode, rate)
+    }
+
+    #[test]
+    fn intel_and_amd_cards_keep_their_frames_too() {
+        let intel = sample_on(VideoEncoder::Qsv, Some("nv12"), true, None);
+        assert!(
+            intel.contains("-hwaccel qsv -hwaccel_output_format qsv -ss"),
+            "{intel}"
+        );
+        assert!(intel.contains(
+            "[0:0]split[source][reference];[source]scale_qsv=format=p010[encode];\
+             [reference]hwdownload,format=nv12,format=yuv420p[ref]"
+        ));
+        let amd = sample_on(VideoEncoder::Amf, Some("p010le"), true, None);
+        assert!(amd.contains("-hwaccel d3d11va -hwaccel_output_format d3d11 -ss"));
+        assert!(amd.contains(
+            "[source]null[encode];[reference]hwdownload,format=p010le,format=yuv420p[ref]"
+        ));
+        // Other sources: copied out of the card first; then converted on the processor.
+        let other = sample_on(VideoEncoder::Amf, None, true, None);
+        assert!(
+            other.contains("-noautorotate -hwaccel d3d11va -ss"),
+            "{other}"
+        );
+        assert!(other.contains("[source]format=p010le[encode]"));
+        assert!(!other.contains("scale_d3d11"));
+        // Decoding on the processor after the card failed.
+        let processor = sample_on(VideoEncoder::Qsv, Some("nv12"), false, None);
+        assert!(!processor.contains("hwaccel"));
+        assert!(processor.contains("[source]format=p010le[encode]"));
+    }
+
+    /// The arguments of one sample of a 1080p video with `encoder`, joined.
+    fn sample_on(
+        encoder: VideoEncoder,
+        card_frames: Option<&'static str>,
+        hw_decode: bool,
+        rate: Option<Rate>,
+    ) -> String {
+        let toolchain = Toolchain::stand_in();
+        let control = JobControl::default();
+        let capabilities = Capabilities {
+            encoder,
+            card_decode: true,
+            hardware: standard::HardwareLevel::Full,
+            x265_10bit: true,
+            vmaf: true,
+            vmaf_cuda: false,
+        };
+        let search = Search {
+            toolchain: &toolchain,
+            input: Path::new(r"C:\v\a.mp4"),
+            stream: 0,
+            rate,
+            attempt: Attempt {
+                encoder,
+                hw_decode,
+                preservation: plan::Preservation::Full,
+            },
+            capabilities: &capabilities,
+            picture: Some((1920, 1080)),
+            card_frames,
+            starts: Vec::new(),
+            duration: Duration::from_secs(60),
+            control: &control,
+            measured: BTreeMap::new(),
+        };
+        search
+            .sample_args(Duration::from_secs(8), 30, 6)
+            .iter()
+            .map(|arg| arg.to_str().unwrap_or_default().to_owned())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    #[test]
+    fn decoded_on_the_card_the_frames_stay_there_for_the_encoder() {
+        for (pixel_format, download) in [("yuv420p", "nv12"), ("yuv420p10le", "p010le")] {
+            let frames = card_download(pixel_format, true);
+            assert_eq!(frames, Some(download));
+            let line = sample_line(frames, true, None);
+            assert!(
+                line.contains("-hwaccel cuda -hwaccel_output_format cuda -ss 8.000"),
+                "{line}"
+            );
+            assert!(
+                line.contains(&format!(
+                    "[0:0]split[source][reference];[source]null[encode];\
+                     [reference]hwdownload,format={download},format=yuv420p[ref]"
+                )),
+                "{line}"
+            );
+            assert!(!line.contains("scale_cuda"), "{line}");
+        }
+        // The frame rate changes on the card, as in the real encode.
+        let line = sample_line(Some("nv12"), true, Some(Rate { num: 30, den: 1 }));
+        assert!(line.contains("[0:0]fps=30/1,split[source][reference];[source]null[encode]"));
+    }
+
+    #[test]
+    fn other_sources_are_copied_out_of_the_card_first() {
+        // 4:4:4, 12-bit, and 10-bit for an 8-bit encoder.
+        assert_eq!(card_download("yuv444p", true), None);
+        assert_eq!(card_download("yuv420p12le", true), None);
+        assert_eq!(card_download("yuv420p10le", false), None);
+        let line = sample_line(None, true, None);
+        assert!(line.contains("-noautorotate -hwaccel cuda -ss"), "{line}");
+        assert!(line.contains("[source]format=p010le[encode];[reference]format=yuv420p[ref]"));
+        // Decoding on the processor after the card failed.
+        let line = sample_line(Some("nv12"), false, None);
+        assert!(!line.contains("hwaccel"), "{line}");
+        assert!(line.contains("[source]format=p010le[encode];[reference]format=yuv420p[ref]"));
+    }
+
+    #[test]
+    fn a_wrong_hint_never_chooses_a_level_that_misses_the_target() {
+        // A score curve with a bump in it, as real ones sometimes have.
+        let bumpy = |level: u8| curve(level) + if level == 33 { 1.5 } else { 0.0 };
+        for (smooth, score) in [(true, curve as fn(u8) -> f64), (false, bumpy)] {
+            for target in [95.0, 90.0] {
+                let (fresh, _) = search(score, 24..=42, target, None, &[]);
+                for hint in (0..=60).map(Some).chain([None]) {
+                    let (found, measured) = search(score, 24..=42, target, hint, &[]);
+                    let found = found.unwrap();
+                    assert!(score(found) >= target, "hint {hint:?} chose {found}");
+                    assert!((24..=42).contains(&found));
+                    assert!(measured.iter().all(|level| (24..=42).contains(level)));
+                    if smooth {
+                        assert_eq!(Some(found), fresh, "hint {hint:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hints_are_kept_by_encoder_size_and_codec() {
+        let hints = Hints::default();
+        let key = |encoder, size, codec: &str| HintKey {
+            encoder,
+            size: size_step(size),
+            codec: codec.to_owned(),
+            again: false,
+        };
+        let full_hd = key(VideoEncoder::Nvenc, Some((1920, 1080)), "h264");
+        hints.remember(full_hd.clone(), 33);
+        assert_eq!(hints.get(&full_hd), Some(33));
+        // A vertical phone video of the same size is the same kind.
+        assert_eq!(
+            hints.get(&key(VideoEncoder::Nvenc, Some((1080, 1920)), "h264")),
+            Some(33)
+        );
+        for other in [
+            key(VideoEncoder::Nvenc, Some((3840, 2160)), "h264"),
+            key(VideoEncoder::Nvenc, Some((1920, 1080)), "hevc"),
+            key(VideoEncoder::X265, Some((1920, 1080)), "h264"),
+            HintKey {
+                again: true,
+                ..full_hd.clone()
+            },
+        ] {
+            assert_eq!(hints.get(&other), None, "{other:?}");
+        }
+        assert_eq!(size_step(None), 0);
+        assert_eq!(size_step(Some((7680, 4320))), 5);
+    }
+
+    #[test]
+    fn how_many_samples_are_measured_at_once() {
+        let nvenc = VideoEncoder::Nvenc;
+        let full_hd = Some((1920, 1080));
+        let free = |gib: u64| Some(gib * GIB);
+        assert_eq!(samples_at_once(4, nvenc, full_hd, free(16), false), 4);
+        assert_eq!(samples_at_once(2, nvenc, full_hd, free(16), false), 2);
+        assert_eq!(
+            samples_at_once(4, nvenc, Some((1080, 1920)), free(16), false),
+            4
+        );
+        assert_eq!(
+            samples_at_once(4, nvenc, Some((2560, 1440)), free(16), false),
+            4
+        );
+        // 2 GB for each.
+        assert_eq!(samples_at_once(4, nvenc, full_hd, free(6), false), 3);
+        assert_eq!(samples_at_once(4, nvenc, full_hd, None, false), 4);
+        // One at a time.
+        for (encoder, picture, memory, easy) in [
+            (VideoEncoder::X265, full_hd, free(16), false),
+            (nvenc, Some((3840, 2160)), free(16), false),
+            (nvenc, None, free(16), false),
+            (nvenc, full_hd, Some(4 * GIB - 1), false),
+            (nvenc, full_hd, free(16), true),
+        ] {
+            assert_eq!(
+                samples_at_once(4, encoder, picture, memory, easy),
+                1,
+                "{encoder:?} {picture:?} {memory:?} {easy}"
+            );
+        }
+        assert_eq!(samples_at_once(1, nvenc, full_hd, free(16), false), 1);
+    }
+
+    #[test]
+    fn a_sample_that_fails_together_is_measured_again_alone() {
+        let run = |outcome, log: &str| Run {
+            outcome,
+            log: log.to_owned(),
+            frame_sizes: Vec::new(),
+        };
+        let failed = || EncodeOutcome::Failed {
+            error: String::new(),
+            made_progress: false,
+        };
+        let full = "[hevc_nvenc @ 0] OpenEncodeSessionEx failed: incompatible client key (21)\n\
+                    [vost#0:0/hevc_nvenc] Error while opening encoder";
+        // The card had no room: one at a time from now on, still decoding on the card.
+        assert_eq!(
+            after_together(&run(failed(), full), false, true),
+            Then::AloneFromNowOn
+        );
+        // Anything else: as one at a time, on the processor, unless the computer slept.
+        let broken = "[h264 @ 0] decode_slice_header error";
+        assert_eq!(
+            after_together(&run(failed(), broken), false, true),
+            Then::AloneOnTheProcessor
+        );
+        assert_eq!(
+            after_together(&run(EncodeOutcome::Stalled, ""), false, true),
+            Then::AloneOnTheProcessor
+        );
+        assert_eq!(
+            after_together(&run(failed(), broken), true, true),
+            Then::Alone
+        );
+        assert_eq!(
+            after_together(&run(failed(), broken), false, false),
+            Then::Alone
+        );
+        assert_eq!(
+            after_together(&run(EncodeOutcome::Finished, ""), false, true),
+            Then::Keep
+        );
+        assert_eq!(
+            after_together(&run(EncodeOutcome::Cancelled, full), false, true),
+            Then::Stop
+        );
     }
 
     #[test]

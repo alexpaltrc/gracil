@@ -32,6 +32,8 @@ pub struct Engine {
     pub decoders: Decoders,
     /// `cjpegli.exe`, shipped with Gracil (ADR 0034). Without it, photos cannot be compressed.
     pub jpegli: Option<PathBuf>,
+    /// The levels the last videos needed, tried first for the next ones like them (ADR 0065).
+    pub hints: search::Hints,
 }
 
 impl Engine {
@@ -42,8 +44,16 @@ impl Engine {
 
     /// An engine for an FFmpeg that has already been found.
     pub fn with(resolved: Resolved) -> Self {
-        let capabilities = Capabilities::detect(&resolved.toolchain, &resolved.encoders);
-        let decoders = Decoders::list(&resolved.toolchain).unwrap_or_else(|error| {
+        // What FFmpeg decodes is listed while the hardware is detected (ADR 0065).
+        let (capabilities, decoders) = std::thread::scope(|scope| {
+            let decoders = scope.spawn(|| Decoders::list(&resolved.toolchain));
+            let capabilities = Capabilities::detect(&resolved.toolchain, &resolved.encoders);
+            let decoders = decoders
+                .join()
+                .unwrap_or_else(|_| Err(io::Error::other("the listing thread failed")));
+            (capabilities, decoders)
+        });
+        let decoders = decoders.unwrap_or_else(|error| {
             warn!(%error, "could not list what FFmpeg decodes");
             Decoders::default()
         });
@@ -52,6 +62,7 @@ impl Engine {
             capabilities,
             decoders,
             jpegli: toolchain::find_jpegli(),
+            hints: search::Hints::default(),
         }
     }
 }
@@ -134,7 +145,7 @@ pub fn prepare(
             let level = Found::Fallback.level_for(first.encoder);
             // The samples are measured and thrown away; nothing is written where the result goes.
             let plan = EncodePlan::new(source, Path::new(""), &info, first, capabilities, level);
-            search::find_level(&engine.toolchain, &plan, &info, control)
+            search::find_level(&engine.toolchain, &plan, &info, control, &engine.hints)
         }
     };
     match found {

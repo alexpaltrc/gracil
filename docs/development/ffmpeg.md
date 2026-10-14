@@ -31,7 +31,10 @@ and points to FFmpeg's source commit and to the builder's scripts with every lib
 
 ## Capabilities
 
-Detected once per process (`Capabilities::detect`):
+Detected once per process (`Capabilities::detect`), never kept from one run to the next. The
+listings (`-hwaccels`, `-filters`, `-h encoder=libx265`, `-codecs`) and each listed card
+encoder's test encodes run at the same time, on scoped threads; each card's tiers are still tried
+best first, and the first card in the order below whose test passed is used (ADR 0065).
 
 - **Card encoder** (ADR 0052): `hevc_nvenc`, then `hevc_qsv`, then `hevc_amf`; the first that is
   listed *and* passes a three-frame test encode is used. A listed encoder says nothing about the
@@ -40,7 +43,11 @@ Detected once per process (`Capabilities::detect`):
   tier's options, best first, and the first that succeeds is used. For NVENC, `Full` is 10-bit
   with lookahead, B-frame references and multipass; `Basic` drops the B-frame settings; `Legacy`
   is the original 8-bit p6 setting. No tier uses adaptive quantization or the temporal filter (ADR 0029).
-- **CUDA decoding**: NVENC works and `-hwaccels` lists `cuda`.
+- **Card decoding** (`card_decode`): for NVENC, `-hwaccels` lists `cuda`. For Quick Sync and AMF
+  (ADR 0065), `-hwaccels` lists `qsv` or `d3d11va`, the conversion filter is listed (`scale_qsv`),
+  and a one-frame test passes: an H.264 frame made on the processor with `libx264` is piped into
+  a second FFmpeg that decodes it on the card, keeps the frames there and encodes them with the
+  chosen tier. On a computer without that card the test fails at once and nothing changes.
 - **Filters**: `-filters` lists `libvmaf` (the quality search); the bundled build has it.
   `libvmaf_cuda` with `scale_cuda` and `hwupload_cuda` (VMAF on the GPU, ADR 0030) is used when
   present; no public Windows build has it.
@@ -64,8 +71,13 @@ Detected once per process (`Capabilities::detect`):
 | 4 | x265 | software | video + AAC audio |
 
 With Quick Sync or AMF it is the card (software decoding) with all streams, then essential, then
-x265 essential. Without a card encoder it is x265 with all streams, then x265 essential. A failed attempt moves on to the
-next one only if it used CUDA or got nowhere. A failure partway through a software decode means
+x265 essential, after a first attempt decoding on the card where its test passed (ADR 0065):
+Quick Sync with `-hwaccel qsv -hwaccel_output_format qsv` and `scale_qsv=format=p010` (`nv12` for
+the 8-bit tier) before the encoder; AMF with `-hwaccel d3d11va -hwaccel_output_format d3d11`, the
+frames taken as they are (`scale_d3d11` couldn't create its output picture with the bundled build
+on the NVIDIA test computer, even for `nv12`). Neither was tried on Intel or AMD hardware. Without
+a card encoder it is x265 with all streams, then x265 essential. A failed attempt moves on to the
+next one only if it decoded on the card or got nowhere. A failure partway through a software decode means
 the source is damaged at that point, and the next attempt would stop there too.
 
 The output is accepted when FFprobe reads it, it holds HEVC video, and its length matches the
@@ -93,7 +105,10 @@ Before the first attempt, Gracil looks for the highest level (smallest file) who
 95: NVENC CQ and AMF QP 24–38, Quick Sync ICQ 20–36, x265 CRF 20–34. Between a level that reaches the target and one that misses
 it, the next guess is on a straight line through their scores; with only a level that reaches it,
 the search steps past it by the score it has to spare (about a point per level); otherwise it
-halves what is left. Each step encodes 4 s samples, one per 15 s of video up to four, centred in
+halves what is left. The first level measured is the one the last video with the same encoder,
+size step and source codec needed (`search::Hints`, in memory only, ADR 0065); the search for
+compressing again starts at the level the first search chose, or the one the last such video
+needed. Each step encodes 4 s samples, one per 15 s of video up to four, centred in
 equal shares of the video, and averages their scores. Every measured level is cached for the
 whole search. One FFmpeg process per sample does both jobs, writing nothing to disk:
 
@@ -105,10 +120,37 @@ whole search. One FFmpeg process per sample does both jobs, writing nothing to d
 -map [vmaf] -f null -
 ```
 
-The loopback decoder (`-dec 0:0`) decodes what the encoder just produced. GPU decoding is used
-without `-hwaccel_output_format`, so both branches get ordinary frames; if it fails, the sample is
-retried on the CPU. The last `VMAF score:` line in the error output is the score; standard output
-lists every encoded frame's size.
+The loopback decoder (`-dec 0:0`) decodes what the encoder just produced. The last `VMAF score:`
+line in the error output is the score; standard output lists every encoded frame's size.
+
+**CUDA decoding (ADR 0065).** For an 8-bit or 10-bit 4:2:0 source (`pix_fmt` `yuv420p` or
+`yuv420p10le`, the 10-bit kind only for a 10-bit tier), the sample is decoded with `-hwaccel cuda
+-hwaccel_output_format cuda`: the encoder takes the CUDA frames as they are (after `fps`, as in the
+real encode), and only the reference is copied out:
+
+```text
+[0:N]fps…,split[source][reference];[source]null[encode];
+[reference]hwdownload,format=nv12|p010le,format=yuv420p[ref]
+```
+
+No `scale_cuda` conversion is used. Measured on 8-bit, 10-bit, 60 fps and 4K clips, the encoded
+frames and the scores are bit-identical to decoding into ordinary frames, and the samples take
+about a fifth less processor. Other sources (4:4:4, 12-bit, 10-bit with an 8-bit tier) are decoded
+with `-hwaccel cuda` alone, so both branches get ordinary frames. Either way, if GPU decoding
+fails, the sample is retried on the CPU.
+
+**Samples together (ADR 0065).** A level's samples run up to four at once, on scoped threads, each
+with `n_threads` = `threads_for_one` / K (at least one), so together they never use more VMAF
+threads than one alone; their scores are collected in sample order, so the pooled score and size
+are computed exactly as one at a time (and measured bit-identical). K is 1 with x265, for a
+picture measured above 1440p (or of unknown size), with less than 4 GB free, and while the app
+says the tools go easy (`share::go_easy`: efficiency mode or battery, which also means whenever
+the computer is in use); otherwise up to 4, with 2 GB free for each. Every process is under the
+job's `JobControl`, which now holds several children: pause, resume, stop and each one's stall
+watchdog apply to each. A sample that fails together is measured again alone; if its log says
+the encoder couldn't be opened (`OpenEncodeSessionEx`, `Error while opening encoder`), that is
+not taken as a decoding failure, and samples go one at a time for the rest of the session.
+Otherwise the failure is handled as one at a time would: decoding moves to the CPU.
 
 VMAF measures every other frame (`n_subsample=2`, ADR 0030). With `libvmaf_cuda`, the input is
 decoded with `-hwaccel_output_format cuda` on a named device (`-init_hw_device cuda=gpu

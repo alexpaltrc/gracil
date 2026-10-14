@@ -3,6 +3,10 @@
 **Status:** Accepted, built (2026-10-05). Not yet tried on Intel or AMD hardware; the test encode
 keeps Gracil on the processor wherever it fails.
 
+*Update (2026-10-14):* by [ADR 0065](0065-speed.md), item 4 below is no longer so: where a
+one-frame test passes, Quick Sync and AMF first try decoding on their own card, keeping the
+frames there; processor decoding stays as the next attempt. Also untried on that hardware.
+
 **Context.** Only NVIDIA cards compressed videos (ADR 0028). Most laptops have no NVIDIA card,
 but nearly all have Intel graphics with Quick Sync, or AMD graphics with AMF, both able to encode
 HEVC many times faster than x265 and far cooler. The bundled FFmpeg (ADR 0050) has `hevc_qsv` and

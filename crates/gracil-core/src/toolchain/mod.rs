@@ -38,6 +38,16 @@ impl Toolchain {
         })
     }
 
+    /// A toolchain that is never run, for tests of the arguments Gracil builds.
+    #[cfg(test)]
+    pub(crate) fn stand_in() -> Self {
+        Self {
+            ffmpeg: PathBuf::from("ffmpeg.exe"),
+            ffprobe: PathBuf::from("ffprobe.exe"),
+            origin: Origin::System,
+        }
+    }
+
     pub fn ffmpeg_path(&self) -> &Path {
         &self.ffmpeg
     }

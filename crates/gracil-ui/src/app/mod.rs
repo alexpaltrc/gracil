@@ -57,12 +57,12 @@ use leaving::Kept;
 use list::choose_files;
 use look::{windows_accent, windows_contrast};
 pub use summary::Finished;
-use summary::Summary;
+use summary::{Outcomes, Summary, Tally};
 use windows::{dismiss, give_icon};
 
 pub struct Gracil {
     pub queue: Queue,
-    pub outcomes: HashMap<JobId, Outcome>,
+    pub outcomes: Outcomes,
     pub engine: EngineState,
     /// The window files are being dragged over, if any.
     pub hovering: Option<window::Id>,
@@ -155,6 +155,8 @@ pub struct Gracil {
     settings: Settings,
     /// Counts over the whole list, as of the last change.
     summary: Summary,
+    /// What each file adds to the counts, so a change counts only the files it touched.
+    tally: Tally,
     /// Where this round of work started, kept until everything in it is done.
     round_from: Option<JobId>,
     /// The files left unfinished the last time Gracil closed, offered until they are taken up or
@@ -289,7 +291,8 @@ impl Gracil {
         gracil_windows::set_icon_theme(mode != Some(Mode::Dark));
         let state = Self {
             queue: Queue::default(),
-            outcomes: HashMap::new(),
+            outcomes: Outcomes::default(),
+            tally: Tally::default(),
             engine: EngineState::Starting,
             hovering: None,
             drawer_open: false,

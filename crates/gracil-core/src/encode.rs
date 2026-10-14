@@ -20,7 +20,9 @@ use crate::toolchain::Toolchain;
 /// parameter here so the core stays free of Windows code.
 pub type Suspend = fn(process_id: u32, suspended: bool) -> io::Result<()>;
 
-/// Lets another thread pause, resume or cancel a running compression. Cheap to clone.
+/// Lets another thread pause, resume or cancel a running compression. Cheap to clone. One job can
+/// run several tools at once, such as the samples of one quality level (ADR 0065); each of them
+/// is paused, resumed, cancelled and watched over like a single one.
 #[derive(Debug, Clone, Default)]
 pub struct JobControl(Arc<Mutex<Slot>>);
 
@@ -29,18 +31,36 @@ struct Slot {
     cancelled: bool,
     /// Set while paused, with the way to resume. A process started meanwhile starts paused.
     paused: Option<Suspend>,
-    child: Option<Child>,
+    /// The tools running now, each with the number it was given when it started.
+    children: Vec<(u64, Child)>,
+    /// The number the next tool started gets.
+    next: u64,
+}
+
+impl Slot {
+    fn child(&mut self, token: u64) -> Option<&mut Child> {
+        self.children
+            .iter_mut()
+            .find(|(t, _)| *t == token)
+            .map(|(_, child)| child)
+    }
+
+    fn take(&mut self, token: u64) -> Option<Child> {
+        let at = self.children.iter().position(|(t, _)| *t == token)?;
+        Some(self.children.swap_remove(at).1)
+    }
 }
 
 impl JobControl {
-    /// Stops the current FFmpeg process, if any, and every attempt after it. Works while paused.
+    /// Stops the FFmpeg processes running now, if any, and every attempt after them. Works while
+    /// paused.
     pub fn cancel(&self) {
         let mut slot = self.lock();
         slot.cancelled = true;
-        if let Some(child) = slot.child.as_mut()
-            && let Err(error) = child.kill()
-        {
-            debug!(%error, "FFmpeg already exited when cancelled");
+        for (_, child) in &mut slot.children {
+            if let Err(error) = child.kill() {
+                debug!(%error, "FFmpeg already exited when cancelled");
+            }
         }
     }
 
@@ -55,11 +75,21 @@ impl JobControl {
         if slot.cancelled || slot.paused.is_some() {
             return Ok(());
         }
-        if let Some(child) = &slot.child {
-            suspend(child.id(), true)?;
+        // With one tool, one that can't be paused leaves the job running, as before. With
+        // several, those already paused stay so until resumed; the first failure is reported.
+        let mut result = Ok(());
+        let mut paused_any = false;
+        for (_, child) in &slot.children {
+            match suspend(child.id(), true) {
+                Ok(()) => paused_any = true,
+                Err(error) if result.is_ok() => result = Err(error),
+                Err(_) => {}
+            }
         }
-        slot.paused = Some(suspend);
-        Ok(())
+        if result.is_ok() || paused_any {
+            slot.paused = Some(suspend);
+        }
+        result
     }
 
     pub fn resume(&self) -> io::Result<()> {
@@ -67,11 +97,17 @@ impl JobControl {
         let Some(suspend) = slot.paused else {
             return Ok(());
         };
-        if let Some(child) = &slot.child {
-            suspend(child.id(), false)?;
+        // Every tool is resumed, even if one can't be: the first failure is reported.
+        let mut result = Ok(());
+        for (_, child) in &slot.children {
+            if let Err(error) = suspend(child.id(), false)
+                && result.is_ok()
+            {
+                result = Err(error);
+            }
         }
         slot.paused = None;
-        Ok(())
+        result
     }
 
     pub fn is_paused(&self) -> bool {
@@ -206,7 +242,7 @@ pub(crate) fn run_program_patient(
         return failed("FFmpeg pipes unavailable".into());
     };
 
-    {
+    let token = {
         let mut slot = control.lock();
         if slot.cancelled {
             drop(slot);
@@ -220,8 +256,11 @@ pub(crate) fn run_program_patient(
         {
             warn!(%error, "could not pause the next attempt");
         }
-        slot.child = Some(child);
-    }
+        let token = slot.next;
+        slot.next += 1;
+        slot.children.push((token, child));
+        token
+    };
 
     // Anything the tool says, on either output, counts as a sign of life.
     let watch = Arc::new(Watch::new());
@@ -230,7 +269,7 @@ pub(crate) fn run_program_patient(
         let (watch, control) = (Arc::clone(&watch), control.clone());
         thread::Builder::new()
             .name("gracil-watch".into())
-            .spawn(move || watch_over(&watch, &control, patience, &done))
+            .spawn(move || watch_over(&watch, &control, token, patience, &done))
             .inspect_err(|error| warn!(%error, "could not watch over a tool"))
             .ok()
     };
@@ -250,7 +289,7 @@ pub(crate) fn run_program_patient(
     // Stdout closes when FFmpeg exits or is killed; collect its status.
     let (status, cancelled) = {
         let mut slot = control.lock();
-        let status = slot.child.take().map(|mut child| child.wait());
+        let status = slot.take(token).map(|mut child| child.wait());
         (status, slot.cancelled)
     };
     let log = stderr_reader.join().unwrap_or_default();
@@ -309,10 +348,16 @@ impl Watch {
     }
 }
 
-/// Stops the tool under `control` once it has been silent for `patience` while meant to be
-/// working, until `done` says it has ended. Paused or resting, and after a sleep, the wait starts
-/// again: nothing is expected of a tool that isn't running.
-fn watch_over(watch: &Watch, control: &JobControl, patience: Duration, done: &Receiver<()>) {
+/// Stops the tool numbered `token` under `control` once it has been silent for `patience` while
+/// meant to be working, until `done` says it has ended. Paused or resting, and after a sleep, the
+/// wait starts again: nothing is expected of a tool that isn't running.
+fn watch_over(
+    watch: &Watch,
+    control: &JobControl,
+    token: u64,
+    patience: Duration,
+    done: &Receiver<()>,
+) {
     let tick = (patience / 10).clamp(Duration::from_millis(10), Duration::from_secs(5));
     let mut sleeps = share::sleeps();
     loop {
@@ -333,7 +378,7 @@ fn watch_over(watch: &Watch, control: &JobControl, patience: Duration, done: &Re
             return;
         }
         // Only a tool still running is stopped; one that just ended is left to report itself.
-        if let Some(child) = slot.child.as_mut()
+        if let Some(child) = slot.child(token)
             && child.kill().is_ok()
         {
             watch.stalled.store(true, Ordering::Relaxed);
@@ -430,6 +475,97 @@ mod tests {
 
     fn pretend_suspend(_: u32, _: bool) -> io::Result<()> {
         Ok(())
+    }
+
+    static SUSPENDED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+    fn counting_suspend(_: u32, _: bool) -> io::Result<()> {
+        SUSPENDED.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    #[test]
+    fn several_tools_at_once_are_paused_resumed_and_stopped_together() {
+        let control = JobControl::default();
+        let started = Instant::now();
+        let outcomes = thread::scope(|scope| {
+            let tools: Vec<_> = (0..3)
+                .map(|_| {
+                    scope.spawn(|| {
+                        run_program_patient(
+                            silent_tool(),
+                            Vec::new(),
+                            &control,
+                            Duration::from_secs(60),
+                            &mut |_| {},
+                        )
+                        .0
+                    })
+                })
+                .collect();
+            while control.lock().children.len() < 3 {
+                assert!(
+                    started.elapsed() < Duration::from_secs(20),
+                    "tools never started"
+                );
+                thread::sleep(Duration::from_millis(20));
+            }
+            control.pause(counting_suspend).unwrap();
+            assert_eq!(SUSPENDED.load(Ordering::SeqCst), 3);
+            control.resume().unwrap();
+            assert_eq!(SUSPENDED.load(Ordering::SeqCst), 6);
+            control.cancel();
+            tools
+                .into_iter()
+                .map(|tool| tool.join().unwrap())
+                .collect::<Vec<_>>()
+        });
+        assert!(
+            outcomes
+                .iter()
+                .all(|outcome| *outcome == EncodeOutcome::Cancelled)
+        );
+        assert_eq!(outcomes.len(), 3);
+        assert!(control.lock().children.is_empty());
+        assert!(started.elapsed() < Duration::from_secs(30));
+    }
+
+    #[test]
+    fn a_silent_tool_is_stopped_without_stopping_the_others() {
+        let control = JobControl::default();
+        let (silent, talking) = thread::scope(|scope| {
+            let silent = scope.spawn(|| {
+                run_program_patient(
+                    silent_tool(),
+                    Vec::new(),
+                    &control,
+                    Duration::from_secs(2),
+                    &mut |_| {},
+                )
+                .0
+            });
+            // Says something every half second for about five seconds, then ends well.
+            let talking = scope.spawn(|| {
+                let mut command = Command::new("powershell");
+                command.args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "1..10 | ForEach-Object { $_; Start-Sleep -Milliseconds 500 }",
+                ]);
+                run_program_patient(
+                    command,
+                    Vec::new(),
+                    &control,
+                    Duration::from_secs(2),
+                    &mut |_| {},
+                )
+                .0
+            });
+            (silent.join().unwrap(), talking.join().unwrap())
+        });
+        assert_eq!(silent, EncodeOutcome::Stalled);
+        assert_eq!(talking, EncodeOutcome::Finished);
     }
 
     #[test]

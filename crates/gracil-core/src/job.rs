@@ -58,6 +58,24 @@ impl fmt::Display for InvalidTransition {
 impl std::error::Error for InvalidTransition {}
 
 impl JobState {
+    /// Every state, each once.
+    pub const ALL: [Self; 9] = [
+        Self::Pending,
+        Self::Preparing,
+        Self::Prepared,
+        Self::Compressing,
+        Self::Paused,
+        Self::Finalizing,
+        Self::Completed,
+        Self::Failed,
+        Self::Cancelled,
+    ];
+
+    /// Where this state is in [`Self::ALL`].
+    pub(crate) fn slot(self) -> usize {
+        self as usize
+    }
+
     pub fn apply(self, event: JobEvent) -> Result<JobState, InvalidTransition> {
         use JobEvent as E;
         use JobState as S;
@@ -122,17 +140,14 @@ mod tests {
     use super::JobState as S;
     use super::*;
 
-    const ALL_STATES: [S; 9] = [
-        S::Pending,
-        S::Preparing,
-        S::Prepared,
-        S::Compressing,
-        S::Paused,
-        S::Finalizing,
-        S::Completed,
-        S::Failed,
-        S::Cancelled,
-    ];
+    const ALL_STATES: [S; 9] = S::ALL;
+
+    #[test]
+    fn every_state_has_its_own_slot() {
+        for (at, state) in S::ALL.into_iter().enumerate() {
+            assert_eq!(state.slot(), at, "{state:?}");
+        }
+    }
     const ALL_EVENTS: [E; 9] = [
         E::Start,
         E::Ready,

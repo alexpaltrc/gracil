@@ -47,6 +47,8 @@ pub struct Room {
     pub warm: bool,
     /// The computer runs on its battery, or Windows is saving energy (ADR 0049).
     pub saving_energy: bool,
+    /// The computer has a battery (ADR 0063).
+    pub has_battery: bool,
 }
 
 impl Room {
@@ -60,16 +62,22 @@ impl Room {
             free_memory: gracil_windows::free_memory(),
             warm: breath.warm,
             saving_energy: breath.saving_energy,
+            has_battery: breath.has_battery,
         }
     }
 
-    /// How many images may compress at once: an eighth of the processor while the person is
-    /// using the computer, it runs warm or it saves energy, a quarter while it is idle, one fewer
-    /// while a video takes the processor, and always at least one. Each image's tools use several
-    /// threads of their own.
+    /// How many images may compress at once: a quarter of the processor while the computer is
+    /// idle; while the person is using it, a sixth on a desktop computer plugged in (one without
+    /// a battery, ADR 0065) and an eighth on a laptop; an eighth too whenever it runs warm or
+    /// saves energy; one fewer while a video takes the processor, and always at least one. Each
+    /// image's tools use several threads of their own, within Gracil's share of the processor
+    /// (ADR 0049).
     pub fn images_at_once(self) -> usize {
-        let share = if self.idle && !self.warm && !self.saving_energy {
+        let calm = !self.warm && !self.saving_energy;
+        let share = if self.idle && calm {
             self.threads / 4
+        } else if calm && !self.has_battery {
+            self.threads / 6
         } else {
             self.threads / 8
         };
@@ -305,6 +313,8 @@ pub struct Breath {
     pub idle: bool,
     /// The computer runs on its battery, or Windows is saving energy (ADR 0049).
     pub saving_energy: bool,
+    /// The computer has a battery: a laptop, whose cooling is modest (ADR 0063).
+    pub has_battery: bool,
     /// How full a laptop's battery is (ADR 0063).
     pub battery: Battery,
 }
@@ -438,6 +448,7 @@ pub fn watch(changed: impl Fn(Breath) + Send + 'static) {
                         }
                         breath.battery = battery;
                         breath.saving_energy = power.saving_energy;
+                        breath.has_battery = power.has_battery;
                         tell(Breath {
                             resting: settling || battery == Battery::VeryLow,
                             ..breath
@@ -477,6 +488,8 @@ pub fn watch(changed: impl Fn(Breath) + Send + 'static) {
                 // Given to the tools running now when it changes; tools started later are given
                 // it as they start.
                 let mode = efficiency_mode(idle, power.saving_energy, power.has_battery);
+                // The quality measure then takes its samples one at a time (ADR 0065).
+                share::go_easy(mode || power.on_battery);
                 if efficient != Some(mode) {
                     match gracil_windows::use_efficiency_mode(mode) {
                         Ok(()) => info!(on = mode, "efficiency mode"),
@@ -495,6 +508,7 @@ pub fn watch(changed: impl Fn(Breath) + Send + 'static) {
                     resting: false,
                     idle,
                     saving_energy: power.saving_energy,
+                    has_battery: power.has_battery,
                     battery,
                 };
                 if settling || battery == Battery::VeryLow {
@@ -537,6 +551,7 @@ mod tests {
             free_memory: None,
             warm: false,
             saving_energy: false,
+            has_battery: false,
         }
     }
 
@@ -545,6 +560,33 @@ mod tests {
         assert_eq!(room(16, false, false).images_at_once(), 2);
         assert_eq!(room(16, true, false).images_at_once(), 4);
         assert_eq!(room(32, true, false).images_at_once(), 8);
+    }
+
+    #[test]
+    fn a_few_more_images_on_a_desktop_in_use() {
+        // Twelve threads, as a Ryzen 5 5600G: two images on a desktop plugged in, one on a
+        // laptop, one whenever it is warm or saves energy.
+        let desktop = room(12, false, false);
+        assert_eq!(desktop.images_at_once(), 2);
+        let laptop = Room {
+            has_battery: true,
+            ..desktop
+        };
+        assert_eq!(laptop.images_at_once(), 1);
+        for calmer in [
+            Room {
+                warm: true,
+                ..desktop
+            },
+            Room {
+                saving_energy: true,
+                ..desktop
+            },
+        ] {
+            assert_eq!(calmer.images_at_once(), 1);
+        }
+        assert_eq!(room(24, false, false).images_at_once(), 4);
+        assert_eq!(room(12, true, false).images_at_once(), 3);
     }
 
     #[test]
