@@ -71,6 +71,8 @@ with it.
   leave the processor freer meanwhile. The result is exactly the same as before. In a list of
   similar videos, such as those from one phone, each one after the first gets ready quicker
   still.
+- On a desktop computer, a few more photos compress at once while you use it. Laptops are
+  unchanged.
 - Gracil never lets the computer run too hot, and it never has to stop to cool down. It keeps
   the graphics card at about 70 °C at most, whether it is NVIDIA, Intel or AMD, as long as the
   card tells Windows its temperature: above that it eases off little by

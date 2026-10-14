@@ -36,6 +36,11 @@ and every safeguard of ADRs 0049, 0051, 0063 and 0064 still holds.
    graphics card encoder's test encodes run at the same time, each card's settings still tried
    best first; the first card in the usual order (ADR 0052) whose test passed is used. Nothing
    is kept from one start to the next.
+5. **A few more images on a desktop in use.** While the person uses the computer, a desktop
+   (no battery), plugged in, not saving energy and not warm, compresses a sixth of the
+   processor's threads in images at once instead of an eighth (ADR 0040): two instead of one on
+   twelve threads. Laptops are unchanged, and so is every other limit: Gracil's share of the
+   processor (ADR 0049), efficiency mode (ADR 0051), memory, heat and battery (ADR 0063).
 
 **Consequences.**
 

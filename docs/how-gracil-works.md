@@ -234,7 +234,9 @@ straining.
 - If the computer goes to sleep, Gracil rests with it, and once it wakes up it tries again
   whatever sleep interrupted.
 - While you are using the computer, Gracil takes on fewer images at once. When you have left it
-  alone for a minute, it takes on more, and fewer again as soon as you come back.
+  alone for a minute, it takes on more, and fewer again as soon as you come back. A desktop
+  computer, which has no battery and cools better than a laptop, takes on a few more images
+  while you use it than a laptop does, as long as it isn't warm or saving energy.
 - Large images need more memory, so Gracil starts fewer of them at once and always leaves at least
   half of the free memory for your programs.
 - Gracil and all its tools together may never take more than about two thirds of the computer's
