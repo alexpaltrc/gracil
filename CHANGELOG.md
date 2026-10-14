@@ -89,8 +89,8 @@ with it.
   drive: files join the list folder by folder and compressing starts with the first ones found.
   Don't want Gracil in **Send to**? Untick **Show Gracil in Send to** in the marble's right-click
   menu. After moving Gracil's folder, open Gracil once and **Send to** follows it.
-- Gracil can also have its own commands in File Explorer's right-click menu (in progress): tick
-  **Show Gracil in File Explorer's menu…** in the marble's right-click menu, and allow it when
+- Gracil can also have its own commands in File Explorer's right-click menu: tick **Show
+  Gracil in File Explorer's menu…** in the marble's right-click menu, and allow it when
   Windows asks, since the commands are for everyone who uses the computer. Videos and images then
   show **Compress with Gracil**, and a folder shows **Gracil**, to compress its videos and images,
   only its videos, or only its images. They follow the **Always** line just like **Send to**.

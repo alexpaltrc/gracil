@@ -29,7 +29,7 @@ ready for more videos. Only **Exit**, in the menu of its marble next to the cloc
 
 Yes. Right-click videos in File Explorer, choose **Show more options**, then **Send to** and
 **Gracil**, whether Gracil is running or not. The same goes for Gracil's own commands in File
-Explorer's menu, if you turned them on in the menu of its marble *(in progress)*.
+Explorer's menu, if you turned them on in the menu of its marble.
 
 If Gracil isn't running when you send videos, it starts quietly and compresses them: without its
 big window when the **Always** line is on **Replace** or **Save copy**, and with it, to ask you,

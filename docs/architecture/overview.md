@@ -159,9 +159,7 @@ writes or removes it with no window and exits; a `GracilProgram` value beside th
 tells which `gracil.exe` wrote it, so the tray ticks it only for that one. Gracil runs in a job
 object (ADR 0018), so it asks File Explorer, through the desktop's Shell automation, to start the
 administrator's Gracil (`gracil_windows::run_as_administrator`), then watches the menu for up to
-two minutes. *(In progress: Windows still denies this on the product owner's PC; written from an
-administrator's terminal, the menu works.)* A development build in `target` leaves Windows
-alone.
+two minutes. A development build in `target` leaves Windows alone.
 
 ## Data on disk
 

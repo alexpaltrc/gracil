@@ -1,6 +1,6 @@
 # 0058 — File Explorer: Send to for everyone, and a main menu turned on from the tray
 
-**Status:** Accepted (2026-10-07). Send to built; the main menu's permission is in progress.
+**Status:** Accepted (2026-10-07). Send to and the main menu built and confirmed (2026-10-14).
 Supersedes the per-user COM menu of [0022](0022-explorer-command.md) and items 4 to 6 of
 [0050](0050-portable-and-open-source.md), the menu's words that followed **Always** in item 2 of
 [0035](0035-explorer-folders-and-always.md) (and the reason item 1 of
@@ -28,7 +28,7 @@ is **Send to**, which Windows builds from a folder of shortcuts in the user's ow
    so a moved or updated folder keeps working. The existing tray setting, saved as
    `explorer_menu`, now reads **Show Gracil in Send to** (Spanish: «Mostrar Gracil en «Enviar
    a»»); turning it off deletes the shortcut.
-2. **The main menu, opt-in (in progress).** A tray item, **Show Gracil in File Explorer's menu…**
+2. **The main menu, opt-in.** A tray item, **Show Gracil in File Explorer's menu…**
    (Spanish: «Mostrar Gracil en el menú del Explorador de archivos…»), writes plain commands for
    the whole computer, under `HKEY_LOCAL_MACHINE\SOFTWARE\Classes`:
    - for each video and image type Gracil compresses,
@@ -49,8 +49,9 @@ is **Send to**, which Windows builds from a folder of shortcuts in the user's ow
    Writing works: run from an administrator's terminal, the commands appeared. Asking for the
    permission from inside Gracil is still denied by Windows on the product owner's PC. Gracil runs
    in its own job object (ADR 0018), the suspected cause, so it now asks File Explorer itself to
-   start the administrator's Gracil, as the user's own **Run as administrator** would. Until this
-   is confirmed, this item stays in progress.
+   start the administrator's Gracil, as the user's own **Run as administrator** would. *Update
+   (2026-10-14):* confirmed on the product owner's PC: Windows asks once, and the commands appear
+   for files and folders.
 3. **`--explorer` leaves the choice to Always.** Send to and the main menu both send `--explorer`.
    The running Gracil applies the **Always** setting (ADR 0025): set to an end, the files are
    compressed in the background and placed as it says; in the middle, the window opens and asks,

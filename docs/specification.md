@@ -17,9 +17,9 @@ Gracil has three primary priorities, in this order:
 
 All three are extremely important. The ordering exists only to resolve conflicts.
 
-A technically elegant implementation that makes the product harder to use is a regression.
-A beautiful interface that wastes resources unnecessarily is also a regression.
-A highly optimized implementation that becomes difficult to maintain without measurable benefit should be reconsidered.
+A technically elegant implementation that makes the product harder to use is a regression. A
+beautiful interface that wastes resources unnecessarily is also a regression. A highly optimized
+implementation that becomes difficult to maintain without measurable benefit should be reconsidered.
 
 # 2. Product philosophy
 
@@ -80,8 +80,8 @@ The final application icon has not been designed yet. Use a clearly temporary de
 Do not invent or finalize the permanent icon. The final icon will later be designed according to
 current Windows 11 iconography and visual guidelines.
 
-*Update (ADR 0015):* the icon has been designed: the marble ("la canica"), with the Piedra palette, in
-`assets/icons/`.
+*Update (ADR 0015):* the icon has been designed: the marble ("la canica"), with the Piedra palette,
+in `assets/icons/`.
 
 *Update (ADR 0031):* the Piedra palette is replaced by Windows 11's own colors and the user's
 accent color, followed live.
@@ -433,13 +433,13 @@ it is not the picked file.
 
 # 32.2 Sizes (ADR 0036)
 
-A result shows its size before and after under its choices ("120 MB → 78 MB"). The drawer row
-of a placed file says how much smaller and where it went ("−35% · Replaced"). With two or more
-results on the list, the drawer opens with their sum ("In all: 3.4 GB → 2.2 GB, 35% smaller")
-and the footer adds the room freed ("1.2 GB smaller"). Only files still on the list count. Sizes
-are counted the way File Explorer counts them (1 KB = 1024 bytes). Every number, sizes and counts alike, is written the way Windows writes
-numbers for the user's region: its decimal mark and its digit grouping (*15,031 files*,
-*1.2 GB* in Mexico; *15.031 archivos*, *1,2 GB* in Spain).
+A result shows its size before and after under its choices ("120 MB → 78 MB"). The drawer row of a
+placed file says how much smaller and where it went ("−35% · Replaced"). With two or more results on
+the list, the drawer opens with their sum ("In all: 3.4 GB → 2.2 GB, 35% smaller") and the footer
+adds the room freed ("1.2 GB smaller"). Only files still on the list count. Sizes are counted the
+way File Explorer counts them (1 KB = 1024 bytes). Every number, sizes and counts alike, is written
+the way Windows writes numbers for the user's region: its decimal mark and its digit grouping
+(*15,031 files*, *1.2 GB* in Mexico; *15.031 archivos*, *1,2 GB* in Spain).
 
 # 33. Active item behavior
 
@@ -706,8 +706,7 @@ ignores commands written for the current user only, so Gracil is in File Explore
   every start and turned off from the tray (**Show Gracil in Send to**). No administrator needed.
 - **Its own commands** in the main menu, written for the whole computer when the user turns them
   on from the tray (**Show Gracil in File Explorer's menu…**), after Windows asks for an
-  administrator's permission once. *(In progress: asking for the permission from inside Gracil
-  is still being made to work.)*
+  administrator's permission once.
 
 Both start `gracil.exe --explorer` with what was picked, and the running Gracil applies the
 **Always** setting to it.
@@ -1115,7 +1114,7 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   wrote for the current user. Gracil is now in **Send to** for everyone, and its own commands in
   File Explorer's menu can be turned on from the tray, with Windows' permission. Their words no
   longer change with **Always**, which Gracil applies itself. *Send to built 2026-10-07; the
-  menu's permission in progress (ADR 0058).*
+  main menu 2026-10-14 (ADR 0058).*
 
 # 78. Temporary UI decisions
 

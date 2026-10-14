@@ -29,8 +29,9 @@ Nothing is signed, so Windows' SmartScreen may warn the first time the zip's Gra
 
 ## Maintainer's daily copy
 
-The Gracil used every day, also while developing, lives in `daily\` inside this project (ignored
-by git). Start it from its `gracil.exe` there (pinned to Start or the taskbar). To update it with the current code:
+The Gracil used every day, also while developing, lives in `daily\` inside this project (ignored by
+git). Start it from its `gracil.exe` there (pinned to Start or the taskbar). To update it with the
+current code:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/portable.ps1 -Copy
@@ -44,7 +45,7 @@ FFmpeg beside the program) puts itself in File Explorer's **Send to** and its st
 sign-in (`RunOnce`), and removes what the former per-user menu left; a development build in
 `target` leaves Windows as it is. File Explorer's main menu is written for the whole computer
 only when turned on from the tray, after Windows asks for an administrator's permission
-([ADR 0058](../decisions/0058-explorer-send-to-and-main-menu.md), in progress). On Windows 11 both
+([ADR 0058](../decisions/0058-explorer-send-to-and-main-menu.md)). On Windows 11 both
 are under **Show more options**. If File Explorer still shows an old menu, restart it (Task
 Manager → Windows Explorer → Restart).
 

@@ -453,12 +453,12 @@ Right-click videos, images or a folder in File Explorer, choose **Show more opti
 up. You can send many files and folders at once; other files picked along with them are left
 alone.
 
-Gracil can also have its own commands in File Explorer's menu, without going through **Send to**
-*(in progress)*. Tick **Show Gracil in File Explorer's menu…** in the menu of its marble next to
-the clock. These commands are for everyone who uses the computer, so Windows asks you once whether
-to allow it. Then, under **Show more options**, videos and images show **Compress with Gracil**,
-and a folder shows **Gracil** with **Compress videos and images**, **Compress videos only** and
-**Compress images only**.
+Gracil can also have its own commands in File Explorer's menu, without going through **Send to**.
+Tick **Show Gracil in File Explorer's menu…** in the menu of its marble next to the clock. These
+commands are for everyone who uses the computer, so Windows asks you once whether to allow it. Then,
+under **Show more options**, videos and images show **Compress with Gracil**, and a folder shows
+**Gracil** with **Compress videos and images**, **Compress videos only** and **Compress images
+only**.
 
 What happens next follows the **Always** line at the foot of Gracil's window, the same for
 **Send to** and for Gracil's own commands:
