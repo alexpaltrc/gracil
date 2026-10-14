@@ -29,8 +29,8 @@ Nothing is signed, so Windows' SmartScreen may warn the first time the zip's Gra
 
 ## Maintainer's daily copy
 
-The Gracil used every day, also while developing, lives in `Documents\Gracil`. Start it from its
-`gracil.exe` there (pinned to Start or the taskbar). To update it with the current code:
+The Gracil used every day, also while developing, lives in `daily\` inside this project (ignored
+by git). Start it from its `gracil.exe` there (pinned to Start or the taskbar). To update it with the current code:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/portable.ps1 -Copy
