@@ -130,6 +130,19 @@ about a fifth less processor. Other sources (4:4:4, 12-bit, 10-bit with an 8-bit
 with `-hwaccel cuda` alone, so both branches get ordinary frames. Either way, if GPU decoding
 fails, the sample is retried on the CPU.
 
+**Samples together (ADR 0065).** A level's samples run up to four at once, on scoped threads, each
+with `n_threads` = `threads_for_one` / K (at least one), so together they never use more VMAF
+threads than one alone; their scores are collected in sample order, so the pooled score and size
+are computed exactly as one at a time (and measured bit-identical). K is 1 with x265, for a
+picture measured above 1440p (or of unknown size), with less than 4 GB free, and while the app
+says the tools go easy (`share::go_easy`: efficiency mode or battery, which also means whenever
+the computer is in use); otherwise up to 4, with 2 GB free for each. Every process is under the
+job's `JobControl`, which now holds several children: pause, resume, stop and each one's stall
+watchdog apply to each. A sample that fails together is measured again alone; if its log says
+the encoder couldn't be opened (`OpenEncodeSessionEx`, `Error while opening encoder`), that is
+not taken as a decoding failure, and samples go one at a time for the rest of the session.
+Otherwise the failure is handled as one at a time would: decoding moves to the CPU.
+
 VMAF measures every other frame (`n_subsample=2`, ADR 0030). With `libvmaf_cuda`, the input is
 decoded with `-hwaccel_output_format cuda` on a named device (`-init_hw_device cuda=gpu
 -filter_hw_device gpu -hwaccel_device gpu`), the encoder takes the CUDA frames as they are, the

@@ -488,6 +488,8 @@ pub fn watch(changed: impl Fn(Breath) + Send + 'static) {
                 // Given to the tools running now when it changes; tools started later are given
                 // it as they start.
                 let mode = efficiency_mode(idle, power.saving_energy, power.has_battery);
+                // The quality measure then takes its samples one at a time (ADR 0065).
+                share::go_easy(mode || power.on_battery);
                 if efficient != Some(mode) {
                     match gracil_windows::use_efficiency_mode(mode) {
                         Ok(()) => info!(on = mode, "efficiency mode"),

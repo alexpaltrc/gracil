@@ -18,7 +18,9 @@ use std::ffi::OsString;
 use std::fs;
 use std::ops::RangeInclusive;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
+use std::thread;
 use std::time::Duration;
 
 use tracing::{info, warn};
@@ -416,10 +418,22 @@ impl<'a> Search<'a> {
         if let Some(measured) = self.measured.get(&level) {
             return Ok(*measured);
         }
-        let mut samples = Vec::with_capacity(self.starts.len());
-        for index in 0..self.starts.len() {
-            samples.push(self.sample(self.starts[index], level)?);
-        }
+        let at_once = samples_at_once(
+            self.starts.len(),
+            self.attempt.encoder,
+            standard::measured_size(self.picture).or(self.picture),
+            share::free_memory(),
+            share::easy() || ONE_AT_A_TIME.load(Ordering::Relaxed),
+        );
+        let samples = if at_once > 1 {
+            self.samples_together(level, at_once)?
+        } else {
+            let mut samples = Vec::with_capacity(self.starts.len());
+            for index in 0..self.starts.len() {
+                samples.push(self.sample(self.starts[index], level)?);
+            }
+            samples
+        };
         let measured = Measured::of(&samples, self.duration);
         info!(
             level,
@@ -431,33 +445,89 @@ impl<'a> Search<'a> {
         Ok(measured)
     }
 
-    fn sample(&mut self, start: Duration, level: u8) -> Result<Sample, Halt> {
-        // A sample can fail because the computer slept under it; it is tried again, once
-        // (ADR 0063).
-        let mut tried_again = false;
+    /// Measures the samples at `level`, `at_once` at a time, each with its share of the threads
+    /// the quality measure may use, so all together use no more than one would alone (ADR 0065).
+    /// The scores come back in the samples' order, as one at a time. A sample that fails is
+    /// measured again on its own; if the graphics card couldn't take one more encoder, the
+    /// samples go one at a time from then on.
+    fn samples_together(&mut self, level: u8, at_once: usize) -> Result<Vec<Sample>, Halt> {
+        let threads = (share::threads_for_one() / at_once).max(1);
+        let sleeps = share::sleeps();
+        let starts = self.starts.clone();
+        let mut runs = Vec::with_capacity(starts.len());
+        let this = &*self;
+        for group in starts.chunks(at_once) {
+            thread::scope(|scope| {
+                let running: Vec<_> = group
+                    .iter()
+                    .map(|&start| scope.spawn(move || this.run(start, level, threads)))
+                    .collect();
+                for sample in running {
+                    runs.push(sample.join().unwrap_or_else(|_| Run {
+                        outcome: EncodeOutcome::Failed {
+                            error: "a sample's thread failed".to_owned(),
+                            made_progress: false,
+                        },
+                        log: String::new(),
+                        frame_sizes: Vec::new(),
+                    }));
+                }
+            });
+        }
+
+        let mut samples = Vec::with_capacity(starts.len());
+        for (start, run) in starts.into_iter().zip(runs) {
+            let slept = share::sleeps() != sleeps;
+            match after_together(&run, slept, self.attempt.hw_decode) {
+                Then::Keep => samples.push(run.sample()?),
+                Then::Stop => return Err(Halt::Cancelled),
+                then => {
+                    if then == Then::AloneFromNowOn && !ONE_AT_A_TIME.swap(true, Ordering::Relaxed)
+                    {
+                        info!("the graphics card can't take samples together; one at a time");
+                    }
+                    if then == Then::AloneOnTheProcessor {
+                        self.attempt.hw_decode = false;
+                    }
+                    samples.push(self.sample(start, level)?);
+                }
+            }
+        }
+        Ok(samples)
+    }
+
+    /// Runs one sample once, with `threads` for the quality measure.
+    fn run(&self, start: Duration, level: u8, threads: usize) -> Run {
         // Measuring above 4K can go much longer between words on a slow computer (ADR 0064).
         let patience = if standard::measured_size(self.picture).is_some() {
             encode::PATIENCE_ABOVE_4K
         } else {
             encode::PATIENCE
         };
+        let mut frame_sizes = Vec::with_capacity(256);
+        let (outcome, log) = encode::run_ffmpeg_patient(
+            self.toolchain,
+            self.sample_args(start, level, threads),
+            self.control,
+            patience,
+            &mut |line| frame_sizes.extend(frame_size(line)),
+        );
+        Run {
+            outcome,
+            log,
+            frame_sizes,
+        }
+    }
+
+    fn sample(&mut self, start: Duration, level: u8) -> Result<Sample, Halt> {
+        // A sample can fail because the computer slept under it; it is tried again, once
+        // (ADR 0063).
+        let mut tried_again = false;
         loop {
             let sleeps = share::sleeps();
-            let mut frame_sizes = Vec::with_capacity(256);
-            let (outcome, log) = encode::run_ffmpeg_patient(
-                self.toolchain,
-                self.sample_args(start, level),
-                self.control,
-                patience,
-                &mut |line| frame_sizes.extend(frame_size(line)),
-            );
-            match outcome {
-                EncodeOutcome::Finished => {
-                    return match vmaf_score(&log) {
-                        Some(score) => Ok(Sample { score, frame_sizes }),
-                        None => Err(Halt::Failed(format!("no score in FFmpeg's output: {log}"))),
-                    };
-                }
+            let run = self.run(start, level, share::threads_for_one());
+            match run.outcome {
+                EncodeOutcome::Finished => return run.sample(),
                 EncodeOutcome::Cancelled => return Err(Halt::Cancelled),
                 EncodeOutcome::Failed { .. } if share::sleeps() != sleeps && !tried_again => {
                     info!("the computer slept during a sample; measuring it again");
@@ -476,8 +546,9 @@ impl<'a> Search<'a> {
         }
     }
 
-    /// Encodes one sample at `level` and measures it against the same part of the source.
-    fn sample_args(&self, start: Duration, level: u8) -> Vec<OsString> {
+    /// Encodes one sample at `level` and measures it against the same part of the source, with
+    /// `threads` for the quality measure on the processor.
+    fn sample_args(&self, start: Duration, level: u8, threads: usize) -> Vec<OsString> {
         let encoder = self.attempt.encoder;
         // With VMAF on the GPU too, the frames never leave it; otherwise they are handed over in
         // ordinary memory, where the reference is measured on the CPU (ADR 0030).
@@ -572,7 +643,6 @@ impl<'a> Search<'a> {
                 "[dec:0]{scale_cpu}format=yuv420p,hwupload_cuda[encoded];[encoded][ref]libvmaf_cuda={VMAF_OPTIONS}[vmaf]"
             )
         } else {
-            let threads = share::threads_for_one();
             format!(
                 "[dec:0]{scale_cpu}format=yuv420p[encoded];[encoded][ref]libvmaf=n_threads={threads}:{VMAF_OPTIONS}[vmaf]"
             )
@@ -587,6 +657,108 @@ impl<'a> Search<'a> {
 
 /// How each sample's frames are pooled into one score, and how many are measured.
 const VMAF_OPTIONS: &str = "pool=harmonic_mean:n_subsample=2";
+
+/// One run of one sample: how FFmpeg ended, the end of what it said, and the size of every frame
+/// it encoded.
+struct Run {
+    outcome: EncodeOutcome,
+    log: String,
+    frame_sizes: Vec<u64>,
+}
+
+impl Run {
+    /// The sample a finished run measured.
+    fn sample(self) -> Result<Sample, Halt> {
+        match vmaf_score(&self.log) {
+            Some(score) => Ok(Sample {
+                score,
+                frame_sizes: self.frame_sizes,
+            }),
+            None => Err(Halt::Failed(format!(
+                "no score in FFmpeg's output: {}",
+                self.log
+            ))),
+        }
+    }
+}
+
+/// Most samples of one level measured at once (ADR 0065).
+const MOST_AT_ONCE: usize = 4;
+
+const GIB: u64 = 1 << 30;
+
+/// Set once the graphics card couldn't open one more encoder for samples measured together:
+/// from then on, for as long as Gracil runs, they go one at a time.
+static ONE_AT_A_TIME: AtomicBool = AtomicBool::new(false);
+
+/// How many of a level's `samples` are measured at once (ADR 0065): one with x265 (its samples
+/// take the processor), a picture measured above 1440p (`measured`, or not known), less than
+/// 4 GB free, or when going `easy` (efficiency mode, a battery, or a card that couldn't take
+/// more); otherwise up to [`MOST_AT_ONCE`], with 2 GB free for each. Free memory that isn't known
+/// counts as enough, as elsewhere.
+fn samples_at_once(
+    samples: usize,
+    encoder: VideoEncoder,
+    measured: Option<(u32, u32)>,
+    free: Option<u64>,
+    easy: bool,
+) -> usize {
+    let large = measured.is_none_or(|(width, height)| width.min(height) > 1440);
+    if easy || encoder == VideoEncoder::X265 || large || free.is_some_and(|free| free < 4 * GIB) {
+        return 1;
+    }
+    let room = free.map_or(usize::MAX, |free| {
+        usize::try_from(free / (2 * GIB)).unwrap_or(usize::MAX)
+    });
+    samples.min(MOST_AT_ONCE).min(room).max(1)
+}
+
+/// What becomes of a sample measured together with others.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Then {
+    /// It was measured.
+    Keep,
+    /// The job was stopped.
+    Stop,
+    /// Measured again on its own, as one at a time would, since the computer slept under it.
+    Alone,
+    /// Measured again on its own, decoded on the processor: decoding on the graphics card may
+    /// not take this video, as one at a time would conclude.
+    AloneOnTheProcessor,
+    /// Measured again on its own, and every sample after it too: the graphics card had no room
+    /// for one more encoder. Not a decoding failure.
+    AloneFromNowOn,
+}
+
+/// What becomes of a sample measured together with others that ended as `run`, depending on
+/// whether the computer `slept` meanwhile and the samples were decoded on the card (`hw_decode`).
+fn after_together(run: &Run, slept: bool, hw_decode: bool) -> Then {
+    match run.outcome {
+        EncodeOutcome::Finished => Then::Keep,
+        EncodeOutcome::Cancelled => Then::Stop,
+        EncodeOutcome::Failed { .. } | EncodeOutcome::Stalled => {
+            if card_was_full(&run.log) {
+                Then::AloneFromNowOn
+            } else if hw_decode && !slept {
+                Then::AloneOnTheProcessor
+            } else {
+                Then::Alone
+            }
+        }
+    }
+}
+
+/// Whether a sample failed because its encoder couldn't be opened, as when the graphics card has
+/// no room for one more encoder at once.
+fn card_was_full(log: &str) -> bool {
+    [
+        "OpenEncodeSessionEx",
+        "Error while opening encoder",
+        "Could not open encoder",
+    ]
+    .iter()
+    .any(|sign| log.contains(sign))
+}
 
 /// The format to copy frames of `pixel_format` out of the graphics card in, for a source whose
 /// frames can stay on the card for the encoder: 8-bit or 10-bit 4:2:0, as nearly every camera and
@@ -827,7 +999,7 @@ mod tests {
             measured: BTreeMap::new(),
         };
         search
-            .sample_args(Duration::from_secs(8), 30)
+            .sample_args(Duration::from_secs(8), 30, 6)
             .iter()
             .map(|arg| arg.to_str().unwrap_or_default().to_owned())
             .collect::<Vec<_>>()
@@ -924,6 +1096,87 @@ mod tests {
         }
         assert_eq!(size_step(None), 0);
         assert_eq!(size_step(Some((7680, 4320))), 5);
+    }
+
+    #[test]
+    fn how_many_samples_are_measured_at_once() {
+        let nvenc = VideoEncoder::Nvenc;
+        let full_hd = Some((1920, 1080));
+        let free = |gib: u64| Some(gib * GIB);
+        assert_eq!(samples_at_once(4, nvenc, full_hd, free(16), false), 4);
+        assert_eq!(samples_at_once(2, nvenc, full_hd, free(16), false), 2);
+        assert_eq!(
+            samples_at_once(4, nvenc, Some((1080, 1920)), free(16), false),
+            4
+        );
+        assert_eq!(
+            samples_at_once(4, nvenc, Some((2560, 1440)), free(16), false),
+            4
+        );
+        // 2 GB for each.
+        assert_eq!(samples_at_once(4, nvenc, full_hd, free(6), false), 3);
+        assert_eq!(samples_at_once(4, nvenc, full_hd, None, false), 4);
+        // One at a time.
+        for (encoder, picture, memory, easy) in [
+            (VideoEncoder::X265, full_hd, free(16), false),
+            (nvenc, Some((3840, 2160)), free(16), false),
+            (nvenc, None, free(16), false),
+            (nvenc, full_hd, Some(4 * GIB - 1), false),
+            (nvenc, full_hd, free(16), true),
+        ] {
+            assert_eq!(
+                samples_at_once(4, encoder, picture, memory, easy),
+                1,
+                "{encoder:?} {picture:?} {memory:?} {easy}"
+            );
+        }
+        assert_eq!(samples_at_once(1, nvenc, full_hd, free(16), false), 1);
+    }
+
+    #[test]
+    fn a_sample_that_fails_together_is_measured_again_alone() {
+        let run = |outcome, log: &str| Run {
+            outcome,
+            log: log.to_owned(),
+            frame_sizes: Vec::new(),
+        };
+        let failed = || EncodeOutcome::Failed {
+            error: String::new(),
+            made_progress: false,
+        };
+        let full = "[hevc_nvenc @ 0] OpenEncodeSessionEx failed: incompatible client key (21)\n\
+                    [vost#0:0/hevc_nvenc] Error while opening encoder";
+        // The card had no room: one at a time from now on, still decoding on the card.
+        assert_eq!(
+            after_together(&run(failed(), full), false, true),
+            Then::AloneFromNowOn
+        );
+        // Anything else: as one at a time, on the processor, unless the computer slept.
+        let broken = "[h264 @ 0] decode_slice_header error";
+        assert_eq!(
+            after_together(&run(failed(), broken), false, true),
+            Then::AloneOnTheProcessor
+        );
+        assert_eq!(
+            after_together(&run(EncodeOutcome::Stalled, ""), false, true),
+            Then::AloneOnTheProcessor
+        );
+        assert_eq!(
+            after_together(&run(failed(), broken), true, true),
+            Then::Alone
+        );
+        assert_eq!(
+            after_together(&run(failed(), broken), false, false),
+            Then::Alone
+        );
+        assert_eq!(
+            after_together(&run(EncodeOutcome::Finished, ""), false, true),
+            Then::Keep
+        );
+        assert_eq!(
+            after_together(&run(EncodeOutcome::Cancelled, full), false, true),
+            Then::Stop
+        );
     }
 
     #[test]

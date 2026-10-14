@@ -7,7 +7,7 @@
 //! [`allow_threads`], how many processor threads Gracil may use right now.
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::thread;
 
 /// What the program running the engine does for it. Each is optional in effect: without a host,
@@ -76,6 +76,21 @@ fn one_of(all: usize, allowed: usize) -> usize {
     } else {
         half.min(allowed)
     }
+}
+
+/// Whether the tools must go easy right now: in Windows' efficiency mode, which includes running
+/// on a battery (ADR 0051, ADR 0063). Taken as yes until told otherwise.
+static EASY: AtomicBool = AtomicBool::new(true);
+
+/// Tells the engine whether its tools run in efficiency mode, or on a battery, right now. While
+/// they do, the samples of a quality level are measured one at a time (ADR 0065).
+pub fn go_easy(easy: bool) {
+    EASY.store(easy, Ordering::Relaxed);
+}
+
+/// Whether the tools must go easy right now (see [`go_easy`]).
+pub(crate) fn easy() -> bool {
+    EASY.load(Ordering::Relaxed)
 }
 
 /// How many times the computer has gone to sleep since Gracil started.

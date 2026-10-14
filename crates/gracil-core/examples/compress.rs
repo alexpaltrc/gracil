@@ -34,6 +34,8 @@ fn main() {
         std::process::exit(1);
     };
     eprintln!("{:?}", engine.capabilities);
+    // As on a desktop computer left alone: the app tells the engine as Windows' state changes.
+    gracil_core::share::go_easy(std::env::var_os("GRACIL_EASY").is_some());
 
     let mut failed = false;
     for source in sources {

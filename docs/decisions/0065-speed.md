@@ -41,6 +41,15 @@ and every safeguard of ADRs 0049, 0051, 0063 and 0064 still holds.
    processor's threads in images at once instead of an eighth (ADR 0040): two instead of one on
    twelve threads. Laptops are unchanged, and so is every other limit: Gracil's share of the
    processor (ADR 0049), efficiency mode (ADR 0051), memory, heat and battery (ADR 0063).
+6. **A level's samples together.** Up to four samples of one level are measured at once, each
+   with its share of the threads the quality measure may use, so all together use no more than
+   one did. Only when nothing asks Gracil to go easy: never with x265, above 1440p, with less than
+   4 GB of memory free (2 GB for each sample), on a battery or in efficiency mode, which Gracil's
+   tools are in whenever the computer is in use. Pause, stop, rest and the watch for a tool that
+   stops answering act on every process. A sample that fails together is measured again alone;
+   one whose encoder couldn't be opened (the card had no room for another) makes the samples go
+   one at a time for as long as Gracil runs, without being taken for a decoding failure. The
+   scores are added up in the samples' order, exactly as before.
 
 **Consequences.**
 
@@ -59,6 +68,11 @@ and every safeguard of ADRs 0049, 0051, 0063 and 0064 still holds.
 
   A second 1080p video like the first measured 2 levels instead of 5 (about 15 s instead of
   37 s), and chose the same level.
+
+  Samples together, on a desktop left alone (same scores, same levels): 1080p 8-bit 37.2 s, 162 s
+  of processor → 34.6 s, 160 s; 1080p 10-bit 22.4 s, 103 s → 19.4 s, 96 s. The quality measure
+  on the processor stays the bottleneck, as ADR 0030 found; above 1440p the samples still go one
+  at a time.
 - Starting the engine (finding FFmpeg and what the computer can do) went from about 525 ms to
   about 485 ms on the reference computer. Cards that are listed but come after the one used are
   now tested too, at the same time; their tests fail or pass quietly.
