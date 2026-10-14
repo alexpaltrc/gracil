@@ -14,10 +14,11 @@ pub struct Taken {
 }
 
 impl Taken {
-    /// Lets it go for good: a result nobody chose for is deleted; the original stays.
+    /// Lets it go for good: a result nobody chose for is deleted, away from the window; the
+    /// original stays.
     fn let_go(self) {
-        if let Some(Outcome::Ready { temp, .. }) = self.outcome {
-            work::discard(&temp);
+        if let Some(Outcome::Ready { temp, original, .. }) = self.outcome {
+            work::discard_later(temp, Some(self.job.path), Some(original));
         }
     }
 }
@@ -182,6 +183,7 @@ impl Gracil {
         let Some(Outcome::Ready {
             temp,
             extension,
+            original,
             placing,
             problem,
             ..
@@ -194,7 +196,7 @@ impl Gracil {
         }
         *placing = true;
         *problem = None;
-        work::place(temp.clone(), source, extension.clone(), choice)
+        work::place(temp.clone(), source, extension.clone(), *original, choice)
             .map(move |placed| Message::Placed(id, choice, placed))
     }
 
@@ -221,6 +223,11 @@ impl Gracil {
                     sizes,
                 };
             }
+            Err(Failure::Changed) => {
+                // The result was let go; the original stays as it is now.
+                *outcome = Outcome::Failed(Failure::Changed);
+                self.note_problem(id);
+            }
             Err(failure) => {
                 *placing = false;
                 *problem = Some(failure);
@@ -229,14 +236,11 @@ impl Gracil {
         }
     }
 
-    /// Takes a video off the list. A result nobody chose for is deleted; the original stays.
+    /// Takes a video off the list. A result nobody chose for is deleted, away from the window;
+    /// the original stays.
     pub(super) fn remove(&mut self, id: JobId) {
-        if let Some(Taken {
-            outcome: Some(Outcome::Ready { temp, .. }),
-            ..
-        }) = self.take(id)
-        {
-            work::discard(&temp);
+        if let Some(taken) = self.take(id) {
+            taken.let_go();
         }
     }
 

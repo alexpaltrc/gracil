@@ -89,6 +89,8 @@ impl Gracil {
         // removed at the next start.
         let (done, tidied) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
+            // Results already let go are deleted first, then the rest, here and now.
+            work::finish_discarding(TIDY_BEFORE_LEAVING);
             for temp in &unchosen {
                 work::discard(temp);
             }

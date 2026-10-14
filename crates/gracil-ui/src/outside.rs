@@ -5,6 +5,7 @@
 //! subscription hands it to the app in order.
 
 use std::sync::{LazyLock, Mutex};
+use std::time::Duration;
 
 use gracil_windows::TrayEvent;
 use iced::Subscription;
@@ -22,6 +23,25 @@ pub enum Outside {
     Breath(Breath),
     /// Whether File Explorer's main menu starts this Gracil, once Windows has asked (ADR 0058).
     MainMenu(bool),
+    /// Windows is shutting down or signing out (ADR 0064): the app keeps the list of unfinished
+    /// files and stops its work, then says so through the sender.
+    EndSession(std::sync::mpsc::Sender<()>),
+}
+
+/// How long the tray waits, as Windows shuts down, for the app to keep what it must. Windows
+/// itself waits about five seconds.
+const END_SESSION_WAIT: Duration = Duration::from_secs(3);
+
+/// Hands what the tray says to the app. As Windows shuts down, waits for the app to have kept
+/// the list of unfinished files, so it isn't lost.
+pub fn from_tray(event: TrayEvent) {
+    if event == TrayEvent::EndSession {
+        let (done, kept) = std::sync::mpsc::channel();
+        send(Outside::EndSession(done));
+        let _ = kept.recv_timeout(END_SESSION_WAIT);
+    } else {
+        send(Outside::Tray(event));
+    }
 }
 
 type Channel = (

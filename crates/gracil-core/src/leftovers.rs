@@ -12,6 +12,7 @@
 //! Anything that cannot be settled now (the drive is not connected, the file is in use) stays in
 //! the ledger for the next start.
 
+use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, Write};
 use std::path::{Path, PathBuf};
@@ -35,17 +36,46 @@ pub fn track(private_dir: &Path) -> io::Result<()> {
 /// Notes a temporary compression file this process just created.
 pub(crate) fn record_temp(temp: &Path) {
     if let Some(ledger) = CURRENT.get() {
-        ledger.write(Entry::Temp(temp.to_owned()));
+        ledger.write(Entry::Temp(temp.to_owned()), true);
     }
+}
+
+/// Notes an intermediate image file in the system's temporary folder. Written down without
+/// waiting for the disk: an image makes several, and losing the last few in a crash only leaves
+/// a little behind in the temporary folder, never anything beside the person's files.
+pub(crate) fn record_scratch(scratch: &Path) {
+    if let Some(ledger) = CURRENT.get() {
+        ledger.write(Entry::Temp(scratch.to_owned()), false);
+    }
+}
+
+/// Names this run of Gracil, for the names of its temporary files: the process id and when it
+/// started. Another run, even one that had the same process id, never makes the same names, so
+/// the ledgers of earlier runs can be settled while this one is already compressing.
+pub(crate) fn run_tag() -> &'static str {
+    static TAG: OnceLock<String> = OnceLock::new();
+    TAG.get_or_init(|| {
+        let started = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        // Only the low bits: enough to tell runs apart, short enough for long names.
+        #[allow(clippy::cast_possible_truncation)]
+        let started = started as u32;
+        format!("{:x}-{started:x}", std::process::id())
+    })
 }
 
 /// Notes that `original` is about to be parked at `backup` while it is replaced.
 pub(crate) fn record_backup(backup: &Path, original: &Path) {
     if let Some(ledger) = CURRENT.get() {
-        ledger.write(Entry::Backup {
-            backup: backup.to_owned(),
-            original: original.to_owned(),
-        });
+        ledger.write(
+            Entry::Backup {
+                backup: backup.to_owned(),
+                original: original.to_owned(),
+            },
+            true,
+        );
     }
 }
 
@@ -60,16 +90,20 @@ pub struct Swept {
     pub kept: usize,
 }
 
-/// Settles the temporary files listed by ledgers whose Gracil is no longer running.
+/// Settles the temporary files listed by ledgers whose Gracil is no longer running. Safe to run
+/// while this run compresses: its own ledger is held, and its files have names of their own.
 pub fn sweep(private_dir: &Path) -> Swept {
     let mut swept = Swept::default();
     let Ok(ledgers) = fs::read_dir(ledgers_dir(private_dir)) else {
         return swept;
     };
+    // Whether each drive is connected is asked once per sweep, not once per file: a drive that
+    // is away can take seconds to answer.
+    let mut drives = Drives::default();
     for ledger in ledgers.flatten() {
         // A ledger that can't be opened is held by a running Gracil; it is not ours to settle.
         if let Ok(file) = open_exclusive(&ledger.path(), false) {
-            settle(file, &ledger.path(), &mut swept);
+            settle(file, &ledger.path(), &mut swept, &mut drives);
         }
     }
     swept
@@ -118,15 +152,19 @@ impl Entry {
         };
         let name = path.file_name()?.to_str()?;
         let gracil = name.contains(".gracil-") && name.ends_with(&format!(".{extension}"));
-        (gracil && path.is_absolute()).then_some(path)
+        // An image's intermediate files, only ever in the system's temporary folder.
+        let scratch = matches!(self, Self::Temp(_))
+            && name.starts_with("gracil-image-")
+            && path.parent() == Some(std::env::temp_dir().as_path());
+        ((gracil || scratch) && path.is_absolute()).then_some(path)
     }
 
     /// Settles this entry. Returns `false` when it has to wait for a later start.
-    fn settle(&self, swept: &mut Swept) -> bool {
+    fn settle(&self, swept: &mut Swept, drives: &mut Drives) -> bool {
         let Some(file) = self.file() else {
             return true;
         };
-        if !drive_present(file) {
+        if !drives.present(file) {
             return false;
         }
         match file.try_exists() {
@@ -149,15 +187,24 @@ impl Entry {
     }
 }
 
-/// Whether the drive or share `path` is on is reachable. A missing file on a drive that is not
-/// connected is not gone, just away.
-fn drive_present(path: &Path) -> bool {
-    path.ancestors()
-        .last()
-        .is_some_and(|root| root.try_exists().unwrap_or(false))
+/// Whether each drive or share is reachable, asked once per root. A missing file on a drive that
+/// is not connected is not gone, just away.
+#[derive(Default)]
+struct Drives(HashMap<PathBuf, bool>);
+
+impl Drives {
+    fn present(&mut self, path: &Path) -> bool {
+        let Some(root) = path.ancestors().last() else {
+            return false;
+        };
+        *self
+            .0
+            .entry(root.to_owned())
+            .or_insert_with(|| root.try_exists().unwrap_or(false))
+    }
 }
 
-fn settle(mut file: File, path: &Path, swept: &mut Swept) {
+fn settle(mut file: File, path: &Path, swept: &mut Swept, drives: &mut Drives) {
     let mut bytes = Vec::new();
     if let Err(error) = file.read_to_end(&mut bytes) {
         warn!(%error, ?path, "could not read a leftover ledger");
@@ -169,7 +216,7 @@ fn settle(mut file: File, path: &Path, swept: &mut Swept) {
         .split_inclusive('\n')
         .filter(|line| line.ends_with('\n'))
         .filter(|line| match Entry::parse(line.trim_end_matches('\n')) {
-            Some(entry) => !entry.settle(swept),
+            Some(entry) => !entry.settle(swept, drives),
             None => false,
         })
         .collect();
@@ -207,7 +254,8 @@ impl Ledger {
         })
     }
 
-    fn write(&self, entry: Entry) {
+    /// Writes `entry` down, waiting for the disk to have it when `durable`.
+    fn write(&self, entry: Entry, durable: bool) {
         let Some(line) = entry.to_line() else {
             warn!(?entry, "a temporary file's path can't be written down");
             return;
@@ -215,7 +263,7 @@ impl Ledger {
         let mut file = self.file.lock().unwrap_or_else(|p| p.into_inner());
         if let Err(error) = file
             .write_all(line.as_bytes())
-            .and_then(|()| file.sync_data())
+            .and_then(|()| if durable { file.sync_data() } else { Ok(()) })
         {
             warn!(%error, "could not write down a temporary file");
         }
@@ -257,8 +305,8 @@ mod tests {
         let placed = dir.join("Clip.mp4.gracil-1b.part");
         fs::write(&temp, b"half a video").unwrap();
         let ledger = ledger(&dir);
-        ledger.write(Entry::Temp(temp.clone()));
-        ledger.write(Entry::Temp(placed));
+        ledger.write(Entry::Temp(temp.clone()), true);
+        ledger.write(Entry::Temp(placed), true);
         drop(ledger);
 
         let swept = sweep(&dir);
@@ -284,7 +332,7 @@ mod tests {
         let temp = dir.join("Clip.mp4.gracil-2a.part");
         fs::write(&temp, b"being written").unwrap();
         let ledger = ledger(&dir);
-        ledger.write(Entry::Temp(temp.clone()));
+        ledger.write(Entry::Temp(temp.clone()), true);
 
         let swept = sweep(&dir);
         let temp_left = temp.exists();
@@ -302,10 +350,13 @@ mod tests {
         let backup = dir.join("Clip.mp4.gracil-3a.bak");
         fs::write(&backup, b"the original").unwrap();
         let ledger = ledger(&dir);
-        ledger.write(Entry::Backup {
-            backup: backup.clone(),
-            original: original.clone(),
-        });
+        ledger.write(
+            Entry::Backup {
+                backup: backup.clone(),
+                original: original.clone(),
+            },
+            true,
+        );
         drop(ledger);
 
         let swept = sweep(&dir);
@@ -326,10 +377,13 @@ mod tests {
         fs::write(&original, b"compressed").unwrap();
         fs::write(&backup, b"the original").unwrap();
         let ledger = ledger(&dir);
-        ledger.write(Entry::Backup {
-            backup: backup.clone(),
-            original: original.clone(),
-        });
+        ledger.write(
+            Entry::Backup {
+                backup: backup.clone(),
+                original: original.clone(),
+            },
+            true,
+        );
         drop(ledger);
 
         let swept = sweep(&dir);
@@ -388,7 +442,7 @@ mod tests {
             r"\\?\Volume{00000000-0000-0000-0000-000000000000}\Clip.mp4.gracil-6a.part",
         );
         let ledger = ledger(&dir);
-        ledger.write(Entry::Temp(away));
+        ledger.write(Entry::Temp(away), true);
         drop(ledger);
 
         let swept = sweep(&dir);

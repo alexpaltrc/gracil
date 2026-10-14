@@ -28,11 +28,12 @@ pub fn save_as_new(temp: &Path, source: &Path, extension: &OsStr) -> io::Result<
                 return Ok(candidate);
             }
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-            // Drives without hard links (FAT32, exFAT): rename, having just checked the name.
-            Err(_) => {
-                fs::rename(temp, &candidate)?;
-                return Ok(candidate);
-            }
+            // Drives without hard links (FAT32, exFAT): a move that also never replaces.
+            Err(_) => match move_to_free_name(temp, &candidate) {
+                Ok(()) => return Ok(candidate),
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error),
+            },
         }
     }
     Err(io::Error::new(
@@ -91,7 +92,7 @@ pub fn replace_original(
         Ok(()) => true,
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => return Err(error),
         Err(_) => {
-            fs::rename(temp, &target)?;
+            move_to_free_name(temp, &target)?;
             false
         }
     };
@@ -109,6 +110,21 @@ pub fn replace_original(
     }
     set_times(&target, times);
     Ok(target)
+}
+
+/// Moves `temp` to `target` on a drive without hard links (FAT32, exFAT), failing with
+/// `AlreadyExists` instead of replacing a file of that name (ADR 0064). The name is claimed first
+/// with an empty file only this call can create; the move then replaces only that claim.
+fn move_to_free_name(temp: &Path, target: &Path) -> io::Result<()> {
+    File::options().write(true).create_new(true).open(target)?;
+    if let Err(error) = fs::rename(temp, target) {
+        // The claim is still empty and still ours; it goes, and the name is free again.
+        if fs::metadata(target).is_ok_and(|metadata| metadata.len() == 0) {
+            let _ = fs::remove_file(target);
+        }
+        return Err(error);
+    }
+    Ok(())
 }
 
 // Once the compressed video is in place the replacement has succeeded; the steps below only
@@ -240,6 +256,33 @@ mod tests {
         assert_eq!(placed, dir.join("Gracil-Clip (2).mp4"));
         assert_eq!(placed_content, b"compressed");
         assert_eq!(other, b"someone else's");
+        assert!(!temp_left);
+    }
+
+    #[test]
+    fn moving_without_hard_links_never_replaces_a_file() {
+        let dir = fresh_dir("no-links");
+        let temp = dir.join("Clip.mp4.gracil-1.part");
+        let taken = dir.join("Gracil-Clip.mp4");
+        let free = dir.join("Gracil-Clip (2).mp4");
+        fs::write(&temp, b"compressed").unwrap();
+        fs::write(&taken, b"someone else's").unwrap();
+
+        let onto_taken = move_to_free_name(&temp, &taken);
+        let onto_free = move_to_free_name(&temp, &free);
+        let contents = (fs::read(&taken).unwrap(), fs::read(&free).unwrap());
+        let temp_left = temp.exists();
+        fs::remove_dir_all(&dir).unwrap();
+
+        assert_eq!(
+            onto_taken.map_err(|error| error.kind()),
+            Err(io::ErrorKind::AlreadyExists)
+        );
+        assert!(onto_free.is_ok());
+        assert_eq!(
+            contents,
+            (b"someone else's".to_vec(), b"compressed".to_vec())
+        );
         assert!(!temp_left);
     }
 

@@ -14,6 +14,7 @@ use tracing::{info, warn};
 use crate::capabilities::{Capabilities, Decoders};
 use crate::encode::{self, EncodeOutcome, JobControl};
 use crate::leftovers;
+use crate::naming;
 use crate::plan::{self, Attempt, EncodePlan};
 use crate::probe::{self, MediaInfo, ProbeError, StreamKind};
 use crate::progress::fraction;
@@ -114,7 +115,10 @@ pub fn prepare(
     control: &JobControl,
     on_update: &mut dyn FnMut(Update),
 ) -> Result<PreparedVideo, CompressError> {
-    let mut info = probe::probe(&engine.toolchain, source)?;
+    let mut info = match probe::probe_under(&engine.toolchain, source, control) {
+        Err(ProbeError::Cancelled) => return Err(CompressError::Cancelled),
+        result => result?,
+    };
     engine.decoders.mark(&mut info);
     if !info.has_video() {
         return Err(CompressError::NoVideo);
@@ -196,7 +200,7 @@ fn run_attempts(
 
         let (error, made_progress) = match outcome {
             EncodeOutcome::Cancelled => return Err(CompressError::Cancelled),
-            EncodeOutcome::Finished => match validate(&engine.toolchain, temp, info) {
+            EncodeOutcome::Finished => match validate(&engine.toolchain, temp, info, control) {
                 Ok(size) => {
                     return Ok(Compressed {
                         temp: temp.to_owned(),
@@ -210,6 +214,9 @@ fn run_attempts(
                 error,
                 made_progress,
             } => (error, made_progress),
+            // A tool that went silent is taken as a stuck encoder or card, never as a damaged
+            // source: the next attempt is tried, as after a graphics card's failure (ADR 0064).
+            EncodeOutcome::Stalled => ("the encoder stopped answering".to_owned(), false),
         };
         warn!(?attempt, %error, made_progress, "attempt failed");
         last_error = error;
@@ -229,12 +236,18 @@ fn run_attempts(
 }
 
 /// Checks the output really is the whole video, re-encoded to HEVC.
-fn validate(toolchain: &Toolchain, output: &Path, source: &MediaInfo) -> Result<u64, String> {
+fn validate(
+    toolchain: &Toolchain,
+    output: &Path,
+    source: &MediaInfo,
+    control: &JobControl,
+) -> Result<u64, String> {
     let size = fs::metadata(output).map_err(|e| e.to_string())?.len();
     if size == 0 {
         return Err("output is empty".into());
     }
-    let result = probe::probe(toolchain, output).map_err(|e| format!("output unreadable: {e}"))?;
+    let result = probe::probe_under(toolchain, output, control)
+        .map_err(|e| format!("output unreadable: {e}"))?;
     let has_hevc = result
         .streams
         .iter()
@@ -259,20 +272,21 @@ fn durations_match(expected: Duration, actual: Duration) -> bool {
 }
 
 /// Creates an empty, uniquely named file next to `source` (same volume, so the final move is a
-/// rename) and returns its path. Named `<file name>.gracil-<id>.part`.
+/// rename) and returns its path. Named `<file name>.gracil-<run>-<id>.part`; a file name too long
+/// for that loses its end, so the whole still fits in a name Windows allows (ADR 0064).
 pub(crate) fn reserve_temp(source: &Path) -> io::Result<PathBuf> {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     let file_name = source
         .file_name()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "source has no file name"))?;
     loop {
-        let id = format!(
-            "{:x}{:x}",
-            std::process::id(),
+        let ending = format!(
+            ".gracil-{}-{:x}.part",
+            leftovers::run_tag(),
             COUNTER.fetch_add(1, Ordering::Relaxed)
         );
-        let mut name = file_name.to_owned();
-        name.push(format!(".gracil-{id}.part"));
+        let mut name = naming::shortened(file_name, ending.len());
+        name.push(ending);
         let path = source.with_file_name(name);
         match OpenOptions::new().write(true).create_new(true).open(&path) {
             Ok(_) => {
@@ -285,9 +299,49 @@ pub(crate) fn reserve_temp(source: &Path) -> io::Result<PathBuf> {
     }
 }
 
+/// Whether files can be written beside `source`, found out by making an empty temporary file there
+/// and removing it at once, before any time is spent compressing (ADR 0064).
+pub fn can_write_beside(source: &Path) -> io::Result<()> {
+    let probe = reserve_temp(source)?;
+    if let Err(error) = fs::remove_file(&probe) {
+        // Writing worked; the empty file is removed at the next start.
+        warn!(%error, "could not remove a test file");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::fresh_dir;
+
+    #[test]
+    fn a_temporary_file_beside_a_long_name_still_fits() {
+        let dir = fresh_dir("long-name");
+        let source = dir.join(format!("{}.mp4", "a".repeat(246)));
+        fs::write(&source, b"original").unwrap();
+        let temp = reserve_temp(&source);
+        let backed_up = temp
+            .as_ref()
+            .is_ok_and(|temp| fs::write(temp.with_extension("bak"), b"parked").is_ok());
+        let can_write = can_write_beside(&source);
+        let entries = fs::read_dir(&dir).unwrap().count();
+        fs::remove_dir_all(&dir).unwrap();
+
+        let temp = temp.unwrap();
+        let name = temp.file_name().unwrap();
+        assert!(naming::units(name) <= naming::LONGEST_NAME);
+        let name = name.to_str().unwrap();
+        assert!(name.starts_with("aaaa"), "{name}");
+        assert!(name.contains(".gracil-"), "{name}");
+        assert!(name.ends_with(".part"), "{name}");
+        assert!(backed_up);
+        assert!(can_write.is_ok());
+        assert_eq!(
+            entries, 3,
+            "the source, its temporary file and its backup; no test file"
+        );
+    }
 
     #[test]
     fn duration_tolerance() {

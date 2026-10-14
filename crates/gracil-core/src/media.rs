@@ -111,6 +111,9 @@ fn walk(dir: &Path, wanted: &dyn Fn(&Path) -> bool, found: &mut dyn FnMut(Vec<Pa
         let Ok(kind) = entry.file_type() else {
             continue;
         };
+        if not_the_persons(&entry) {
+            continue;
+        }
         let path = entry.path();
         if kind.is_dir() {
             folders.push(path);
@@ -124,6 +127,39 @@ fn walk(dir: &Path, wanted: &dyn Fn(&Path) -> bool, found: &mut dyn FnMut(Vec<Pa
     for folder in folders {
         walk(&folder, wanted, found);
     }
+}
+
+/// Folders Windows and other systems keep for themselves on a drive: the recycle bin, restore
+/// points, and a Mac's trash.
+const SYSTEM_FOLDERS: [&str; 3] = ["$RECYCLE.BIN", "System Volume Information", ".Trashes"];
+
+/// Whether an entry inside a folder being looked through belongs to the system rather than the
+/// person (ADR 0064): hidden or system files and folders, the folders in [`SYSTEM_FOLDERS`], and
+/// the `._` files a Mac leaves beside every file it copies. A file dropped or chosen by itself is
+/// never looked at this way.
+fn not_the_persons(entry: &std::fs::DirEntry) -> bool {
+    let name = entry.file_name();
+    let name = name.to_string_lossy();
+    if name.starts_with("._")
+        || SYSTEM_FOLDERS
+            .iter()
+            .any(|folder| name.eq_ignore_ascii_case(folder))
+    {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const HIDDEN: u32 = 0x2;
+        const SYSTEM: u32 = 0x4;
+        // Comes with the folder's listing too.
+        if let Ok(metadata) = entry.metadata()
+            && metadata.file_attributes() & (HIDDEN | SYSTEM) != 0
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// The extension a result in a format known by `same` gets: the source's own spelling when it
@@ -223,5 +259,60 @@ mod tests {
         assert_eq!(names(gather([root.join("notes.txt")], None)), ["notes.txt"]);
         assert!(gather([root.join("notes.txt")], Some(Kind::Video)).is_empty());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn what_belongs_to_the_system_is_left_out_of_folders() {
+        let root = crate::testing::fresh_dir("system-files");
+        for folder in [
+            "$Recycle.Bin",
+            "System Volume Information",
+            ".Trashes",
+            "Trip",
+        ] {
+            let folder = root.join(folder);
+            std::fs::create_dir_all(&folder).unwrap();
+            std::fs::write(folder.join("inside.mp4"), b"x").unwrap();
+        }
+        for name in ["._Clip.mp4", "Clip.mp4", "hidden.mp4", "system.jpg"] {
+            std::fs::write(root.join(name), b"x").unwrap();
+        }
+        let hidden_folder = root.join("Hidden folder");
+        std::fs::create_dir_all(&hidden_folder).unwrap();
+        std::fs::write(hidden_folder.join("inside.mp4"), b"x").unwrap();
+        for (flag, path) in [
+            ("+h", root.join("hidden.mp4")),
+            ("+s", root.join("system.jpg")),
+            ("+h", hidden_folder.clone()),
+        ] {
+            let status = std::process::Command::new("attrib")
+                .arg(flag)
+                .arg(&path)
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+
+        let found: Vec<PathBuf> = gather([root.clone()], None);
+        let names: Vec<String> = found
+            .iter()
+            .map(|path| {
+                path.strip_prefix(&root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        // Given by itself, a hidden file is still taken.
+        let given = gather([root.join("hidden.mp4")], None);
+        let _ = std::process::Command::new("attrib")
+            .args(["-s", "-h"])
+            .arg(root.join("system.jpg"))
+            .status();
+        std::fs::remove_dir_all(&root).unwrap();
+
+        assert_eq!(names, ["Clip.mp4", r"Trip\inside.mp4"]);
+        assert_eq!(given.len(), 1);
     }
 }

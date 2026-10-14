@@ -512,6 +512,13 @@ out-of-space conditions, replacement errors, invalid output and interrupted fina
 
 The source must remain recoverable if final replacement fails. This is a hard requirement.
 
+*Update (ADR 0064):* the original's size and last-changed time are noted when Gracil starts on it
+and checked again before it is replaced; if either changed, the result is deleted and the
+original left as it is. A read-only original is never replaced and its read-only mark is never
+cleared; the result stays for Save copy. Results are put in place one at a time, in the order
+chosen. A tool that says nothing for five minutes (ten for the quality measure above 4K) is
+stopped and the next way of compressing tried.
+
 # 40. Compress and save a copy
 
 Create a new file in the same directory with the `Gracil-` prefix (`Vacation.mp4` →
@@ -520,6 +527,10 @@ non-conflicting name using a simple predictable strategy (`Gracil-Vacation (2).m
 
 *Amended after the original specification: the prefix is `Gracil-`, with a hyphen, not
 `Gracil_`.*
+
+*Update (ADR 0064):* a name that would pass Windows' 255-character limit loses the end of its
+stem, never half a character. On a drive without hard links, the copy is moved only to a name
+Gracil has just claimed, so it never replaces a file that appeared meanwhile.
 
 # 40.1 Results that are not smaller
 
@@ -849,6 +860,13 @@ collisions, are recognizable internally and do not conflict with user files. Nev
 merely because their names resemble Gracil temporary files; track ownership/state and clean
 abandoned temporary files conservatively.
 
+*Update (ADR 0064):* temporary names carry the run that made them (process and start time) and
+are shortened to fit 255 characters. The sweep of an earlier run's files runs on its own thread
+beside the work, checks each drive once, and covers image scratch files too. Before compressing,
+an empty temporary file is made and removed beside the first file of each folder, so a folder
+that takes no new files fails at once. Unused results are deleted by one background worker,
+which Gracil waits for on leaving.
+
 # 73. Testing
 
 Automated testing is required, covering at least: output naming, naming collisions, Unicode
@@ -1163,6 +1181,9 @@ telemetry; introduce cloud processing; upload videos anywhere; change versioning
 
 *Update (ADR 0063):* Iced's processor renderer (tiny-skia) is built in as a fallback, used only
 when the graphics card can't draw the window. WGPU stays the renderer.
+
+*Update (ADR 0064):* the safe-replace model is kept and made stricter: an original that changed
+since it was compressed, or that is read-only, is never replaced (§39).
 
 If a requirement becomes technically problematic, explain the conflict before changing behavior.
 

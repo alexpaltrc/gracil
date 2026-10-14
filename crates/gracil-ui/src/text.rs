@@ -52,6 +52,8 @@ pub struct Text {
     pub getting_ready: &'static str,
     pub waiting: &'static str,
     pub ffmpeg_missing: &'static str,
+    /// Gracil was opened from inside its zip, which has to be extracted first (ADR 0064).
+    pub inside_zip: &'static str,
     pub compressing: &'static str,
     pub paused: &'static str,
     /// A laptop's battery is low: the file waits to be plugged in (ADR 0063).
@@ -142,6 +144,8 @@ struct Failures {
     no_encoder: &'static str,
     no_room: &'static str,
     too_large: &'static str,
+    changed: &'static str,
+    read_only: &'static str,
 }
 
 impl Text {
@@ -295,6 +299,8 @@ impl Text {
             Failure::NoEncoder => failures.no_encoder,
             Failure::NoRoom => failures.no_room,
             Failure::TooLarge => failures.too_large,
+            Failure::Changed => failures.changed,
+            Failure::ReadOnly => failures.read_only,
         }
     }
 }
@@ -320,6 +326,7 @@ static ENGLISH: Text = Text {
     getting_ready: "Getting ready",
     waiting: "Waiting",
     ffmpeg_missing: "Gracil is missing its video tool. Download Gracil again from where you got it",
+    inside_zip: "Gracil is still inside its zip. Extract it to a folder first, then open it from there",
     compressing: "Compressing",
     paused: "Paused",
     low_battery: "Low battery · waiting",
@@ -443,6 +450,8 @@ static ENGLISH: Text = Text {
         no_encoder: "Gracil is missing its photo tool. Download Gracil again from where you got it",
         no_room: "The drive is almost full, so this file was left as it is. Free up some space and add it again",
         too_large: "This image is too large for this computer's memory, so it was left as it is",
+        changed: "This file changed while it was being compressed, so it was left as it is. Add it again to compress the new version",
+        read_only: "This file is read-only, so it can't be replaced. Save a copy instead",
     },
 };
 
@@ -467,6 +476,7 @@ static SPANISH: Text = Text {
     getting_ready: "Preparando",
     waiting: "En espera",
     ffmpeg_missing: "A Gracil le falta su herramienta de video. Vuelve a descargarlo de donde lo obtuviste",
+    inside_zip: "Gracil sigue dentro de su zip. Extráelo a una carpeta primero y ábrelo desde ahí",
     compressing: "Comprimiendo",
     paused: "En pausa",
     low_battery: "Batería baja · en espera",
@@ -602,6 +612,8 @@ static SPANISH: Text = Text {
         no_encoder: "A Gracil le falta su herramienta de fotos. Vuelve a descargarlo de donde lo obtuviste",
         no_room: "El disco está casi lleno, así que este archivo se dejó como está. Libera espacio y vuelve a agregarlo",
         too_large: "Esta imagen es demasiado grande para la memoria de esta computadora, así que se dejó como está",
+        changed: "Este archivo cambió mientras se comprimía, así que se dejó como está. Vuelve a agregarlo para comprimir la versión nueva",
+        read_only: "Este archivo es de solo lectura, así que no se puede reemplazar. Guarda una copia en su lugar",
     },
 };
 
