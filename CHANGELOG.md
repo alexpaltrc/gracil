@@ -68,7 +68,9 @@ with it.
 - With tens of thousands of files on the list, the window stays as smooth as with a few, and
   **Clear** and **Stop** answer at once.
 - Videos spend less time getting ready, above all on computers with an NVIDIA graphics card, and
-  leave the processor freer meanwhile. The result is exactly the same as before.
+  leave the processor freer meanwhile. The result is exactly the same as before. In a list of
+  similar videos, such as those from one phone, each one after the first gets ready quicker
+  still.
 - Gracil never lets the computer run too hot, and it never has to stop to cool down. It keeps
   the graphics card at about 70 °C at most, whether it is NVIDIA, Intel or AMD, as long as the
   card tells Windows its temperature: above that it eases off little by

@@ -13,11 +13,12 @@
 //! again loses a little, which is what the user asks for. If even that would not be clearly
 //! smaller, nothing is encoded.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fs;
 use std::ops::RangeInclusive;
 use std::path::Path;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use tracing::{info, warn};
@@ -68,12 +69,56 @@ impl Found {
     }
 }
 
-/// Searches the level for `plan`'s main video, encoded the way `plan.attempt` would.
+/// The levels the last videos were found to need, by encoder, size and source codec, each the
+/// first level tried for the next video of the same kind (ADR 0065). Kept in memory for as long
+/// as Gracil runs, never written down. A hint only decides what is measured first: the level
+/// chosen is always one measured to reach the target.
+#[derive(Debug, Clone, Default)]
+pub struct Hints(Arc<Mutex<HashMap<HintKey, u8>>>);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct HintKey {
+    encoder: VideoEncoder,
+    /// The picture's short side, in steps (see [`size_step`]).
+    size: u8,
+    codec: String,
+    /// The level for compressing again (ADR 0033) rather than for looking the same.
+    again: bool,
+}
+
+impl Hints {
+    fn get(&self, key: &HintKey) -> Option<u8> {
+        self.lock().get(key).copied()
+    }
+
+    fn remember(&self, key: HintKey, level: u8) {
+        self.lock().insert(key, level);
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<HintKey, u8>> {
+        // A plain map of numbers: a panic elsewhere leaves nothing half done in it.
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// Which of a few common sizes a picture of `size` is closest to, by its short side: up to 480,
+/// 720, 1080, 1440, 2160, and above.
+fn size_step(size: Option<(u32, u32)>) -> u8 {
+    let short = size.map_or(0, |(width, height)| width.min(height));
+    [480, 720, 1080, 1440, 2160]
+        .iter()
+        .position(|&step| short <= step)
+        .unwrap_or(5) as u8
+}
+
+/// Searches the level for `plan`'s main video, encoded the way `plan.attempt` would, starting
+/// from what `hints` remember of videos like it.
 pub fn find_level(
     toolchain: &Toolchain,
     plan: &EncodePlan,
     info: &MediaInfo,
     control: &JobControl,
+    hints: &Hints,
 ) -> Found {
     let encoder = plan.attempt.encoder;
     let Some((index, rate)) = plan.main_video() else {
@@ -90,11 +135,16 @@ pub fn find_level(
         return Found::Fallback;
     }
 
-    let pixel_format = info
-        .streams
-        .iter()
-        .find(|stream| stream.index == index)
-        .and_then(|stream| stream.pixel_format.as_deref());
+    let source = info.streams.iter().find(|stream| stream.index == index);
+    let pixel_format = source.and_then(|stream| stream.pixel_format.as_deref());
+    let key = HintKey {
+        encoder,
+        size: size_step(plan.picture),
+        codec: source
+            .map(|stream| stream.codec.clone())
+            .unwrap_or_default(),
+        again: false,
+    };
     let mut search = Search {
         toolchain,
         input: &plan.input,
@@ -117,7 +167,7 @@ pub fn find_level(
             kept: kept_bytes(info, plan, original, duration),
         }
     });
-    match choose(&mut search, sizes) {
+    match choose(&mut search, sizes, hints, key) {
         Ok(found) => found,
         Err(Halt::Cancelled) => Found::Cancelled,
         Err(Halt::Failed(error)) => {
@@ -129,8 +179,14 @@ pub fn find_level(
 }
 
 /// Picks the level that looks the same. If that is not worth it, the video was already compressed,
-/// and it gets the level that loses a little (ADR 0033), when that one is worth it.
-fn choose(search: &mut Search, sizes: Option<Sizes>) -> Result<Found, Halt> {
+/// and it gets the level that loses a little (ADR 0033), when that one is worth it. Each search
+/// starts from the level `hints` remember for `key`, and leaves the level it found there.
+fn choose(
+    search: &mut Search,
+    sizes: Option<Sizes>,
+    hints: &Hints,
+    key: HintKey,
+) -> Result<Found, Halt> {
     let encoder = search.attempt.encoder;
     let levels = standard::levels(encoder);
     // A level that already misses the target and is still too big: every level that reaches the
@@ -139,9 +195,15 @@ fn choose(search: &mut Search, sizes: Option<Sizes>) -> Result<Found, Halt> {
         measured.score < standard::TARGET_SCORE
             && sizes.is_some_and(|sizes| !sizes.worth_it(sizes.predicted(measured)))
     };
-    let chosen = match search.highest(levels.clone(), standard::TARGET_SCORE, None, &give_up) {
+    let hint = hints.get(&key);
+    let chosen = match search.highest(levels.clone(), standard::TARGET_SCORE, hint, &give_up) {
         // Content that never reaches the target gets the best quality searched.
-        Ok(best) => Some(best.unwrap_or(*levels.start())),
+        Ok(best) => {
+            if let Some(level) = best {
+                hints.remember(key.clone(), level);
+            }
+            Some(best.unwrap_or(*levels.start()))
+        }
         Err(Halt::GaveUp) => None,
         Err(halt) => return Err(halt),
     };
@@ -158,13 +220,20 @@ fn choose(search: &mut Search, sizes: Option<Sizes>) -> Result<Found, Halt> {
         "already compressed; measuring the level for compressing again"
     );
 
+    // The level that looked the same is where losing a little starts, unless a video like this
+    // one was compressed again before.
     let never = |_: &Measured| false;
+    let key = HintKey { again: true, ..key };
+    let hint = hints.get(&key).or(chosen);
     let again = search.highest(
         standard::again_levels(encoder),
         standard::AGAIN_SCORE,
-        None,
+        hint,
         &never,
     )?;
+    if let Some(level) = again {
+        hints.remember(key, level);
+    }
     if let Some(found) = if_worth_it(search, sizes, again, "chose a level for compressing again")? {
         return Ok(found);
     }
@@ -580,6 +649,7 @@ fn next_level(
         let guess = f64::from(reached) + share * f64::from(missed - reached);
         return Some((guess.round() as u8).clamp(low, high));
     }
+    let hint = hint.map(|level| level.clamp(*levels.start(), *levels.end()));
     match hint.filter(|level| (low..=high).contains(level) && !scores.contains_key(level)) {
         Some(level) => Some(level),
         // Only a level that reaches the target so far: the score it has to spare, at roughly a
@@ -801,6 +871,59 @@ mod tests {
         let line = sample_line(Some("nv12"), false, None);
         assert!(!line.contains("hwaccel"), "{line}");
         assert!(line.contains("[source]format=p010le[encode];[reference]format=yuv420p[ref]"));
+    }
+
+    #[test]
+    fn a_wrong_hint_never_chooses_a_level_that_misses_the_target() {
+        // A score curve with a bump in it, as real ones sometimes have.
+        let bumpy = |level: u8| curve(level) + if level == 33 { 1.5 } else { 0.0 };
+        for (smooth, score) in [(true, curve as fn(u8) -> f64), (false, bumpy)] {
+            for target in [95.0, 90.0] {
+                let (fresh, _) = search(score, 24..=42, target, None, &[]);
+                for hint in (0..=60).map(Some).chain([None]) {
+                    let (found, measured) = search(score, 24..=42, target, hint, &[]);
+                    let found = found.unwrap();
+                    assert!(score(found) >= target, "hint {hint:?} chose {found}");
+                    assert!((24..=42).contains(&found));
+                    assert!(measured.iter().all(|level| (24..=42).contains(level)));
+                    if smooth {
+                        assert_eq!(Some(found), fresh, "hint {hint:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hints_are_kept_by_encoder_size_and_codec() {
+        let hints = Hints::default();
+        let key = |encoder, size, codec: &str| HintKey {
+            encoder,
+            size: size_step(size),
+            codec: codec.to_owned(),
+            again: false,
+        };
+        let full_hd = key(VideoEncoder::Nvenc, Some((1920, 1080)), "h264");
+        hints.remember(full_hd.clone(), 33);
+        assert_eq!(hints.get(&full_hd), Some(33));
+        // A vertical phone video of the same size is the same kind.
+        assert_eq!(
+            hints.get(&key(VideoEncoder::Nvenc, Some((1080, 1920)), "h264")),
+            Some(33)
+        );
+        for other in [
+            key(VideoEncoder::Nvenc, Some((3840, 2160)), "h264"),
+            key(VideoEncoder::Nvenc, Some((1920, 1080)), "hevc"),
+            key(VideoEncoder::X265, Some((1920, 1080)), "h264"),
+            HintKey {
+                again: true,
+                ..full_hd.clone()
+            },
+        ] {
+            assert_eq!(hints.get(&other), None, "{other:?}");
+        }
+        assert_eq!(size_step(None), 0);
+        assert_eq!(size_step(Some((7680, 4320))), 5);
     }
 
     #[test]

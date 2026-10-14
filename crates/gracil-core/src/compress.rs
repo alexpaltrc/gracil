@@ -32,6 +32,8 @@ pub struct Engine {
     pub decoders: Decoders,
     /// `cjpegli.exe`, shipped with Gracil (ADR 0034). Without it, photos cannot be compressed.
     pub jpegli: Option<PathBuf>,
+    /// The levels the last videos needed, tried first for the next ones like them (ADR 0065).
+    pub hints: search::Hints,
 }
 
 impl Engine {
@@ -52,6 +54,7 @@ impl Engine {
             capabilities,
             decoders,
             jpegli: toolchain::find_jpegli(),
+            hints: search::Hints::default(),
         }
     }
 }
@@ -134,7 +137,7 @@ pub fn prepare(
             let level = Found::Fallback.level_for(first.encoder);
             // The samples are measured and thrown away; nothing is written where the result goes.
             let plan = EncodePlan::new(source, Path::new(""), &info, first, capabilities, level);
-            search::find_level(&engine.toolchain, &plan, &info, control)
+            search::find_level(&engine.toolchain, &plan, &info, control, &engine.hints)
         }
     };
     match found {

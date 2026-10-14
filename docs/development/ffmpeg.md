@@ -93,7 +93,10 @@ Before the first attempt, Gracil looks for the highest level (smallest file) who
 95: NVENC CQ and AMF QP 24–38, Quick Sync ICQ 20–36, x265 CRF 20–34. Between a level that reaches the target and one that misses
 it, the next guess is on a straight line through their scores; with only a level that reaches it,
 the search steps past it by the score it has to spare (about a point per level); otherwise it
-halves what is left. Each step encodes 4 s samples, one per 15 s of video up to four, centred in
+halves what is left. The first level measured is the one the last video with the same encoder,
+size step and source codec needed (`search::Hints`, in memory only, ADR 0065); the search for
+compressing again starts at the level the first search chose, or the one the last such video
+needed. Each step encodes 4 s samples, one per 15 s of video up to four, centred in
 equal shares of the video, and averages their scores. Every measured level is cached for the
 whole search. One FFmpeg process per sample does both jobs, writing nothing to disk:
 

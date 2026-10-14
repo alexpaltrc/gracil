@@ -24,6 +24,14 @@ and every safeguard of ADRs 0049, 0051, 0063 and 0064 still holds.
    sample is compared with is copied out (8-bit and 10-bit 4:2:0 sources; others as before). The
    encoded frames and the scores are bit-identical to before; copying every frame out and back in
    cost about a fifth of the processor.
+3. **Starting where the last video ended.** Gracil remembers, in memory only and never on disk,
+   the level the last video needed for each encoder, size (short side up to 480, 720, 1080, 1440,
+   2160, above) and source codec, and measures that level first for the next video like it; the
+   search for compressing again (ADR 0033) starts at the level the first search found, or at the
+   one the last video compressed again needed. A hint outside the levels searched is brought
+   inside them. A hint only changes which levels are measured first: the level chosen is always
+   one measured to reach the target, and on a score curve that falls steadily it is the same
+   level as without a hint.
 
 **Consequences.**
 
@@ -39,3 +47,6 @@ and every safeguard of ADRs 0049, 0051, 0063 and 0064 still holds.
   | 1080p 8-bit | 41.9 s, 206 s | 36.7 s, 164 s |
   | 1080p 10-bit | 25.2 s, 116 s | 21.6 s, 104 s |
   | 2160p 8-bit | 114.8 s, 649 s | 95.3 s, 497 s |
+
+  A second 1080p video like the first measured 2 levels instead of 5 (about 15 s instead of
+  37 s), and chose the same level.

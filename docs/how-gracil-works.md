@@ -292,6 +292,10 @@ see a difference. So instead of squeezing every video the same amount, Gracil me
 - With an NVIDIA graphics card, the short moments stay on the card while they are compressed,
   and only what they are compared with goes to the processor. That makes getting ready quicker
   and leaves the processor freer, with exactly the same result.
+- While it runs, Gracil remembers how much compression the last video of the same kind needed
+  (the same size and recorded the same way) and tries that first, so a list of similar videos,
+  such as those from one phone, gets ready quicker. It is never written down, and it never
+  changes how much a video is compressed: that is always measured.
 - Very short videos, and videos the measurement can't handle, use a safe standard amount
   instead.
 
