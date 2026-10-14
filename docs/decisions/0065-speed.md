@@ -51,6 +51,21 @@ and every safeguard of ADRs 0049, 0051, 0063 and 0064 still holds.
    one at a time for as long as Gracil runs, without being taken for a decoding failure. The
    scores are added up in the samples' order, exactly as before.
 
+**Considered and not done**, measured on the reference computer:
+
+- **Cutting each sample once into a lossless copy** (FFV1) for sources with key frames far apart,
+  so later levels don't decode from the last key frame again. The copy scores bit-identically,
+  but it is slower: decoding the FFV1 copy on the processor took longer than decoding the source
+  again on the graphics card, even 18 s into a 20 s gap between key frames (2.6 s against 2.4 s
+  a sample), and making it took 2.3 s and 115 MB of disk a 1080p sample. Decoded on the processor,
+  it saved 0.2 s a sample in the middle of such a gap while using more of the processor.
+- **Decoding the encoded sample on the graphics card**, with the encoder in one FFmpeg and the
+  measure in another, joined by a pipe (raw HEVC, frame sizes on the encoder's error output,
+  frames paired by number). Bit-identical scores and sizes, and a fifth less processor, but each
+  sample took 15–20 % longer (2.3 s against 1.9 s): two processes and two CUDA start-ups, and
+  the source decoded twice, cost more time than the processor saved, as the measure keeps to the
+  threads it is given either way.
+
 **Consequences.**
 
 - Thirty thousand images, each got ready and compressed: keeping the window's counts took about
