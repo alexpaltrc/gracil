@@ -69,3 +69,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0062](0062-compressing-documents.md) | *Proposed:* compressing documents (Word, Excel, PowerPoint, OpenDocument, PDF) by making the pictures inside them smaller, nothing else changed |
 | [0063](0063-safe-on-any-computer.md) | Safe on any computer: idle only when nobody needs it, laptops capped at half, a low battery waits, sleep rests and retries, memory over the whole job, above 4K measured at 4K, a window drawn without a graphics card |
 | [0064](0064-robust-with-real-files.md) | Robust with real files: a file that changed is left alone, a stuck tool is stopped, results placed in order, cloud files freed up again, read-only never replaced, system folders left out, shutdown keeps the list, a Gracil inside its zip says so |
+| [0065](0065-speed.md) | Speed: the list counts as it goes, so the window keeps up with any list |

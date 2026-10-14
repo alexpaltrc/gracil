@@ -97,6 +97,18 @@ impl std::ops::Add for Sizes {
     }
 }
 
+impl std::ops::Sub for Sizes {
+    type Output = Self;
+
+    /// Takes off sizes added before.
+    fn sub(self, other: Self) -> Self {
+        Self {
+            original: self.original.saturating_sub(other.original),
+            compressed: self.compressed.saturating_sub(other.compressed),
+        }
+    }
+}
+
 /// What the original was like when Gracil started on it, to tell whether it changed meanwhile
 /// (ADR 0064).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

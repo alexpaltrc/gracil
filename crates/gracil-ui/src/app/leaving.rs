@@ -113,10 +113,7 @@ impl Gracil {
             && !self.mini_shown
             && self.running.is_empty()
             && self.waiting_to_compress() == 0
-            && !self
-                .outcomes
-                .values()
-                .any(|outcome| matches!(outcome, Outcome::Ready { .. }))
+            && self.summary.ready == 0
     }
 
     /// The files not finished yet, to carry on with if Gracil closes now (ADR 0042): those still

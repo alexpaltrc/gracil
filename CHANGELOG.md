@@ -65,6 +65,8 @@ with it.
 - Stop stops the whole list at once, even on a slow network or cloud drive. Nothing is lost: the
   files not done yet wait on a quiet line with **Continue**, so you can carry on whenever you
   like. Exit no longer keeps you waiting either.
+- With tens of thousands of files on the list, the window stays as smooth as with a few, and
+  **Clear** and **Stop** answer at once.
 - Gracil never lets the computer run too hot, and it never has to stop to cool down. It keeps
   the graphics card at about 70 °C at most, whether it is NVIDIA, Intel or AMD, as long as the
   card tells Windows its temperature: above that it eases off little by

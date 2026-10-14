@@ -887,7 +887,7 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
                 Some(Message::ChooseAll(Choice::SaveCopy)),
             ));
     }
-    let any_removable = state.queue.jobs().iter().any(|job| state.can_remove(job));
+    let any_removable = state.any_removable();
     header = header.push(Space::new().width(Fill)).push(quiet(
         state.text.clear,
         any_removable.then_some(Message::Clear),

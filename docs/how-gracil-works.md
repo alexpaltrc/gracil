@@ -247,8 +247,10 @@ straining.
   others will take. Otherwise the file is left as it is, and a small "!" says the drive is
   almost full.
 - The window stays quick to answer however long the list is and however long Gracil has been
-  working, even with tens of thousands of files and hours of work: pause, stop and **View files**
-  always respond at once.
+  working, even with tens of thousands of files and hours of work: pause, stop, **Clear** and
+  **View files** always respond at once. Gracil keeps its counts of the list up to date as each
+  file changes, instead of going through the whole list again, so a huge list costs the window no
+  more than a short one.
 - Gracil keeps an eye on how hot the computer runs, so a long list never cooks it, even with
   poor cooling:
   - Gracil never stops to let the computer cool down: it keeps it from getting hot in the first
