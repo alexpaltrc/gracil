@@ -35,6 +35,8 @@ pub struct Stream {
     pub frame_rate: Option<Rate>,
     /// Bits per second, when the file records it.
     pub bit_rate: Option<u64>,
+    /// A picture's width and height in pixels, as stored, when the file says.
+    pub size: Option<(u32, u32)>,
     /// FFmpeg knows the codec but can't decode it, such as the spatial audio iPhones record
     /// (`apple_apac`). Set by [`crate::capabilities::Decoders::mark`].
     pub undecodable: bool,
@@ -149,6 +151,8 @@ struct RawStream {
     #[serde(default)]
     r_frame_rate: String,
     bit_rate: Option<String>,
+    width: Option<u32>,
+    height: Option<u32>,
     #[serde(default)]
     disposition: BTreeMap<String, u8>,
 }
@@ -173,6 +177,7 @@ fn parse(json: &[u8]) -> Result<MediaInfo, ProbeError> {
             channels: s.channels,
             frame_rate: Rate::parse(&s.avg_frame_rate).or_else(|| Rate::parse(&s.r_frame_rate)),
             bit_rate: s.bit_rate.and_then(|b| b.parse().ok()).filter(|&b| b > 0),
+            size: s.width.zip(s.height).filter(|&(w, h)| w > 0 && h > 0),
             undecodable: false,
         })
         .collect();
@@ -218,6 +223,8 @@ mod tests {
                 den: 1001
             })
         );
+        assert_eq!(video.size, Some((3840, 2160)));
+        assert_eq!(info.streams[1].size, None);
         assert_eq!(info.streams[1].frame_rate, None);
         assert_eq!(info.streams[1].bit_rate, Some(128_000));
         assert_eq!(info.streams[2].kind, StreamKind::Data);

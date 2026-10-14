@@ -112,6 +112,8 @@ pub struct EncodePlan {
     pub capabilities: Capabilities,
     /// CQ for NVENC, ICQ for Quick Sync, QP for AMF, CRF for x265.
     pub level: u8,
+    /// The encoded video's width and height as stored, when the source says.
+    pub picture: Option<(u32, u32)>,
 }
 
 impl EncodePlan {
@@ -125,6 +127,7 @@ impl EncodePlan {
     ) -> Self {
         let mut streams = Vec::with_capacity(info.streams.len());
         let mut dropped = Vec::new();
+        let mut picture = None;
         // Audio FFmpeg can't decode can't be converted, and MP4 can't hold it as it is: the
         // spatial audio iPhones record next to an ordinary track. It is left out while another
         // track keeps the sound; a video whose only sound it is fails rather than go silent.
@@ -138,6 +141,11 @@ impl EncodePlan {
             } else {
                 stream_action(stream, attempt.preservation)
             };
+            if let Some(StreamAction::EncodeVideo(_)) = action
+                && picture.is_none()
+            {
+                picture = stream.size;
+            }
             match action {
                 Some(action) => streams.push(MappedStream {
                     source_index: stream.index,
@@ -155,6 +163,7 @@ impl EncodePlan {
             keep_apple_metadata: info.tag_keys.iter().any(|k| k.starts_with("com.apple.")),
             capabilities,
             level,
+            picture,
         }
     }
 
@@ -218,7 +227,13 @@ impl EncodePlan {
                 if !filters.is_empty() {
                     option(args, "filter", &filters.join(","));
                 }
-                args.extend(video_codec_args(encoder, capabilities, self.level, out));
+                args.extend(video_codec_args(
+                    encoder,
+                    capabilities,
+                    self.level,
+                    out,
+                    self.picture,
+                ));
             }
             StreamAction::Copy => option(args, "c", "copy"),
             StreamAction::ToMovText => option(args, "c", "mov_text"),
@@ -252,15 +267,20 @@ pub(crate) fn video_filters(
     filters
 }
 
-/// The video encoder and its options for output stream `out`, at `level`.
+/// The video encoder and its options for output stream `out`, at `level`, for a picture of
+/// `picture` pixels.
 pub(crate) fn video_codec_args(
     encoder: VideoEncoder,
     capabilities: &Capabilities,
     level: u8,
     out: usize,
+    picture: Option<(u32, u32)>,
 ) -> Vec<OsString> {
     let options: Vec<(&str, String)> = match encoder {
-        VideoEncoder::X265 => standard::x265_options(share::threads_for_one()).into(),
+        VideoEncoder::X265 => {
+            let lean = standard::x265_lean(picture, share::free_memory());
+            standard::x265_options(share::threads_for_one(), lean).into()
+        }
         _ => capabilities
             .hardware
             .options(encoder)

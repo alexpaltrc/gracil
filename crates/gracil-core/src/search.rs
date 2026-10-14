@@ -97,6 +97,7 @@ pub fn find_level(
         rate,
         attempt: plan.attempt,
         capabilities: &plan.capabilities,
+        picture: plan.picture,
         starts: sample_starts(duration),
         duration,
         control,
@@ -295,6 +296,8 @@ struct Search<'a> {
     rate: Option<Rate>,
     attempt: Attempt,
     capabilities: &'a Capabilities,
+    /// The video's width and height as stored, when the source says.
+    picture: Option<(u32, u32)>,
     starts: Vec<Duration>,
     duration: Duration,
     control: &'a JobControl,
@@ -350,25 +353,36 @@ impl<'a> Search<'a> {
     }
 
     fn sample(&mut self, start: Duration, level: u8) -> Result<Sample, Halt> {
-        let mut frame_sizes = Vec::with_capacity(256);
-        let (outcome, log) = encode::run_ffmpeg(
-            self.toolchain,
-            self.sample_args(start, level),
-            self.control,
-            &mut |line| frame_sizes.extend(frame_size(line)),
-        );
-        match outcome {
-            EncodeOutcome::Finished => match vmaf_score(&log) {
-                Some(score) => Ok(Sample { score, frame_sizes }),
-                None => Err(Halt::Failed(format!("no score in FFmpeg's output: {log}"))),
-            },
-            EncodeOutcome::Cancelled => Err(Halt::Cancelled),
-            // GPU decoding may not take this video; the samples then decode on the CPU.
-            EncodeOutcome::Failed { .. } if self.attempt.hw_decode => {
-                self.attempt.hw_decode = false;
-                self.sample(start, level)
+        // A sample can fail because the computer slept under it; it is tried again, once
+        // (ADR 0063).
+        let mut tried_again = false;
+        loop {
+            let sleeps = share::sleeps();
+            let mut frame_sizes = Vec::with_capacity(256);
+            let (outcome, log) = encode::run_ffmpeg(
+                self.toolchain,
+                self.sample_args(start, level),
+                self.control,
+                &mut |line| frame_sizes.extend(frame_size(line)),
+            );
+            match outcome {
+                EncodeOutcome::Finished => {
+                    return match vmaf_score(&log) {
+                        Some(score) => Ok(Sample { score, frame_sizes }),
+                        None => Err(Halt::Failed(format!("no score in FFmpeg's output: {log}"))),
+                    };
+                }
+                EncodeOutcome::Cancelled => return Err(Halt::Cancelled),
+                EncodeOutcome::Failed { .. } if share::sleeps() != sleeps && !tried_again => {
+                    info!("the computer slept during a sample; measuring it again");
+                    tried_again = true;
+                }
+                // GPU decoding may not take this video; the samples then decode on the CPU.
+                EncodeOutcome::Failed { .. } if self.attempt.hw_decode => {
+                    self.attempt.hw_decode = false;
+                }
+                EncodeOutcome::Failed { error, .. } => return Err(Halt::Failed(error)),
             }
-            EncodeOutcome::Failed { error, .. } => Err(Halt::Failed(error)),
         }
     }
 
@@ -408,15 +422,34 @@ impl<'a> Search<'a> {
             graph.push(',');
         }
         graph.push_str("split[source][reference];");
+        // Above 4K, both pictures are measured scaled down to 4K (ADR 0063): VMAF's memory and
+        // time grow with every pixel, and its model judges what a person sees at normal viewing,
+        // which more pixels than 4K don't change.
+        let smaller = standard::measured_size(self.picture);
+        let (scale_gpu, scale_cpu) = match smaller {
+            Some((width, height)) => (
+                format!("{width}:{height}:"),
+                format!("scale={width}:{height},"),
+            ),
+            None => (String::new(), String::new()),
+        };
         if on_gpu {
             graph.push_str("[source]null[encode];");
-            graph.push_str("[reference]scale_cuda=format=yuv420p[ref]");
+            graph.push_str(&format!(
+                "[reference]scale_cuda={scale_gpu}format=yuv420p[ref]"
+            ));
         } else {
             graph.push_str(&format!("[source]{format}[encode];"));
-            graph.push_str("[reference]format=yuv420p[ref]");
+            graph.push_str(&format!("[reference]{scale_cpu}format=yuv420p[ref]"));
         }
         args.extend(["-filter_complex", &graph, "-map", "[encode]"].map(OsString::from));
-        args.extend(plan::video_codec_args(encoder, self.capabilities, level, 0));
+        args.extend(plan::video_codec_args(
+            encoder,
+            self.capabilities,
+            level,
+            0,
+            self.picture,
+        ));
         // Every encoded frame's number and size, on standard output.
         args.extend(
             [
@@ -433,12 +466,12 @@ impl<'a> Search<'a> {
         // the score moves by a few tenths at most, and the measuring takes a third less (ADR 0030).
         let measure = if on_gpu {
             format!(
-                "[dec:0]format=yuv420p,hwupload_cuda[encoded];[encoded][ref]libvmaf_cuda={VMAF_OPTIONS}[vmaf]"
+                "[dec:0]{scale_cpu}format=yuv420p,hwupload_cuda[encoded];[encoded][ref]libvmaf_cuda={VMAF_OPTIONS}[vmaf]"
             )
         } else {
             let threads = share::threads_for_one();
             format!(
-                "[dec:0]format=yuv420p[encoded];[encoded][ref]libvmaf=n_threads={threads}:{VMAF_OPTIONS}[vmaf]"
+                "[dec:0]{scale_cpu}format=yuv420p[encoded];[encoded][ref]libvmaf=n_threads={threads}:{VMAF_OPTIONS}[vmaf]"
             )
         };
         args.extend(

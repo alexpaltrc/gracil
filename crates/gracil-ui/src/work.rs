@@ -213,10 +213,14 @@ pub fn prepare_file(engine: Arc<Engine>, source: PathBuf, control: JobControl) -
                 Ok(video) => Report::Prepared(Prepared::new(Stage::Video(video))),
                 Err(error) => Report::Done(video_outcome(Err(error), &source)),
             },
-            Kind::Image => match images::prepare(&source) {
-                Ok(image) => Report::Prepared(Prepared::new(Stage::Image(image))),
-                Err(error) => Report::Done(image_outcome(Err(error), &source)),
-            },
+            Kind::Image => {
+                // Images are read in the background, below everything else (ADR 0063).
+                gracil_windows::work_in_background();
+                match images::prepare(&source) {
+                    Ok(image) => Report::Prepared(Prepared::new(Stage::Image(image))),
+                    Err(error) => Report::Done(image_outcome(Err(error), &source)),
+                }
+            }
         };
         let _ = block_on(sender.send(report));
     })
@@ -237,19 +241,27 @@ pub fn compress_file(
             let _ = progress.try_send(Report::Progress(update.fraction));
         };
         let stage = prepared.take();
+        // Held until the result is written, so files compressing at once onto the same drive
+        // each count the room the others will take (ADR 0063).
+        let room = reserve_room(&source);
         let outcome = match stage {
-            _ if !room_on_drive(&source) => Outcome::Failed(Failure::NoRoom),
+            _ if room.is_none() => Outcome::Failed(Failure::NoRoom),
             Some(Stage::Image(image)) if too_large(&image) => Outcome::Failed(Failure::TooLarge),
             Some(Stage::Video(video)) => video_outcome(
                 compress::compress_prepared(&engine, &source, video, &control, &mut on_update),
                 &source,
             ),
-            Some(Stage::Image(image)) => image_outcome(
-                images::compress_prepared(&engine, &source, image, &control, &mut on_update),
-                &source,
-            ),
+            Some(Stage::Image(image)) => {
+                // Images compress in the background, below everything else (ADR 0063).
+                gracil_windows::work_in_background();
+                image_outcome(
+                    images::compress_prepared(&engine, &source, image, &control, &mut on_update),
+                    &source,
+                )
+            }
             None => Outcome::Failed(Failure::CouldNotCompress),
         };
+        drop(room);
         let _ = block_on(sender.send(Report::Done(outcome)));
     })
 }
@@ -258,18 +270,51 @@ pub fn compress_file(
 /// never find it full (ADR 0049).
 const ROOM_TO_SPARE: u64 = 2 << 30;
 
-/// Whether the drive holding `source` has room for its compressed version, which is never larger
-/// than the original, and [`ROOM_TO_SPARE`] besides. A drive that doesn't say has room.
-fn room_on_drive(source: &Path) -> bool {
-    let (Some(folder), Ok(metadata)) = (source.parent(), fs::metadata(source)) else {
-        return true;
-    };
-    let room = gracil_windows::free_space(folder)
-        .is_none_or(|free| free >= metadata.len().saturating_add(ROOM_TO_SPARE));
-    if !room {
-        warn!("the drive is too full to compress onto");
+/// Room on each drive that files being compressed will take, at most, once written.
+static RESERVED: Mutex<Vec<(PathBuf, u64)>> = Mutex::new(Vec::new());
+
+/// Room on a drive kept for one file's compressed version until it is written.
+struct Reservation(Option<(PathBuf, u64)>);
+
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        if let Some(kept) = self.0.take() {
+            let mut reserved = RESERVED
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(at) = reserved.iter().position(|other| *other == kept) {
+                reserved.swap_remove(at);
+            }
+        }
     }
-    room
+}
+
+/// Keeps room on the drive holding `source` for its compressed version, which is never larger
+/// than the original, if the drive has that room and [`ROOM_TO_SPARE`] besides, after what the
+/// other files compressing onto it will take. A drive that doesn't say has room.
+fn reserve_room(source: &Path) -> Option<Reservation> {
+    let (Some(folder), Ok(metadata)) = (source.parent(), fs::metadata(source)) else {
+        return Some(Reservation(None));
+    };
+    let Some(free) = gracil_windows::free_space(folder) else {
+        return Some(Reservation(None));
+    };
+    let drive = gracil_windows::volume_of(folder).unwrap_or_else(|| folder.to_path_buf());
+    let mut reserved = RESERVED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let taken: u64 = reserved
+        .iter()
+        .filter(|(other, _)| *other == drive)
+        .map(|(_, bytes)| bytes)
+        .sum();
+    let need = metadata.len();
+    if free.saturating_sub(taken) < need.saturating_add(ROOM_TO_SPARE) {
+        warn!("the drive is too full to compress onto");
+        return None;
+    }
+    reserved.push((drive.clone(), need));
+    Some(Reservation(Some((drive, need))))
 }
 
 /// Whether `image` needs more than half of all the computer's memory to compress, which would
@@ -335,6 +380,7 @@ fn image_outcome(result: Result<images::CompressedImage, ImageError>, source: &P
                 ImageError::Hdr => Failure::Hdr,
                 ImageError::NoEncoder => Failure::NoEncoder,
                 ImageError::Io(_) => Failure::CouldNotSave,
+                ImageError::TooLarge => Failure::TooLarge,
                 ImageError::Failed(_) | ImageError::Cancelled | ImageError::AsSmallAsItGets => {
                     Failure::CouldNotCompress
                 }

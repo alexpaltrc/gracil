@@ -77,8 +77,20 @@ fn main() -> iced::Result {
     if let Err(error) = gracil_windows::end_children_with_this_process() {
         warn!(%error, "FFmpeg may outlive a sudden close");
     }
+    // Each tool and image thread is put in the background and kept low in memory as it starts
+    // (ADR 0063).
+    gracil_core::share::set_host(gracil_core::share::Host {
+        tool_started: gracil_windows::quiet_tool,
+        worker_started: gracil_windows::work_in_background,
+        free_memory: gracil_windows::free_memory,
+    });
     // Compressing runs below other programs; the window, drawn on this thread, does not (ADR 0040).
     gracil_windows::work_quietly();
+    // While the computer sleeps, the work rests, and what sleep cut short is tried again
+    // (ADR 0063).
+    if let Err(error) = gracil_windows::on_sleep(pace::sleeping) {
+        warn!(%error, "Gracil won't know when the computer sleeps");
+    }
     // Too hot, and everything waits for the computer to cool down (ADR 0043).
     pace::watch(|breath| outside::send(Outside::Breath(breath)));
     outside::send(Outside::Request(request));

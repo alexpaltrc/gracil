@@ -99,6 +99,24 @@ pub enum ImageError {
     /// Already compressed, and not even compressing it again would make it clearly smaller.
     #[error("the image is already about as small as it gets")]
     AsSmallAsItGets,
+    /// The memory its pixels need could not be had right now (ADR 0063).
+    #[error("not enough memory for the image")]
+    TooLarge,
+}
+
+/// Makes sure about `bytes` of memory can be had right now, without keeping it, so a picture too
+/// large for what is free fails quietly instead of ending Gracil (ADR 0063).
+fn room_for(bytes: u64) -> Result<(), ImageError> {
+    let bytes = usize::try_from(bytes).map_err(|_| ImageError::TooLarge)?;
+    Vec::<u8>::new()
+        .try_reserve_exact(bytes)
+        .map_err(|_| ImageError::TooLarge)
+}
+
+/// Room for `more` items in `vec`, or [`ImageError::TooLarge`].
+fn reserve<T>(vec: &mut Vec<T>, more: usize) -> Result<(), ImageError> {
+    vec.try_reserve_exact(more)
+        .map_err(|_| ImageError::TooLarge)
 }
 
 /// What a file holds, by its first bytes rather than its name.
@@ -280,7 +298,7 @@ pub fn compress_prepared(
                 (bytes, Target::Png)
             } else {
                 let input = job.scratch.file("decoded.ppm")?;
-                fs::write(&input, ppm(&decoded.reference))?;
+                fs::write(&input, ppm(&decoded.reference)?)?;
                 let carried = Carried::from_parts(decoded.exif.as_deref(), decoded.icc.as_deref());
                 let expected = (decoded.reference.width, decoded.reference.height);
                 let bytes = job.make_jpeg(
@@ -335,6 +353,10 @@ fn decode_with_image(data: &[u8], upright: bool) -> Result<Decoded, ImageError> 
         .flatten()
         .map(|raw| exif::strip_prefix(&raw).to_vec());
     let orientation = decoder.orientation().ok();
+    // The decoded picture and its turned copy, then its RGBA copy and the pixels kept.
+    let (width, height) = decoder.dimensions();
+    let per_pixel = u64::from(decoder.color_type().bytes_per_pixel()) * 2 + 4 + 4;
+    room_for(u64::from(width) * u64::from(height) * per_pixel)?;
     let mut picture = DynamicImage::from_decoder(decoder).map_err(unreadable)?;
     if upright {
         if let Some(orientation) = orientation {
@@ -346,7 +368,10 @@ fn decode_with_image(data: &[u8], upright: bool) -> Result<Decoded, ImageError> 
     }
     let rgba = picture.into_rgba8();
     let (width, height) = rgba.dimensions();
-    let pixels = rgba.as_raw().as_chunks::<4>().0.to_vec();
+    let chunks = rgba.as_raw().as_chunks::<4>().0;
+    let mut pixels = Vec::new();
+    reserve(&mut pixels, chunks.len())?;
+    pixels.extend_from_slice(chunks);
     Ok(Decoded {
         reference: Reference::new(pixels, width, height),
         exif,
@@ -359,13 +384,13 @@ fn is_animated_webp(data: &[u8]) -> bool {
 }
 
 /// The picture as a binary PPM, the plainest input jpegli reads.
-fn ppm(reference: &Reference) -> Vec<u8> {
+fn ppm(reference: &Reference) -> Result<Vec<u8>, ImageError> {
     let mut out = format!("P6\n{} {}\n255\n", reference.width, reference.height).into_bytes();
-    out.reserve(reference.pixels.len() * 3);
+    reserve(&mut out, reference.pixels.len() * 3)?;
     for pixel in &reference.pixels {
         out.extend_from_slice(&pixel[..3]);
     }
-    out
+    Ok(out)
 }
 
 struct Job<'a> {
@@ -605,6 +630,7 @@ impl Job<'_> {
                     .iter()
                     .map(|&(colors, dithered)| {
                         scope.spawn(move || {
+                            share::worker_started();
                             let made = png::palette(
                                 &reference.pixels,
                                 reference.width,
@@ -695,7 +721,12 @@ impl Job<'_> {
                 thread::scope(|scope| {
                     let handles: Vec<_> = unknown
                         .iter()
-                        .map(|&n| scope.spawn(move || measure(n)))
+                        .map(|&n| {
+                            scope.spawn(move || {
+                                share::worker_started();
+                                measure(n)
+                            })
+                        })
                         .collect();
                     handles
                         .into_iter()

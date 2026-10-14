@@ -303,12 +303,7 @@ impl Gracil {
             running: HashMap::new(),
             prepared: HashMap::new(),
             paused: false,
-            breath: Breath {
-                warm: false,
-                resting: false,
-                idle: false,
-                saving_energy: false,
-            },
+            breath: Breath::default(),
             held: false,
             main: None,
             window_shown: false,

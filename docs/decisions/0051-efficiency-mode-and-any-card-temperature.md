@@ -2,6 +2,11 @@
 
 **Status:** Accepted, built (2026-10-05).
 
+*Update (2026-10-14):* by [ADR 0063](0063-safe-on-any-computer.md), efficiency mode is always on
+for a computer with a battery, is given when it changes and to each tool as it starts instead of
+every second, and tools also get low memory priority. Only cards of the maker whose encoder is in
+use are read.
+
 **Context.** ADR 0049 holds Gracil to part of the processor, and ADR 0046 holds an NVIDIA card at
 about 70 °C. Two gaps remained. First, the threads Gracil may use still ran at full clock: on a
 laptop, a few threads at top speed heat the processor and spin the fans more than many threads at

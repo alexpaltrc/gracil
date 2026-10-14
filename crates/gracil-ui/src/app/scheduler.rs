@@ -7,9 +7,62 @@ impl Gracil {
     /// Starts whatever there is room for (ADR 0040), once the engine is ready. Videos: one
     /// compresses while the next one gets ready. Images: a few at once beside it, as many as
     /// [`pace::Room`] allows, each read ahead of its turn. Nothing new starts while paused,
-    /// while resting a moment because the computer runs warm, or once Gracil is exiting.
+    /// while resting a moment because the computer runs warm, once Gracil is exiting, or while a
+    /// laptop's battery is low (ADR 0063).
     pub(super) fn schedule(&mut self) -> Task<Message> {
-        if self.exiting || self.held {
+        let tasks = self.start_what_fits();
+        self.tell_pace();
+        tasks
+    }
+
+    /// Tells [`pace`] what Gracil is doing, so the computer is read only as much as that needs,
+    /// and the right graphics card is watched (ADR 0063).
+    fn tell_pace(&self) {
+        let video_running = self.running.keys().any(|&id| {
+            self.queue
+                .get(id)
+                .is_some_and(|job| job.kind == Kind::Video)
+        });
+        let card = match &self.engine {
+            EngineState::Ready(engine) if video_running => plan::attempts(engine.capabilities)
+                .first()
+                .and_then(|attempt| match attempt.encoder {
+                    VideoEncoder::Nvenc => Some(gracil_windows::Card::Nvidia),
+                    VideoEncoder::Qsv => Some(gracil_windows::Card::Intel),
+                    VideoEncoder::Amf => Some(gracil_windows::Card::Amd),
+                    VideoEncoder::X265 => None,
+                }),
+            _ => None,
+        };
+        let activity = if !self.running.is_empty() {
+            pace::Activity::Working { card }
+        } else if self.queue.jobs().iter().any(|job| !job.state.is_finished()) {
+            pace::Activity::Waiting
+        } else {
+            pace::Activity::Nothing
+        };
+        pace::working(activity);
+    }
+
+    /// Whether a file in `state` waits for the laptop to be plugged in (ADR 0063): with the
+    /// battery low, those not started yet; with it very low, those being worked on too.
+    pub fn waiting_for_battery(&self, state: JobState) -> bool {
+        match self.breath.battery {
+            pace::Battery::Fine => false,
+            pace::Battery::Low => matches!(state, JobState::Pending | JobState::Prepared),
+            pace::Battery::VeryLow => matches!(
+                state,
+                JobState::Pending
+                    | JobState::Preparing
+                    | JobState::Prepared
+                    | JobState::Compressing
+            ),
+        }
+    }
+
+    fn start_what_fits(&mut self) -> Task<Message> {
+        // With the battery low, the files under way finish and nothing new starts (ADR 0063).
+        if self.exiting || self.held || self.breath.battery != pace::Battery::Fine {
             return Task::none();
         }
         let EngineState::Ready(engine) = &self.engine else {
@@ -26,7 +79,14 @@ impl Gracil {
         {
             tasks.push(self.start_compressing(&engine, id));
         }
+        // The next video gets ready beside one compressing only with memory to spare (ADR 0063).
+        let room_beside = self.queue.count(Kind::Video, compressing) == 0
+            || pace::room_to_prepare_beside(
+                gracil_windows::total_memory(),
+                gracil_windows::free_memory(),
+            );
         if self.queue.count(Kind::Video, getting_ready) == 0
+            && room_beside
             && let Some(id) = self.queue.start_preparing(Kind::Video).map(|job| job.id)
         {
             tasks.push(self.start_preparing(&engine, id));
@@ -229,5 +289,6 @@ impl Gracil {
         }
         self.paused = false;
         self.hold();
+        self.tell_pace();
     }
 }

@@ -279,7 +279,9 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
                 .size(size::TITLE)
                 .into(),
             match job.state {
-                JobState::Compressing | JobState::Preparing => {
+                JobState::Compressing | JobState::Preparing
+                    if !state.waiting_for_battery(job.state) =>
+                {
                     Status::plain(crate::text::progress(list.fraction))
                 }
                 _ => status(state, job),
@@ -567,6 +569,12 @@ fn status(state: &Gracil, job: &Job) -> Status {
     match job.state {
         JobState::Pending | JobState::Preparing | JobState::Prepared if state.paused => {
             Status::plain(state.text.paused)
+        }
+        // A laptop's battery running low holds the work quietly, saying why (ADR 0063).
+        JobState::Pending | JobState::Preparing | JobState::Prepared | JobState::Compressing
+            if state.waiting_for_battery(job.state) =>
+        {
+            Status::plain(state.text.low_battery)
         }
         JobState::Pending | JobState::Prepared => match state.engine {
             EngineState::Starting => Status::plain(state.text.getting_ready),

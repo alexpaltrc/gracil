@@ -67,3 +67,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0060](0060-reasons-in-sight.md) | Reasons are written out under the file shown large; the middle of **Always** says **Ask** |
 | [0061](0061-windows-accessibility-settings.md) | Gracil follows Windows' **Animation effects** and **contrast themes**; text on the accent is white or black, whichever reads better |
 | [0062](0062-compressing-documents.md) | *Proposed:* compressing documents (Word, Excel, PowerPoint, OpenDocument, PDF) by making the pictures inside them smaller, nothing else changed |
+| [0063](0063-safe-on-any-computer.md) | Safe on any computer: idle only when nobody needs it, laptops capped at half, a low battery waits, sleep rests and retries, memory over the whole job, above 4K measured at 4K, a window drawn without a graphics card |

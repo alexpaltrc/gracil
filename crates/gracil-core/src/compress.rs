@@ -18,6 +18,7 @@ use crate::plan::{self, Attempt, EncodePlan};
 use crate::probe::{self, MediaInfo, ProbeError, StreamKind};
 use crate::progress::fraction;
 use crate::search::{self, Found};
+use crate::share;
 use crate::toolchain::{self, Resolved, Toolchain};
 
 /// A ready FFmpeg and what it can do on this computer, and jpegli for photos. Built once per
@@ -170,7 +171,12 @@ fn run_attempts(
     let capabilities = engine.capabilities;
 
     let mut last_error = String::new();
-    for attempt in plan::attempts(capabilities) {
+    let attempts = plan::attempts(capabilities);
+    let mut next = 0;
+    // A tool can fail because the computer slept under it (a graphics card that was reset, a
+    // drive that went away for a moment): that attempt is given its try again, once (ADR 0063).
+    let mut tried_again = false;
+    while let Some(&attempt) = attempts.get(next) {
         if control.is_cancelled() {
             return Err(CompressError::Cancelled);
         }
@@ -181,6 +187,7 @@ fn run_attempts(
             fraction: fraction(Duration::ZERO, info.duration),
         });
 
+        let sleeps = share::sleeps();
         let outcome = encode::run(&engine.toolchain, &plan, control, &mut |progress| {
             on_update(Update {
                 fraction: fraction(progress.position, info.duration),
@@ -206,11 +213,17 @@ fn run_attempts(
         };
         warn!(?attempt, %error, made_progress, "attempt failed");
         last_error = error;
+        if share::sleeps() != sleeps && !tried_again {
+            info!("the computer slept during the attempt; trying it again");
+            tried_again = true;
+            continue;
+        }
         // A failure partway through a software decode means the source itself is damaged there;
         // the next attempt would stop at the same place after just as long.
         if made_progress && !attempt.hw_decode {
             break;
         }
+        next += 1;
     }
     Err(CompressError::Failed(last_error))
 }

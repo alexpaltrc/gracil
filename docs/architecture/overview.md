@@ -45,7 +45,13 @@ threads, whether the person is using the computer and the memory free. A thread 
 computer once a second, a *breath* (ADR 0045, ADR 0046): its warmth, whether it is idle and
 whether it saves energy. While warm, fewer images run and each breath starts with a short rest,
 longer the warmer it is (ADR 0043). Windows itself holds Gracil to part of the processor, less
-while the computer is in use or on battery (ADR 0049).
+while the computer is in use or on battery (ADR 0049). The scheduler tells `pace::working` what
+is going on (`Activity`), so the computer is read every second only while files are worked on,
+the battery alone while files wait, and nothing otherwise, and only the card of the encoder in use
+is watched (ADR 0063). `pace::sleeping`, called from Windows' suspend/resume notification, rests
+the work around sleep and lets `gracil_core::share::sleeps` retry the step sleep cut short. The
+core reaches Windows only through `share::set_host` (tools started, image threads, free memory),
+so it stays free of Windows code.
 
 **Leftovers.** Every `.part` and parked `.bak` a process creates is written down in its own
 ledger in the data folder's `temporary\`, held open exclusively while the process runs. At

@@ -5,6 +5,11 @@
 *Changed by [ADR 0051](0051-efficiency-mode-and-any-card-temperature.md):* the temperature of
 Intel and AMD cards is now read too, from their driver.
 
+*Update (2026-10-14):* by [ADR 0063](0063-safe-on-any-computer.md), the processor's usual limit
+starts at full speed instead of the highest value seen, and becomes a lower value only once the
+limit has held steady there for a minute. Only the card doing the work is read, and only while
+files are being worked on.
+
 **Context.** Lists of 15,000 files keep the computer busy for many hours, often overnight. On a
 computer with poor cooling, hours of work at a steady load can run the graphics card or the
 processor hot. The product owner asked for a limit: when the graphics card or the processor

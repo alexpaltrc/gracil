@@ -2,6 +2,11 @@
 
 **Status:** Accepted, built (2026-10-05).
 
+*Update (2026-10-14):* by [ADR 0063](0063-safe-on-any-computer.md), memory is capped at about
+65 % for Gracil and its tools together rather than three quarters per process; a computer with a
+battery never gets more than half of the processor; room on a drive is shared among the files
+compressing onto it; and the threads each tool uses follow the share allowed right now.
+
 **Context.** The product owner asked whether Gracil could still harm someone's computer: run it
 hot, make its fans roar, or fill its memory or disk, above all on a simple laptop with poor
 cooling and no NVIDIA card. Until now, Gracil only lowered its priority (ADR 0040), and the

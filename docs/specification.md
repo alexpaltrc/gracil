@@ -273,6 +273,10 @@ polling; no unnecessary background worker; reasonable memory. Use event-driven b
 render at 60 FPS simply because the window exists. Measure idle resource consumption from the
 first prototypes.
 
+*Update (ADR 0063):* with nothing to do, the thread that watches the computer sleeps, waking only
+every ten minutes to note Gracil's memory; it reads the computer every second only while files are
+being worked on.
+
 # 19. FFmpeg philosophy
 
 Gracil orchestrates FFmpeg. Do not attempt to reinvent FFmpeg. Allow FFmpeg to make its own
@@ -1115,6 +1119,16 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   File Explorer's menu can be turned on from the tray, with Windows' permission. Their words no
   longer change with **Always**, which Gracil applies itself. *Send to built 2026-10-07; the
   main menu 2026-10-14 (ADR 0058).*
+- **Safe on any computer.** *Asked by the product owner* after a review of what could still
+  strain a simple laptop. The computer counts as idle only when nobody needs it (no film, game,
+  presentation or call) and its warmth can be read; a laptop never gets more than half of the
+  processor and its tools always run in efficiency mode; on battery below 30 % nothing new starts
+  and below 15 % everything waits, saying **Low battery · waiting**, until it is plugged in; the
+  computer is read only while there is work; only the card doing the work is watched; Gracil and
+  its tools together hold at most about 65 % of memory; above 4K the quality is measured at 4K;
+  work rests while the computer sleeps and a step sleep cut short is tried again; room on a drive
+  counts the other files compressing onto it; and the window is drawn by the processor when the
+  graphics card can't. *Built 2026-10-14 (ADR 0063).*
 
 # 78. Temporary UI decisions
 
@@ -1146,6 +1160,9 @@ conventional queue; add a permanent Windows service; add startup execution; add 
 telemetry; introduce cloud processing; upload videos anywhere; change versioning rules.
 
 *Update (ADR 0024):* startup execution was requested and added; see §53.
+
+*Update (ADR 0063):* Iced's processor renderer (tiny-skia) is built in as a fallback, used only
+when the graphics card can't draw the window. WGPU stays the renderer.
 
 If a requirement becomes technically problematic, explain the conflict before changing behavior.
 

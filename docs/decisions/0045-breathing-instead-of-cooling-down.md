@@ -2,6 +2,10 @@
 
 **Status:** Accepted, built (2026-10-04).
 
+*Update (2026-10-14):* by [ADR 0063](0063-safe-on-any-computer.md), the work also rests, the
+same unseen way, while the computer sleeps and for ten seconds after it wakes, and while a
+laptop's battery is below 15 % (then with **Low battery · waiting** on each file).
+
 **Context.** ADR 0043 made Gracil stop everything when the computer got too hot, saying
 **Letting the computer cool down** until it had. The product owner doesn't want Gracil ever to
 reach that point: a program that stops because of heat makes people anxious about their computer.

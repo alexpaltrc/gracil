@@ -161,6 +161,7 @@ pub(crate) fn run_program(
             ));
         }
     };
+    crate::share::tool_started(child.id());
     let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
         let _ = child.kill();
         let _ = child.wait();

@@ -5,11 +5,16 @@
 //! and takes short, unnoticed rests, eased up and down to hold the graphics card at a steady
 //! temperature, so it never gets hot (ADR 0045, 0046). Windows itself holds Gracil to part of the
 //! processor, a smaller part while the person works and on battery (ADR 0049).
+//!
+//! The computer is only read while there is something to do, and only as much as that needs; a
+//! laptop's battery running low stops new work, then all of it, until it is plugged in, and work
+//! rests while the computer sleeps (ADR 0063).
 
-use std::time::Duration;
+use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant};
 
 use gracil_core::share;
-use gracil_windows::{GraphicsHeat, Heat, Thermometer};
+use gracil_windows::{Card, GraphicsHeat, Heat, Power, Thermometer};
 use tracing::{info, warn};
 
 /// Without a touch of the keyboard or mouse for this long, the computer counts as idle.
@@ -85,14 +90,31 @@ pub fn image_memory(pixels: Option<u64>) -> u64 {
     pixels.unwrap_or(UNKNOWN_PIXELS) * BYTES_PER_PIXEL
 }
 
+/// Computers with this much memory or less never get the next video ready while one compresses
+/// (ADR 0063): the two together could fill it.
+const SMALL_MEMORY: u64 = 8 << 30;
+
+/// Memory getting a video ready takes, at most, while another compresses: a 4K picture's frames
+/// in flight in the quality measure and its encoder.
+const VIDEO_PREPARING_MEMORY: u64 = 2 << 30;
+
+/// Whether the next video may get ready while one compresses (ADR 0063): only with well over the
+/// memory it takes free, twice as much, and never on a computer with little memory. Unknown
+/// memory counts as enough, as before.
+pub fn room_to_prepare_beside(total: Option<u64>, free: Option<u64>) -> bool {
+    total.is_none_or(|total| total > SMALL_MEMORY)
+        && free.is_none_or(|free| free >= 2 * VIDEO_PREPARING_MEMORY)
+}
+
 /// How many of the processor's `threads` Gracil and the tools it starts may run on at all
-/// (ADR 0049): three quarters while the computer is idle, half while the person is using it, and
-/// a quarter while it runs on its battery or saves energy. Windows holds Gracil to it, so however
-/// the work is split, the rest of the processor stays free and cool.
-pub fn processors(threads: usize, idle: bool, saving_energy: bool) -> usize {
+/// (ADR 0049): three quarters while the computer is idle, half while the person is using it or
+/// it has a battery (a laptop's cooling is modest, ADR 0063), and a quarter while it runs on its
+/// battery or saves energy. Windows holds Gracil to it, so however the work is split, the rest of
+/// the processor stays free and cool.
+pub fn processors(threads: usize, idle: bool, saving_energy: bool, has_battery: bool) -> usize {
     let share = if saving_energy {
         threads / 4
-    } else if idle {
+    } else if idle && !has_battery {
         threads * 3 / 4
     } else {
         threads / 2
@@ -100,11 +122,52 @@ pub fn processors(threads: usize, idle: bool, saving_energy: bool) -> usize {
     share.max(1)
 }
 
-/// Whether the tools run in Windows' efficiency mode (ADR 0051): while the person uses the computer
-/// or it saves energy, so they keep to the efficient cores and lower clock speeds and the computer
-/// stays cool and quiet. Left to Windows while the computer is idle and plugged in.
-pub fn efficiency_mode(idle: bool, saving_energy: bool) -> bool {
-    !idle || saving_energy
+/// Whether the tools run in Windows' efficiency mode (ADR 0051): while the person uses the
+/// computer, it saves energy or it has a battery at all (ADR 0063), so they keep to the
+/// efficient cores and lower clock speeds and the computer stays cool and quiet. Left to Windows
+/// while a computer without a battery is idle.
+pub fn efficiency_mode(idle: bool, saving_energy: bool, has_battery: bool) -> bool {
+    !idle || saving_energy || has_battery
+}
+
+/// Whether the computer counts as idle (ADR 0063): untouched for a while, nothing on it that
+/// doesn't need the keyboard or mouse (a film, a game, a presentation, a call), and its warmth
+/// readable. A computer whose warmth can't be read at all is treated as in use: Gracil couldn't
+/// tell if it were getting hot.
+pub fn idle(untouched: bool, busy: bool, heat: &Heat) -> bool {
+    let blind = heat.graphics.is_empty() && heat.processor_limit.is_none();
+    untouched && !busy && !blind
+}
+
+/// How full a laptop's battery is, as far as the work goes (ADR 0063).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum Battery {
+    /// Plugged in, no battery, or enough left.
+    #[default]
+    Fine,
+    /// Low: the files being worked on finish, and no new one starts.
+    Low,
+    /// Very low: everything waits.
+    VeryLow,
+}
+
+/// Below this many percent, on battery, no new file starts.
+const LOW_BATTERY: u8 = 30;
+/// Below this many percent, on battery, everything waits.
+const VERY_LOW_BATTERY: u8 = 15;
+
+/// The battery now, after `last`. Once low it stays low until the computer is plugged in, so a
+/// battery that recovers a point or two doesn't start and stop the work.
+pub fn battery(last: Battery, power: Power) -> Battery {
+    if !power.on_battery {
+        return Battery::Fine;
+    }
+    let now = match power.battery_percent {
+        Some(percent) if percent < VERY_LOW_BATTERY => Battery::VeryLow,
+        Some(percent) if percent < LOW_BATTERY => Battery::Low,
+        _ => Battery::Fine,
+    };
+    now.max(last)
 }
 
 /// How often Gracil writes down how much memory it holds, so a long run can be checked for
@@ -116,6 +179,11 @@ const MEMORY_LOG_EVERY: Duration = Duration::from_secs(10 * 60);
 const BREATH: Duration = Duration::from_secs(1);
 /// A rest shorter than this isn't worth taking: it would only stop and start the work.
 const SHORTEST_REST: Duration = Duration::from_millis(50);
+/// How often the battery is read while files wait to start.
+const WAITING_EVERY: Duration = Duration::from_secs(5);
+/// How long the work keeps resting after the computer wakes up, while its drives and graphics
+/// card come back.
+const SETTLE: Duration = Duration::from_secs(10);
 
 /// The temperature Gracil keeps a graphics card at, at most: 70 degrees, or 20 below the
 /// temperature at which the card starts slowing itself down, whichever is lower (ADR 0046).
@@ -134,6 +202,13 @@ const HELD_BACK_BY: f64 = 10.0;
 /// Readings in a row the processor must be held back for, so a moment's dip is not mistaken for
 /// heat.
 const HELD_BACK_READINGS: u8 = 5;
+/// The processor's usual limit, until it is seen otherwise: its full speed (ADR 0063).
+const FULL_LIMIT: f64 = 100.0;
+/// Readings in a row the processor's limit must hold within [`STEADY_WITHIN`] of the same value
+/// to be taken as its usual one: some laptops always hold the processor back a little, and that
+/// is not heat.
+const STEADY_READINGS: u32 = 60;
+const STEADY_WITHIN: f64 = 1.0;
 
 /// Turns readings into the share of each breath Gracil works, remembering what it needs between
 /// them (ADR 0046).
@@ -141,8 +216,10 @@ const HELD_BACK_READINGS: u8 = 5;
 pub struct Warmer {
     /// The share of each breath worked now.
     work: f64,
-    /// The highest the processor's limit has been seen at: its usual value.
-    usual_limit: Option<f64>,
+    /// The processor's usual limit: full speed, or what it has held steady at for a while.
+    usual_limit: f64,
+    /// The limit the processor holds steady at, and for how many readings.
+    steady: Option<(f64, u32)>,
     /// Readings in a row with the processor held back.
     held_back: u8,
 }
@@ -151,7 +228,8 @@ impl Default for Warmer {
     fn default() -> Self {
         Self {
             work: 1.0,
-            usual_limit: None,
+            usual_limit: FULL_LIMIT,
+            steady: None,
             held_back: 0,
         }
     }
@@ -167,9 +245,18 @@ impl Warmer {
     pub fn read(&mut self, heat: &Heat, elapsed: Duration) -> f64 {
         let processor_held_back = match heat.processor_limit {
             Some(limit) => {
-                let usual = self.usual_limit.map_or(limit, |usual| usual.max(limit));
-                self.usual_limit = Some(usual);
-                limit <= usual - HELD_BACK_BY
+                let steady = match self.steady {
+                    Some((at, readings)) if (limit - at).abs() <= STEADY_WITHIN => {
+                        (at, readings + 1)
+                    }
+                    _ => (limit, 1),
+                };
+                self.steady = Some(steady);
+                if steady.1 >= STEADY_READINGS {
+                    self.usual_limit = steady.0;
+                }
+                self.usual_limit = self.usual_limit.max(limit);
+                limit <= self.usual_limit - HELD_BACK_BY
             }
             None => false,
         };
@@ -207,21 +294,100 @@ fn target(card: &GraphicsHeat) -> u32 {
 }
 
 /// What the work does right now, as Gracil breathes (ADR 0045).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Breath {
     /// The computer is running warm: fewer images at once.
     pub warm: bool,
-    /// Resting: everything being worked on is frozen for a moment.
+    /// Resting: everything being worked on is frozen for a moment, or, while the computer
+    /// sleeps or its battery is very low, for longer.
     pub resting: bool,
     /// The person isn't using the computer.
     pub idle: bool,
     /// The computer runs on its battery, or Windows is saving energy (ADR 0049).
     pub saving_energy: bool,
+    /// How full a laptop's battery is (ADR 0063).
+    pub battery: Battery,
 }
 
-/// Reads the computer's warmth every breath on a thread of its own, for as long as Gracil runs.
-/// While it is warm, each breath is a short rest followed by work, the rest longer the warmer it
-/// is; `changed` hears every change, starting with the first.
+/// What Gracil is doing, as the window tells [`working`]. The computer is read only as often as
+/// that needs (ADR 0063).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Activity {
+    /// Nothing to do: nothing is read, except now and then how much memory Gracil holds.
+    #[default]
+    Nothing,
+    /// Files wait to start: only the battery is read, every few seconds.
+    Waiting,
+    /// Files are being worked on: everything is read every breath. `card` is the graphics card
+    /// a tool works on, if any; its warmth is the one watched.
+    Working { card: Option<Card> },
+}
+
+/// What [`watch`] is told from outside its thread.
+#[derive(Debug, Clone, Copy)]
+struct Told {
+    activity: Activity,
+    /// The computer is going to sleep, or asleep.
+    asleep: bool,
+    /// When it last woke up.
+    woke: Option<Instant>,
+    /// Something changed since [`watch`] last looked.
+    news: bool,
+}
+
+static TOLD: Mutex<Told> = Mutex::new(Told {
+    activity: Activity::Nothing,
+    asleep: false,
+    woke: None,
+    news: false,
+});
+static NEWS: Condvar = Condvar::new();
+
+fn told() -> MutexGuard<'static, Told> {
+    TOLD.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn tell_watch(change: impl FnOnce(&mut Told)) {
+    let mut told = told();
+    change(&mut told);
+    told.news = true;
+    NEWS.notify_all();
+}
+
+/// Tells [`watch`] what Gracil is doing now. Cheap when nothing changed.
+pub fn working(activity: Activity) {
+    if told().activity != activity {
+        tell_watch(|told| told.activity = activity);
+    }
+}
+
+/// Tells [`watch`] the computer is going to sleep (`true`) or has woken up. Called on a thread of
+/// Windows', which must not wait: it only notes it.
+pub fn sleeping(asleep: bool) {
+    if asleep {
+        share::note_sleep();
+    }
+    tell_watch(|told| {
+        told.asleep = asleep;
+        if !asleep {
+            told.woke = Some(Instant::now());
+        }
+    });
+}
+
+/// Waits `timeout`, or less if [`working`] or [`sleeping`] has news.
+fn wait(timeout: Duration) {
+    let told = told();
+    let _ = NEWS
+        .wait_timeout_while(told, timeout, |told| !told.news)
+        .map_err(PoisonError::into_inner);
+}
+
+/// Reads the computer on a thread of its own, for as long as Gracil runs: every breath while
+/// files are worked on, the battery alone every few seconds while files wait, and nothing while
+/// there is nothing to do. While the computer is warm, each breath is a short rest followed by
+/// work, the rest longer the warmer it is; `changed` hears every change, starting with the
+/// first.
 pub fn watch(changed: impl Fn(Breath) + Send + 'static) {
     let spawned = std::thread::Builder::new()
         .name("warmth".to_owned())
@@ -237,76 +403,120 @@ pub fn watch(changed: impl Fn(Breath) + Send + 'static) {
             };
             // Logged in steps of a twentieth, so a degree up and down isn't written each time.
             let mut logged = None;
-            let threads = share::processor_threads();
+            let threads = gracil_windows::usable_threads().unwrap_or_else(share::processor_threads);
             let mut allowed = None;
-            let mut memory_logged: Option<std::time::Instant> = None;
-            let mut efficient_logged = None;
+            let mut efficient = None;
+            let mut memory_logged: Option<Instant> = None;
+            let mut low = Battery::Fine;
+            let mut breath = Breath::default();
             loop {
-                let idle = gracil_windows::idle_for().is_some_and(|idle| idle >= IDLE_AFTER);
-                let saving_energy = gracil_windows::saving_energy();
-                let now = processors(threads, idle, saving_energy);
-                if allowed != Some(now) {
-                    match gracil_windows::use_processors(now) {
+                let now = {
+                    let mut told = told();
+                    told.news = false;
+                    *told
+                };
+                if memory_logged.is_none_or(|at| at.elapsed() >= MEMORY_LOG_EVERY) {
+                    info!(bytes = gracil_windows::own_memory(), "memory held");
+                    memory_logged = Some(Instant::now());
+                }
+                let settling = now.asleep || now.woke.is_some_and(|at| at.elapsed() < SETTLE);
+                let card = match now.activity {
+                    Activity::Nothing => {
+                        tell(Breath {
+                            resting: settling,
+                            ..breath
+                        });
+                        wait(MEMORY_LOG_EVERY);
+                        continue;
+                    }
+                    Activity::Waiting => {
+                        let power = gracil_windows::power();
+                        let battery = battery(low, power);
+                        if battery != low {
+                            info!(?battery, percent = power.battery_percent, "battery");
+                            low = battery;
+                        }
+                        breath.battery = battery;
+                        breath.saving_energy = power.saving_energy;
+                        tell(Breath {
+                            resting: settling || battery == Battery::VeryLow,
+                            ..breath
+                        });
+                        wait(WAITING_EVERY);
+                        continue;
+                    }
+                    Activity::Working { card } => card,
+                };
+
+                let power = gracil_windows::power();
+                let battery = battery(low, power);
+                if battery != low {
+                    info!(?battery, percent = power.battery_percent, "battery");
+                    low = battery;
+                }
+                let untouched = gracil_windows::idle_for().is_some_and(|idle| idle >= IDLE_AFTER);
+                let heat = thermometer.read(card);
+                // Only asked once untouched for a while: it is the rarer case.
+                let idle = idle(untouched, untouched && gracil_windows::person_busy(), &heat);
+                let share_now = processors(threads, idle, power.saving_energy, power.has_battery);
+                if allowed != Some(share_now) {
+                    share::allow_threads(share_now);
+                    match gracil_windows::use_processors(share_now) {
                         Ok(()) => info!(
-                            threads = now,
+                            threads = share_now,
                             of = threads,
                             idle,
-                            saving_energy,
+                            saving_energy = power.saving_energy,
+                            has_battery = power.has_battery,
                             "processor share"
                         ),
                         Err(error) => warn!(%error, "the processor share can't be set"),
                     }
-                    allowed = Some(now);
+                    allowed = Some(share_now);
                 }
-                // Tools start all the time, so the mode is given again every breath.
-                let efficient = efficiency_mode(idle, saving_energy);
-                match gracil_windows::use_efficiency_mode(efficient) {
-                    Ok(()) if efficient_logged != Some(efficient) => {
-                        info!(on = efficient, "efficiency mode");
-                        efficient_logged = Some(efficient);
+                // Given to the tools running now when it changes; tools started later are given
+                // it as they start.
+                let mode = efficiency_mode(idle, power.saving_energy, power.has_battery);
+                if efficient != Some(mode) {
+                    match gracil_windows::use_efficiency_mode(mode) {
+                        Ok(()) => info!(on = mode, "efficiency mode"),
+                        Err(error) => warn!(%error, "efficiency mode can't be set"),
                     }
-                    Ok(()) => {}
-                    Err(error) if efficient_logged.is_some() => {
-                        warn!(%error, "efficiency mode can't be set");
-                        efficient_logged = None;
-                    }
-                    Err(_) => {}
+                    efficient = Some(mode);
                 }
-                if memory_logged.is_none_or(|at| at.elapsed() >= MEMORY_LOG_EVERY) {
-                    info!(bytes = gracil_windows::own_memory(), "memory held");
-                    memory_logged = Some(std::time::Instant::now());
-                }
-                let heat = thermometer.read();
                 let work = warmer.read(&heat, BREATH);
                 let step = (work * 20.0).round() as u8;
                 if logged != Some(step) {
                     info!(work, ?heat, "warmth");
                     logged = Some(step);
                 }
+                breath = Breath {
+                    warm: work < 1.0,
+                    resting: false,
+                    idle,
+                    saving_energy: power.saving_energy,
+                    battery,
+                };
+                if settling || battery == Battery::VeryLow {
+                    tell(Breath {
+                        resting: true,
+                        ..breath
+                    });
+                    wait(BREATH);
+                    continue;
+                }
                 let rest = BREATH.mul_f64(1.0 - work);
                 if rest >= SHORTEST_REST {
                     tell(Breath {
-                        warm: true,
                         resting: true,
-                        idle,
-                        saving_energy,
+                        ..breath
                     });
-                    std::thread::sleep(rest);
-                    tell(Breath {
-                        warm: true,
-                        resting: false,
-                        idle,
-                        saving_energy,
-                    });
-                    std::thread::sleep(BREATH - rest);
+                    wait(rest);
+                    tell(breath);
+                    wait(BREATH - rest);
                 } else {
-                    tell(Breath {
-                        warm: work < 1.0,
-                        resting: false,
-                        idle,
-                        saving_energy,
-                    });
-                    std::thread::sleep(BREATH);
+                    tell(breath);
+                    wait(BREATH);
                 }
             }
         });
@@ -357,6 +567,15 @@ mod tests {
             ..room(8, true, false)
         };
         assert_eq!(free.memory_for_images(), 4 << 30);
+    }
+
+    #[test]
+    fn the_next_video_gets_ready_beside_only_with_memory_to_spare() {
+        const GB: u64 = 1 << 30;
+        assert!(room_to_prepare_beside(Some(32 * GB), Some(16 * GB)));
+        assert!(room_to_prepare_beside(None, None));
+        assert!(!room_to_prepare_beside(Some(8 * GB), Some(6 * GB)));
+        assert!(!room_to_prepare_beside(Some(32 * GB), Some(3 * GB)));
     }
 
     fn card(celsius: u32) -> Heat {
@@ -444,12 +663,15 @@ mod tests {
         assert_eq!(warmer.read(&heat, SECOND), LEAST_WORK);
     }
 
-    #[test]
-    fn a_processor_held_back_for_a_while_works_least() {
-        let processor = |limit| Heat {
+    fn processor(limit: f64) -> Heat {
+        Heat {
             graphics: Vec::new(),
             processor_limit: Some(limit),
-        };
+        }
+    }
+
+    #[test]
+    fn a_processor_held_back_for_a_while_works_least() {
         let mut warmer = Warmer::default();
         assert_eq!(warmer.read(&processor(100.0), SECOND), 1.0);
         // A moment's dip is not heat.
@@ -467,38 +689,102 @@ mod tests {
     }
 
     #[test]
-    fn a_processor_always_limited_is_not_hot() {
+    fn a_processor_held_back_from_the_start_is_noticed() {
+        // Its full speed is the usual, not the first reading.
         let mut warmer = Warmer::default();
-        let always = Heat {
-            graphics: Vec::new(),
-            processor_limit: Some(80.0),
-        };
-        for _ in 0..10 {
-            assert_eq!(warmer.read(&always, SECOND), 1.0);
+        for _ in 0..HELD_BACK_READINGS {
+            warmer.read(&processor(70.0), SECOND);
         }
+        assert_eq!(warmer.read(&processor(70.0), SECOND), LEAST_WORK);
     }
 
     #[test]
-    fn nothing_to_read_is_cool() {
+    fn a_processor_always_limited_is_not_hot() {
+        // Held steady at 80 for a minute, 80 is its usual, and the work comes back.
+        let mut warmer = Warmer::default();
+        for _ in 0..STEADY_READINGS + 200 {
+            warmer.read(&processor(80.0), SECOND);
+        }
+        assert_eq!(warmer.read(&processor(80.0), SECOND), 1.0);
+        // Falling well below that is heat again.
+        for _ in 0..HELD_BACK_READINGS {
+            warmer.read(&processor(65.0), SECOND);
+        }
+        assert_eq!(warmer.read(&processor(65.0), SECOND), LEAST_WORK);
+    }
+
+    #[test]
+    fn nothing_to_read_is_cool_but_never_idle() {
         let mut warmer = Warmer::default();
         assert_eq!(warmer.read(&Heat::default(), SECOND), 1.0);
+        // Gracil couldn't tell if it got hot, so it takes what it takes while the person works.
+        assert!(!idle(true, false, &Heat::default()));
+        assert!(idle(true, false, &processor(100.0)));
+        assert!(idle(
+            true,
+            false,
+            &Heat {
+                processor_limit: None,
+                ..card(50)
+            }
+        ));
+    }
+
+    #[test]
+    fn a_film_or_a_game_is_not_idle() {
+        assert!(!idle(true, true, &processor(100.0)));
+        assert!(!idle(false, false, &processor(100.0)));
     }
 
     #[test]
     fn less_of_the_processor_while_in_use_and_on_battery() {
-        assert_eq!(processors(12, true, false), 9);
-        assert_eq!(processors(12, false, false), 6);
-        assert_eq!(processors(12, true, true), 3);
-        assert_eq!(processors(4, false, true), 1);
-        assert_eq!(processors(1, true, false), 1);
+        assert_eq!(processors(12, true, false, false), 9);
+        assert_eq!(processors(12, false, false, false), 6);
+        assert_eq!(processors(12, true, true, true), 3);
+        assert_eq!(processors(4, false, true, true), 1);
+        assert_eq!(processors(1, true, false, false), 1);
     }
 
     #[test]
-    fn efficiency_mode_unless_idle_and_plugged_in() {
-        assert!(!efficiency_mode(true, false));
-        assert!(efficiency_mode(false, false));
-        assert!(efficiency_mode(true, true));
-        assert!(efficiency_mode(false, true));
+    fn a_laptop_never_takes_more_than_half() {
+        assert_eq!(processors(12, true, false, true), 6);
+    }
+
+    #[test]
+    fn efficiency_mode_unless_idle_plugged_in_without_a_battery() {
+        assert!(!efficiency_mode(true, false, false));
+        assert!(efficiency_mode(false, false, false));
+        assert!(efficiency_mode(true, true, false));
+        assert!(efficiency_mode(false, true, false));
+        assert!(efficiency_mode(true, false, true));
+    }
+
+    #[test]
+    fn a_low_battery_stops_new_work_then_all_of_it() {
+        let on_battery = |percent| Power {
+            saving_energy: true,
+            on_battery: true,
+            has_battery: true,
+            battery_percent: Some(percent),
+        };
+        assert_eq!(battery(Battery::Fine, on_battery(80)), Battery::Fine);
+        assert_eq!(battery(Battery::Fine, on_battery(29)), Battery::Low);
+        assert_eq!(battery(Battery::Fine, on_battery(14)), Battery::VeryLow);
+        // It stays low while unplugged, even if it recovers a little.
+        assert_eq!(battery(Battery::Low, on_battery(31)), Battery::Low);
+        assert_eq!(battery(Battery::VeryLow, on_battery(16)), Battery::VeryLow);
+        // Plugged in, the work goes on.
+        let plugged = Power {
+            on_battery: false,
+            ..on_battery(10)
+        };
+        assert_eq!(battery(Battery::VeryLow, plugged), Battery::Fine);
+        // Without a level, nothing is held back.
+        let unknown = Power {
+            battery_percent: None,
+            ..on_battery(10)
+        };
+        assert_eq!(battery(Battery::Fine, unknown), Battery::Fine);
     }
 
     #[test]
