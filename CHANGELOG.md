@@ -26,7 +26,11 @@ with it.
   dark mode and your accent color, and when you change either, Gracil fades gently to match.
   Every word and button stays easy to read in both, even on a pale accent color.
 - Gracil follows Windows' contrast themes, drawing with their colors alone, and Windows'
-  **Animation effects**: when they are off, nothing in Gracil moves.
+  **Animation effects**: when they are off, nothing in Gracil moves. In a contrast theme, buttons
+  light up in the theme's highlight color when you point at them or reach them with the keyboard,
+  and buttons you can't use yet are clearly dimmed.
+- When the window changes what it shows, for example from the work to the finished view, the new
+  view fades in softly instead of jumping.
 - Gracil has its own icon, a marble resting on a support, in the window, the taskbar and File
   Explorer. It sits on a small tile in Windows' own greys, always the opposite of Windows: dark
   when Windows is light, light when Windows is dark, so it stands out in both. It stays sharp at
@@ -106,6 +110,9 @@ with it.
   works on images.
 - Moving images (such as GIF), camera RAW files, JPEG XL and photos stored in HDR aren't
   compressed: they are left exactly as they are, and a small "!" says why.
+- When a result can't be put in place, the "!" says why and what to do, for example **Another
+  program is using this file. Close it, then choose again**, or that the file is no longer where it
+  was. While Gracil gets ready, the marble next to the clock says so: **Gracil · getting ready**.
 - The video being compressed is shown large, inside a ring: a marble rolls around it as the work
   advances, filling an invisible circle with color behind it. The middle of the ring holds the
   controls, as symbols instead of words: the top part pauses (II) and turns into play (▶) to resume,
@@ -119,11 +126,14 @@ with it.
   and the line with **View files** says how many files are left, counting down to none as they
   finish, for example **12 files left**. Click a file to show it large; click it again, close **View
   files**, or click the small line naming the file being compressed to go back to the ring. Take a
-  file off the list with **×** or **Clear**. A video can always be compressed again, even right
+  file off the list with **×** or **Clear**. Right after **Clear**, **Undo** puts the whole list
+  back, finished results included. A video can always be compressed again, even right
   after replacing it, without clearing the list first.
-- Everything works from the keyboard too: **Tab** moves a ring from one button to the next, and
-  **Enter** or **Space** presses it; on the **Always** line, the arrow keys move the choice. With
-  no ring, **Space** pauses and resumes, **Esc** steps back, and **Ctrl+O** chooses files.
+- Everything works from the keyboard too: **Tab** moves a ring from one button to the next,
+  including pause and stop on the ring, and **Enter** or **Space** presses it. The button with the
+  ring lights up and shows its reminder, and buttons you can't use yet are skipped. On the
+  **Always** line, the arrow keys move the choice. With no ring, **Space** pauses and resumes,
+  **Esc** steps back, **Ctrl+O** chooses files and **Ctrl+Z** undoes **Clear**.
 - With more than one file, the ring stands for the whole list, with one equal part per file. Above
   it Gracil says how many files it holds, for example **Compressing 24 files**, and the
   percentage below is the whole list's. Adding files while Gracil works moves the marble back a

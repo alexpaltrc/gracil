@@ -72,6 +72,10 @@ pub struct Gracil {
     /// How far down the list is scrolled and how tall its visible part is, so only the rows in
     /// sight are built (spec §77.3).
     pub drawer_scroll: DrawerScroll,
+    /// What the last Clear took off the list, while Undo can still put it back.
+    pub cleared: Option<Vec<list::Taken>>,
+    /// How many times Clear was pressed, so only the last one's Undo goes away on time.
+    clears: u64,
     /// The video the user picked in the drawer to look at, if any.
     pub selected: Option<JobId>,
     /// The last video put in place, so the window stays on it once nothing else needs a choice.
@@ -199,6 +203,10 @@ pub enum Message {
     ShowCurrent,
     Remove(JobId),
     Clear,
+    /// Puts back what Clear took off the list.
+    Undo,
+    /// Undo for that press of Clear is gone.
+    UndoGone(u64),
     ToggleDrawer,
     /// The list finished folding away after being closed.
     DrawerFolded,
@@ -278,7 +286,7 @@ impl Gracil {
             gracil_windows::light_apps().map(|light| if light { Mode::Light } else { Mode::Dark });
         let accent = windows_accent();
         let contrast = windows_contrast();
-        style::set_contrasting(contrast.is_some());
+        style::set_contrast(contrast);
         motion::follow_windows();
         gracil_windows::set_icon_theme(mode != Some(Mode::Dark));
         let state = Self {
@@ -289,6 +297,8 @@ impl Gracil {
             drawer_open: false,
             drawer_folding: false,
             drawer_scroll: DrawerScroll::default(),
+            cleared: None,
+            clears: 0,
             selected: None,
             last_placed: None,
             text,
@@ -460,14 +470,21 @@ impl Gracil {
             }
             Message::Key(window, key) => self.on_key(window, key),
             Message::ShowProblem => {
-                self.selected = self
+                let found = self
                     .queue
                     .jobs()
                     .iter()
-                    .find(|job| self.is_fault(job.id))
-                    .map(|job| job.id);
+                    .position(|job| self.is_fault(job.id));
+                self.selected = found.map(|index| self.queue.jobs()[index].id);
                 self.drawer_open = true;
-                Task::none()
+                // The list opens on that file, however far down it is.
+                match found {
+                    Some(index) => {
+                        self.drawer_scroll = self.drawer_scroll.showing(index);
+                        self.drawer_scroll.restore()
+                    }
+                    None => Task::none(),
+                }
             }
             Message::ChooseFiles => Task::perform(choose_files(self.text), Message::FilesChosen),
             Message::FilesChosen(paths) => self.look_through(paths, None, None),
@@ -522,15 +539,11 @@ impl Gracil {
                 self.offered.clear();
                 Task::none()
             }
-            Message::Clear => {
-                let ids: Vec<JobId> = self.queue.jobs().iter().map(|job| job.id).collect();
-                for id in ids {
-                    self.remove(id);
-                }
-                if self.queue.is_empty() {
-                    // The empty window has no list to fold away.
-                    self.drawer_open = false;
-                    self.drawer_folding = false;
+            Message::Clear => self.clear(),
+            Message::Undo => self.undo_clear(),
+            Message::UndoGone(clears) => {
+                if clears == self.clears {
+                    self.let_go_cleared();
                 }
                 Task::none()
             }
@@ -539,12 +552,12 @@ impl Gracil {
                     // Closing the list puts away what was picked in it, too.
                     self.selected = None;
                     self.close_drawer();
+                    Task::none()
                 } else {
                     self.drawer_open = true;
-                    // A list opened again starts at the top.
-                    self.drawer_scroll = DrawerScroll::default();
+                    // A list opened again is where it was left.
+                    self.drawer_scroll.restore()
                 }
-                Task::none()
             }
             Message::DrawerFolded => {
                 self.drawer_folding = false;

@@ -11,6 +11,8 @@ pub enum Key {
     PauseResume,
     /// Ctrl+O: chooses files to add.
     ChooseFiles,
+    /// Ctrl+Z: puts back what Clear just took off the list, while Undo shows.
+    Undo,
     /// Tab: the keyboard's ring moves on to the next control (ADR 0059).
     NextControl,
     /// Shift+Tab: the ring moves back to the previous control.
@@ -24,6 +26,7 @@ pub(super) fn key_for(key: &keyboard::Key, modifiers: keyboard::Modifiers) -> Op
         keyboard::Key::Named(Named::Escape) => Some(Key::Back),
         keyboard::Key::Named(Named::Space) if modifiers.is_empty() => Some(Key::PauseResume),
         keyboard::Key::Character("o" | "O") if modifiers.command() => Some(Key::ChooseFiles),
+        keyboard::Key::Character("z" | "Z") if modifiers.command() => Some(Key::Undo),
         keyboard::Key::Named(Named::Tab) if modifiers.shift() => Some(Key::PreviousControl),
         keyboard::Key::Named(Named::Tab) => Some(Key::NextControl),
         _ => None,
@@ -62,6 +65,8 @@ impl Gracil {
             }
             Key::ChooseFiles if self.confirming_exit => Task::none(),
             Key::ChooseFiles => Task::perform(choose_files(self.text), Message::FilesChosen),
+            Key::Undo if self.confirming_exit || in_mini => Task::none(),
+            Key::Undo => self.undo_clear(),
             Key::NextControl | Key::PreviousControl => {
                 let scope = if in_mini { Scope::Mini } else { Scope::Main };
                 focus::step(scope, key == Key::NextControl)

@@ -7,6 +7,14 @@ use std::time::Instant;
 
 static STILL: AtomicBool = AtomicBool::new(false);
 
+/// How quickly what answers the pointer or the keyboard eases, in seconds (the time to cover
+/// about two thirds): a control lighting up, the pill's stone, the dial's symbols, the list
+/// unfolding, and a new view coming in. One pace, so everything feels of one piece.
+pub const QUICK: f32 = 0.06;
+
+/// How quickly what follows the work eases: the dial filling, the marble breathing.
+pub const STEADY: f32 = 0.28;
+
 /// Follows Windows' "Animation effects" setting: when it is off, nothing in Gracil moves.
 pub fn follow_windows() {
     STILL.store(!gracil_windows::animations(), Ordering::Relaxed);

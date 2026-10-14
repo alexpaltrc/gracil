@@ -5,14 +5,16 @@ use std::ops::Range;
 
 use gracil_core::job::JobState;
 use gracil_core::queue::{Job, JobId};
+use iced::widget::operation::{self, AbsoluteOffset};
 use iced::widget::text::Wrapping;
-use iced::widget::{Canvas, Space, button, column, container, row, scrollable, text, tooltip};
-use iced::{Center, Element, Fill, Padding, window};
+use iced::widget::{Canvas, Id, Space, button, column, container, row, scrollable, text, tooltip};
+use iced::{Center, Element, Fill, Padding, Task, Theme, window};
 
 use crate::app::{EngineState, Finished, Gracil, Message};
+use crate::appear::appear;
 use crate::dial::{self, Dial, Shows};
 use crate::done::{self, Done};
-use crate::focus::{Scope, keyed};
+use crate::focus::{Scope, keyed, keyed_if};
 use crate::pill::pill;
 use crate::reveal::reveal;
 use crate::style::{self, size, space};
@@ -28,6 +30,8 @@ const DRAWER_MAX_HEIGHT: f32 = 148.0;
 const ROW_HEIGHT: f32 = 30.0;
 /// Rows built beyond each edge of what is in sight, so scrolling never shows a gap.
 const ROWS_BEYOND: usize = 4;
+/// The list, so it can be scrolled to a file.
+const DRAWER_LIST: Id = Id::new("drawer-list");
 
 /// How far down the list is scrolled and how tall its visible part is, in logical pixels.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -46,6 +50,29 @@ impl Default for DrawerScroll {
 }
 
 impl DrawerScroll {
+    /// Scrolled so the row at `index` is in sight, a row below the top when it can be.
+    pub fn showing(self, index: usize) -> Self {
+        let top = index as f32 * ROW_HEIGHT;
+        if top >= self.offset && top + ROW_HEIGHT <= self.offset + self.height {
+            return self;
+        }
+        Self {
+            offset: (top - ROW_HEIGHT).max(0.0),
+            ..self
+        }
+    }
+
+    /// Puts the list back where this says, once it is built: a list folded away forgets its place.
+    pub fn restore<T>(self) -> Task<T> {
+        operation::scroll_to(
+            DRAWER_LIST,
+            AbsoluteOffset {
+                x: 0.0,
+                y: self.offset,
+            },
+        )
+    }
+
     /// The rows of a list of `len` that are in sight, or nearly.
     fn rows(self, len: usize) -> Range<usize> {
         let first = (self.offset.max(0.0) / ROW_HEIGHT) as usize;
@@ -65,20 +92,37 @@ pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
         return mini(state, window);
     }
     let hovering = state.hovering == Some(window);
-    if state.confirming_exit {
-        return container(exit_question(state))
-            .center(Fill)
-            .padding(space::L)
-            .into();
-    }
-    let focus = container(focus(state, hovering))
-        .center(Fill)
-        .padding(space::L)
-        .style(move |theme| style::drop_zone(theme, hovering));
+    // The question before leaving takes the drop area's place, so it comes in softly too.
+    let asking = state.confirming_exit;
+    let shows = if asking {
+        exit_question(state)
+    } else {
+        focus(state, hovering)
+    };
+    let focus = container(appear(
+        shown(state, hovering),
+        move |theme: &Theme| style::zone_surface(theme, hovering && !asking),
+        shows,
+    ))
+    .center(Fill)
+    .padding(space::L)
+    .style(move |theme| {
+        if asking {
+            container::Style::default()
+        } else {
+            style::drop_zone(theme, hovering)
+        }
+    });
 
     let mut content = column![focus].spacing(space::M);
+    if asking {
+        return container(content).padding(space::M).into();
+    }
     if !state.offered.is_empty() {
         content = content.push(offer(state));
+    }
+    if state.cleared.is_some() {
+        content = content.push(undo(state));
     }
     if !state.queue.is_empty() {
         content = content.push(footer(state));
@@ -110,14 +154,35 @@ fn offer(state: &Gracil) -> Element<'_, Message> {
                     .style(style::quiet_button)
                     .on_press(Message::ContinueUnfinished)
             ),
-            hint(
-                keyed(
-                    Scope::Main,
+            keyed(
+                Scope::Main,
+                hint(
                     button(text("×").size(size::CAPTION))
                         .style(style::quiet_button)
-                        .on_press(Message::LetGoUnfinished)
+                        .on_press(Message::LetGoUnfinished),
+                    state.text.forget_unfinished,
                 ),
-                state.text.forget_unfinished,
+            ),
+        ]
+        .spacing(space::S)
+        .align_y(Center),
+    )
+    .center_x(Fill)
+    .into()
+}
+
+/// For a few seconds after Clear: a quiet way to put the list back, never a question first.
+fn undo(state: &Gracil) -> Element<'_, Message> {
+    container(
+        row![
+            text(state.text.list_cleared)
+                .size(size::CAPTION)
+                .style(style::muted),
+            keyed(
+                Scope::Main,
+                button(text(state.text.undo).size(size::CAPTION))
+                    .style(style::quiet_button)
+                    .on_press(Message::Undo)
             ),
         ]
         .spacing(space::S)
@@ -157,6 +222,26 @@ fn always(state: &Gracil) -> Element<'_, Message> {
     )
     .center_x(Fill)
     .into()
+}
+
+/// Which view the window shows, as a number that changes when the view does, so the new one can
+/// come in softly: the question before leaving, files dragged over, the finished view, a file, or
+/// the empty window.
+fn shown(state: &Gracil, hovering: bool) -> u64 {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    if state.confirming_exit {
+        0.hash(&mut hasher);
+    } else if hovering {
+        1.hash(&mut hasher);
+    } else if state.selected.is_none() && state.finished().is_some() {
+        2.hash(&mut hasher);
+    } else if let Some(job) = state.focused() {
+        (3, job.id).hash(&mut hasher);
+    } else {
+        (4, state.gathering > 0).hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 fn focus(state: &Gracil, hovering: bool) -> Element<'_, Message> {
@@ -293,7 +378,7 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
         .max_width(320);
 
     if let Some(ring) = ring {
-        content = content.push(Canvas::new(ring).width(dial::SIZE).height(dial::SIZE));
+        content = content.push(ring.keyed(Scope::Main, dial::SIZE));
     }
 
     let mut details = column![status_line(&shown, size::BODY, Explain::Below)]
@@ -304,9 +389,10 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
             placing,
             extension,
             sizes,
+            problem,
             ..
         }) => {
-            details = details.push(choices(state, job, !placing));
+            details = details.push(choices(state, job, !placing, *problem));
             details = details.push(caption(state.text.change(*sizes)));
             if let Some(change) = format_change(job, extension) {
                 details = details.push(caption(change));
@@ -387,8 +473,10 @@ fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
     .spacing(space::XS);
     match state.outcomes.get(&job.id) {
         // The choice is made right here, without opening the big window.
-        Some(Outcome::Ready { placing, .. }) => {
-            details = details.push(mini_choices(state, job, !placing));
+        Some(Outcome::Ready {
+            placing, problem, ..
+        }) => {
+            details = details.push(mini_choices(state, job, !placing, *problem));
         }
         Some(Outcome::Placed { choice, path, .. }) => {
             details = details.push(caption(placed_caption(state, job, *choice, path)));
@@ -416,7 +504,7 @@ fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
             can_stop: false,
             ..dial(state, job)
         };
-        line = line.push(Canvas::new(ring).width(dial::SMALL).height(dial::SMALL));
+        line = line.push(ring.keyed(Scope::Mini, dial::SMALL));
     }
     line.push(details).into()
 }
@@ -466,15 +554,28 @@ fn exit_question(state: &Gracil) -> Element<'_, Message> {
     .into()
 }
 
+/// Whether `choice` can be made now: not while a result is being put in place, and not Replace
+/// again once another file turned out to have the new name, since it would fail the same way.
+fn can_choose(enabled: bool, problem: Option<Failure>, choice: Choice) -> bool {
+    enabled && !(choice == Choice::Replace && problem == Some(Failure::NameTaken))
+}
+
 /// Replace and Save copy, the two things to do with a finished result (ADR 0009).
-fn choices(state: &Gracil, job: &Job, enabled: bool) -> Element<'static, Message> {
+fn choices(
+    state: &Gracil,
+    job: &Job,
+    enabled: bool,
+    problem: Option<Failure>,
+) -> Element<'static, Message> {
     let action = |label: &'static str, choice: Choice| {
-        keyed(
+        let can = can_choose(enabled, problem, choice);
+        keyed_if(
             Scope::Main,
+            can,
             button(text(label).size(size::BODY))
                 .padding([space::XS, space::M])
                 .style(style::action_button)
-                .on_press_maybe(enabled.then_some(Message::Choose(job.id, choice))),
+                .on_press_maybe(can.then_some(Message::Choose(job.id, choice))),
         )
     };
     row![
@@ -486,15 +587,22 @@ fn choices(state: &Gracil, job: &Job, enabled: bool) -> Element<'static, Message
 }
 
 /// The same two choices, smaller, for the mini-window.
-fn mini_choices(state: &Gracil, job: &Job, enabled: bool) -> Element<'static, Message> {
+fn mini_choices(
+    state: &Gracil,
+    job: &Job,
+    enabled: bool,
+    problem: Option<Failure>,
+) -> Element<'static, Message> {
     let action = |label: &'static str, choice: Choice| {
-        keyed(
+        let can = can_choose(enabled, problem, choice);
+        keyed_if(
             Scope::Mini,
+            can,
             button(text(label).size(size::CAPTION))
                 // Five pixels above and below make it at least 24 pixels tall, easy to hit.
                 .padding([5.0, space::S])
                 .style(style::action_button)
-                .on_press_maybe(enabled.then_some(Message::Choose(job.id, choice))),
+                .on_press_maybe(can.then_some(Message::Choose(job.id, choice))),
         )
     };
     row![
@@ -660,15 +768,15 @@ fn status_line(status: &Status, text_size: f32, explain: Explain) -> Element<'st
         .into(),
         Explain::Link(id) => row![
             label,
-            hint(
-                keyed(
-                    Scope::Mini,
+            keyed(
+                Scope::Mini,
+                hint(
                     button(mark())
                         .padding([0.0, space::XS])
                         .style(style::quiet_button)
                         .on_press(Message::Explain(id)),
+                    explanation,
                 ),
-                explanation,
             ),
         ]
         .spacing(space::XS)
@@ -690,9 +798,16 @@ fn name(job: &Job, max_chars: usize, text_size: f32) -> Element<'static, Message
 
 fn footer(state: &Gracil) -> Element<'_, Message> {
     let mut summary = state.text.files_left(state.left());
-    match state.waiting_count() {
+    // "More" to decide: besides the result already shown large, as in the mini-window.
+    let shown_waiting = state.focused().is_some_and(|job| state.is_waiting(job.id));
+    match state.waiting_count() - usize::from(shown_waiting) {
         0 => {}
         n => summary.push_str(&format!("  ·  {}", state.text.ready(n))),
+    }
+    // The room freed so far, once there is more than one result to add up (spec §32.2).
+    let (total, results) = state.total();
+    if results >= 2 {
+        summary.push_str(&format!("  ·  {}", state.text.less(total)));
     }
     if state.gathering > 0 {
         summary.push_str(&format!("  ·  {}", state.text.looking_for_more));
@@ -704,14 +819,14 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
     };
     // The summary takes what room is left after "+", and wraps onto a second line rather than
     // pushing "+" out of the window.
-    let add = hint(
-        keyed(
-            Scope::Main,
+    let add = keyed(
+        Scope::Main,
+        hint(
             button(text("+").size(size::TITLE).line_height(1.0))
                 .style(style::quiet_button)
                 .on_press(Message::ChooseFiles),
+            state.text.add_files,
         ),
-        state.text.add_files,
     );
     // Once all is done, the big window already says how it went; the line below only opens the
     // list, and not even that while files failed: what failed already leads there.
@@ -736,8 +851,9 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
 
 fn drawer(state: &Gracil) -> Element<'_, Message> {
     let quiet = |label: &'static str, message: Option<Message>| {
-        keyed(
+        keyed_if(
             Scope::Main,
+            message.is_some(),
             button(text(label).size(size::CAPTION))
                 .style(style::quiet_button)
                 .on_press_maybe(message),
@@ -810,6 +926,7 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
                 .extend(rows)
                 .push(Space::new().height(below)),
         )
+        .id(DRAWER_LIST)
         .spacing(space::XS)
         .height(iced::Shrink)
         .on_scroll(|viewport| {

@@ -44,9 +44,15 @@ one stays readable.
 
 If you turn on a contrast theme in Windows (**Settings → Accessibility → Contrast themes**),
 Gracil draws with that theme's colors alone, and the moment you turn it on or off, Gracil changes
-with it. If you turn off **Animation effects** (**Settings → Accessibility → Visual effects**),
+with it. Buttons light up in the theme's highlight color when you point at them or reach them with
+the keyboard, buttons you can't use yet are drawn in its dimmed color, and the list and the file
+you are looking at have a thin outline, so nothing depends on shades of grey. If you turn off **Animation effects** (**Settings → Accessibility → Visual effects**),
 nothing in Gracil moves: the ring, the list and the colors change at once instead of gliding, and
 the marble stays still while Gracil gets ready.
+
+When what the window shows changes, for example from the work to the finished view, or to the
+question before leaving, the new view fades in softly in a moment instead of jumping. With
+**Animation effects** off, it simply appears.
 
 Gracil's symbol is a marble resting on a support: the marble is your video, and the support is
 Gracil, which takes care of the technical work. It is Gracil's icon in the window, the taskbar and
@@ -76,8 +82,8 @@ pictures) below.
   done. The percentage is written just below. While Gracil gets a list ready, before the marble
   starts moving, the middle of the marble slowly fades and returns, so you know it is working.
 - The middle of the ring holds the controls. Its top part is **pause** (II); click it and it turns
-  into **play** (▶), which resumes. Its bottom part is **stop** (■); point at it and the square
-  turns into the words **Stop all**. Pause acts on every file being worked on, all together; while
+  into **play** (▶), which resumes. Its bottom part is **stop** (■); point at it, or reach it with
+  **Tab**, and the square turns into the words **Stop all**. Pause acts on every file being worked on, all together; while
   paused, nothing new starts. Stop stops the whole list at once: files being compressed stop and
   their originals stay as they were, and every file not done yet leaves the list and is kept on a
   quiet line with **Continue**, so you can carry on whenever you like (see "Carrying on after
@@ -86,10 +92,12 @@ pictures) below.
   graphics card. Resuming carries on from the same point; nothing is lost or started over. You
   can also stop while paused.
 - Everything works from the keyboard too. **Tab** moves a ring from one button to the next
-  (**Shift+Tab** goes back), and **Enter** or **Space** presses the one with the ring; on the
-  **Always** line, the arrow keys move the choice. With no ring, **Space** pauses and resumes,
-  **Esc** steps back (closes the list, or the small window next to the clock), and **Ctrl+O**
-  chooses files.
+  (**Shift+Tab** goes back), including the pause and stop parts of the ring, and **Enter** or
+  **Space** presses the one with the ring. A button with the ring lights up as if you pointed at
+  it, and shows its reminder, such as **Add files** for the **+**. Buttons you can't use yet are
+  skipped. On the **Always** line, the arrow keys move the choice. With no ring, **Space** pauses
+  and resumes, **Esc** steps back (closes the list, or the small window next to the clock),
+  **Ctrl+O** chooses files and **Ctrl+Z** undoes **Clear**.
 - **View files**, under it, shows every video and image you added and how each one went: how much
   smaller it became, where it went (for example **−35% · Replaced**), or why it couldn't be
   compressed. With two or more done, a line at its top adds them all up, for example **In all:
@@ -116,7 +124,9 @@ pictures) below.
   it (while files failed, the **!** is the way into the list); add more files and Gracil gets back
   to work.
 - The **×** beside a file takes it off the list, and **Clear** empties the list. Neither touches
-  your original.
+  your original. After **Clear**, a quiet line says **List cleared · Undo** for a few seconds:
+  **Undo** (or **Ctrl+Z**) puts every file back where it was, finished results included. Once the
+  line is gone, results nobody chose for are deleted, as when you take a file off the list.
 - You can always compress a video again, even one already on the list: if the list is done with
   it (it was replaced, saved, couldn't be compressed or was stopped), it starts again as new.
   Adding a video that is still waiting, being compressed or waiting for your choice does nothing.
@@ -158,7 +168,8 @@ video editing project, or a playlist) won't find it under its old name. If that 
 video, choose **Save copy** instead; your original stays exactly where it was.
 
 When something goes wrong, there's no message box. A small **!** appears beside the file; point
-at it to read what happened.
+at it, or reach it with **Tab**, to read what happened and what to do, for example **Another
+program is using this file. Close it, then choose again**.
 
 ## FFmpeg, the engine underneath
 
@@ -527,7 +538,8 @@ tells you how things are going:
   went wrong; the marble turns back to normal.
 
 Pointing at the marble says the same in words, and so does Gracil's name in the taskbar and in
-Alt+Tab, for example "Gracil · compressing 42%". Right-click the marble for its menu: **Open
+Alt+Tab, for example "Gracil · compressing 42%", or "Gracil · getting ready" before the work
+starts moving. Right-click the marble for its menu: **Open
 Gracil**; then the settings, **Start with Windows**, **Show Gracil in Send to**, **Show Gracil in
 File Explorer's menu…** and **Show mini-window when compressing from File Explorer**; then **Prepare
 to delete Gracil** and **Exit**.

@@ -40,6 +40,9 @@ pub struct Text {
     pub view_files: &'static str,
     pub hide_files: &'static str,
     pub carry_on: &'static str,
+    /// After Clear, for a few seconds: the list was cleared, and Undo puts it back.
+    pub list_cleared: &'static str,
+    pub undo: &'static str,
     pub replace: &'static str,
     pub save_copy: &'static str,
     pub replace_all: &'static str,
@@ -83,8 +86,7 @@ pub struct Text {
     pub prepare_to_delete: &'static str,
     /// "Always", before the pill that picks what to do with every finished file (ADR 0025).
     pub always: &'static str,
-    /// The pill's two ends: always replace, always save a copy. Its middle, "ask each time", is a
-    /// small circle rather than a word.
+    /// The pill's three places: always replace, ask each time, always save a copy.
     pub always_choices: [&'static str; 3],
     /// The big line once everything is done, when nothing came out smaller and nothing failed.
     pub nothing_to_shrink: &'static str,
@@ -98,6 +100,8 @@ pub struct Text {
     pub cannot_start: &'static str,
     /// Exit's question when Prepare to delete Gracil was chosen.
     pub prepare_question: &'static str,
+    /// The tray's tip and the window's title while the work is getting ready, before 1%.
+    pub tray_getting_ready: &'static str,
     smaller: fn(u32) -> String,
     in_all: fn(&str, u32) -> String,
     less: fn(&str) -> String,
@@ -126,7 +130,10 @@ struct Failures {
     not_smaller: &'static str,
     as_small_as_it_gets: &'static str,
     could_not_save: &'static str,
+    could_not_place: &'static str,
     name_taken: &'static str,
+    in_use: &'static str,
+    gone: &'static str,
     animated: &'static str,
     not_accepted: &'static str,
     hdr: &'static str,
@@ -276,7 +283,10 @@ impl Text {
             Failure::NotSmaller => failures.not_smaller,
             Failure::AsSmallAsItGets => failures.as_small_as_it_gets,
             Failure::CouldNotSave => failures.could_not_save,
+            Failure::CouldNotPlace => failures.could_not_place,
             Failure::NameTaken => failures.name_taken,
+            Failure::InUse => failures.in_use,
+            Failure::Gone => failures.gone,
             Failure::Animated => failures.animated,
             Failure::NotAccepted => failures.not_accepted,
             Failure::Hdr => failures.hdr,
@@ -297,6 +307,8 @@ static ENGLISH: Text = Text {
     view_files: "View files",
     hide_files: "Hide files",
     carry_on: "Continue",
+    list_cleared: "List cleared",
+    undo: "Undo",
     replace: "Replace",
     save_copy: "Save copy",
     replace_all: "Replace all",
@@ -361,6 +373,7 @@ static ENGLISH: Text = Text {
     forget_unfinished: "Forget these files",
     cannot_start: "Can't start",
     prepare_question: "Prepare to delete Gracil?",
+    tray_getting_ready: "Gracil · getting ready",
     compressed: |count, written| match count {
         1 => "1 file compressed".to_owned(),
         _ => format!("{written} files compressed"),
@@ -417,7 +430,10 @@ static ENGLISH: Text = Text {
         not_smaller: "This file couldn't be made smaller than the original, so it was left as it is",
         as_small_as_it_gets: "This file is already compressed about as much as it can be, so it was left as it is",
         could_not_save: "The compressed file couldn't be saved in this folder. Make sure files can be saved there, then add it again",
-        name_taken: "Another file already has this file's new name, so the original was kept",
+        could_not_place: "The compressed file couldn't be saved in this folder. Make sure files can be saved there, then choose again",
+        name_taken: "Another file already has this file's new name, so the original was kept. Save a copy instead",
+        in_use: "Another program is using this file. Close it, then choose again",
+        gone: "This file is no longer where it was, so it was left alone",
         animated: "Gracil doesn't compress moving images, so it was left as it is",
         not_accepted: "Gracil doesn't compress this kind of image, so it was left as it is",
         hdr: "This photo is stored in HDR, which Gracil doesn't compress, so it was left as it is",
@@ -437,6 +453,8 @@ static SPANISH: Text = Text {
     view_files: "Ver archivos",
     hide_files: "Ocultar archivos",
     carry_on: "Continuar",
+    list_cleared: "Lista vaciada",
+    undo: "Deshacer",
     replace: "Reemplazar",
     save_copy: "Guardar copia",
     replace_all: "Reemplazar todos",
@@ -500,6 +518,7 @@ static SPANISH: Text = Text {
     forget_unfinished: "Olvidar estos archivos",
     cannot_start: "No se puede iniciar",
     prepare_question: "¿Preparar para eliminar Gracil?",
+    tray_getting_ready: "Gracil · preparando",
     compressed: |count, written| match count {
         1 => "1 archivo comprimido".to_owned(),
         _ => format!("{written} archivos comprimidos"),
@@ -569,7 +588,10 @@ static SPANISH: Text = Text {
         not_smaller: "Este archivo no se pudo hacer más pequeño que el original, así que se dejó como está",
         as_small_as_it_gets: "Este archivo ya está comprimido casi al máximo, así que se dejó como está",
         could_not_save: "El archivo comprimido no se pudo guardar en esta carpeta. Comprueba que se pueden guardar archivos ahí y vuelve a agregarlo",
-        name_taken: "Ya hay otro archivo con el nuevo nombre de este archivo, así que se conservó el original",
+        could_not_place: "El archivo comprimido no se pudo guardar en esta carpeta. Comprueba que se pueden guardar archivos ahí y vuelve a elegir",
+        name_taken: "Ya hay otro archivo con el nuevo nombre de este archivo, así que se conservó el original. Guarda una copia en su lugar",
+        in_use: "Otro programa está usando este archivo. Ciérralo y vuelve a elegir",
+        gone: "Este archivo ya no está donde estaba, así que no se tocó",
         animated: "Gracil no comprime imágenes en movimiento, así que se dejó como está",
         not_accepted: "Gracil no comprime este tipo de imagen, así que se dejó como está",
         hdr: "Esta foto está guardada en HDR, que Gracil no comprime, así que se dejó como está",

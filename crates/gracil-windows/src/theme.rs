@@ -4,7 +4,8 @@
 use std::ptr;
 
 use windows_sys::Win32::Graphics::Gdi::{
-    COLOR_HIGHLIGHT, COLOR_WINDOW, COLOR_WINDOWTEXT, GetSysColor,
+    COLOR_GRAYTEXT, COLOR_HIGHLIGHT, COLOR_HIGHLIGHTTEXT, COLOR_WINDOW, COLOR_WINDOWTEXT,
+    GetSysColor,
 };
 use windows_sys::Win32::System::Registry::{
     HKEY_CURRENT_USER, RRF_RT_REG_BINARY, RRF_RT_REG_DWORD, RegGetValueW,
@@ -108,8 +109,12 @@ pub fn animations() -> bool {
 pub struct Contrast {
     pub background: [u8; 3],
     pub text: [u8; 3],
-    /// Selected and filled controls.
+    /// Selected and filled controls, and a control under the pointer.
     pub highlight: [u8; 3],
+    /// Text on `highlight`.
+    pub highlight_text: [u8; 3],
+    /// Controls that can't be used now.
+    pub disabled: [u8; 3],
 }
 
 /// The contrast theme's colors while one is on in Windows' settings, or `None`.
@@ -142,5 +147,7 @@ pub fn contrast() -> Option<Contrast> {
         background: color(COLOR_WINDOW),
         text: color(COLOR_WINDOWTEXT),
         highlight: color(COLOR_HIGHLIGHT),
+        highlight_text: color(COLOR_HIGHLIGHTTEXT),
+        disabled: color(COLOR_GRAYTEXT),
     })
 }

@@ -223,7 +223,14 @@ impl Gracil {
             None => TrayState::Idle,
         };
         // The tip shows whole percentages, so it follows the work more finely than the picture.
+        let getting_ready = self
+            .working()
+            .is_some_and(|job| job.state == JobState::Preparing);
         let tip = match (state, done) {
+            // Nothing has moved yet: it says so, as the window does, rather than "0%".
+            (TrayState::Processing(_), Some(done)) if getting_ready && done <= 0.0 => {
+                self.text.tray_getting_ready.to_owned()
+            }
             (TrayState::Processing(_), Some(done)) => {
                 self.text.tray_tip(TrayState::Processing(done))
             }

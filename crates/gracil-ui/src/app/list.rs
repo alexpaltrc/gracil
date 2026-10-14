@@ -2,6 +2,26 @@
 
 use super::*;
 
+/// How long Undo stays after Clear.
+const UNDO_FOR: Duration = Duration::from_secs(6);
+
+/// A file Clear took off the list, with all Gracil knew of it, kept a moment for Undo.
+pub struct Taken {
+    job: Job,
+    outcome: Option<Outcome>,
+    intent: Option<Choice>,
+    prepared: Option<work::Prepared>,
+}
+
+impl Taken {
+    /// Lets it go for good: a result nobody chose for is deleted; the original stays.
+    fn let_go(self) {
+        if let Some(Outcome::Ready { temp, .. }) = self.outcome {
+            work::discard(&temp);
+        }
+    }
+}
+
 /// The picker shows videos and images by default. Only a convenience: any video FFmpeg reads is
 /// accepted.
 pub(super) async fn choose_files(text: &'static Text) -> Vec<PathBuf> {
@@ -211,14 +231,24 @@ impl Gracil {
 
     /// Takes a video off the list. A result nobody chose for is deleted; the original stays.
     pub(super) fn remove(&mut self, id: JobId) {
-        let removable = self.queue.get(id).is_some_and(|job| self.can_remove(job));
-        if !removable || !self.queue.remove(id) {
-            return;
-        }
-        self.intents.remove(&id);
-        self.prepared.remove(&id);
-        if let Some(Outcome::Ready { temp, .. }) = self.outcomes.remove(&id) {
+        if let Some(Taken {
+            outcome: Some(Outcome::Ready { temp, .. }),
+            ..
+        }) = self.take(id)
+        {
             work::discard(&temp);
+        }
+    }
+
+    /// Takes a file off the list with all Gracil knows of it, so it can be put back.
+    fn take(&mut self, id: JobId) -> Option<Taken> {
+        let job = self
+            .queue
+            .get(id)
+            .filter(|job| self.can_remove(job))
+            .cloned()?;
+        if !self.queue.remove(id) {
+            return None;
         }
         if self.selected == Some(id) {
             self.selected = None;
@@ -226,6 +256,77 @@ impl Gracil {
         if self.last_placed == Some(id) {
             self.last_placed = None;
         }
+        Some(Taken {
+            job,
+            outcome: self.outcomes.remove(&id),
+            intent: self.intents.remove(&id),
+            prepared: self.prepared.remove(&id),
+        })
+    }
+
+    /// Clear: everything not being worked on leaves the list, and for a few seconds Undo puts it
+    /// back. Results nobody chose for are deleted only once Undo is gone.
+    pub(super) fn clear(&mut self) -> Task<Message> {
+        self.let_go_cleared();
+        let ids: Vec<JobId> = self.queue.jobs().iter().map(|job| job.id).collect();
+        let taken: Vec<Taken> = ids.into_iter().filter_map(|id| self.take(id)).collect();
+        if self.queue.is_empty() {
+            // The empty window has no list to fold away.
+            self.drawer_open = false;
+            self.drawer_folding = false;
+        }
+        self.drawer_scroll = DrawerScroll::default();
+        if taken.is_empty() {
+            return Task::none();
+        }
+        self.clears += 1;
+        self.cleared = Some(taken);
+        after(UNDO_FOR, Message::UndoGone(self.clears))
+    }
+
+    /// Undo: what Clear took off the list comes back where it was.
+    pub(super) fn undo_clear(&mut self) -> Task<Message> {
+        let Some(taken) = self.cleared.take() else {
+            return Task::none();
+        };
+        let jobs = taken.iter().map(|taken| taken.job.clone()).collect();
+        let restored: HashSet<JobId> = self.queue.restore(jobs).into_iter().collect();
+        for taken in taken {
+            let id = taken.job.id;
+            if !restored.contains(&id) {
+                // Its file was added again meanwhile; the new entry stands.
+                taken.let_go();
+                continue;
+            }
+            if let Some(outcome) = taken.outcome {
+                self.outcomes.insert(id, outcome);
+            }
+            if let Some(intent) = taken.intent {
+                self.intents.insert(id, intent);
+            }
+            if let Some(prepared) = taken.prepared {
+                self.prepared.insert(id, prepared);
+            }
+        }
+        self.schedule()
+    }
+
+    /// Undo is gone: what Clear took off the list is let go for good.
+    pub(super) fn let_go_cleared(&mut self) {
+        for taken in self.cleared.take().into_iter().flatten() {
+            taken.let_go();
+        }
+    }
+
+    /// Results kept for Undo, which Gracil deletes on leaving like any other nobody chose for.
+    pub(super) fn cleared_results(&self) -> impl Iterator<Item = &PathBuf> {
+        self.cleared
+            .iter()
+            .flatten()
+            .filter_map(|taken| match &taken.outcome {
+                Some(Outcome::Ready { temp, .. }) => Some(temp),
+                _ => None,
+            })
     }
 
     /// Marks a problem the user hasn't seen, when no window is open.

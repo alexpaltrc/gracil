@@ -82,6 +82,7 @@ impl Gracil {
                 Outcome::Ready { temp, .. } => Some(temp.clone()),
                 _ => None,
             })
+            .chain(self.cleared_results().cloned())
             .collect();
         // Deleting on a slow drive, and a replaced video's parked original still in another
         // program's hands, are waited for only so long (ADR 0044); anything left after this is

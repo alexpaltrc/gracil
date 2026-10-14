@@ -28,3 +28,7 @@ fixed per mode (white in light, black in dark), which fades into a pale accent s
 
 - Gracil respects the two settings people use most to make Windows comfortable to look at.
 - Only the Windows-integration crate reads the settings; the rest of Gracil asks one place.
+
+*Update (2026-10-13):* in a contrast theme, Gracil also uses the theme's highlight-text and
+dimmed-text colors: buttons light up in the highlight color on hover and focus, disabled buttons
+use the dimmed color, and the list and the picked file get a thin outline.

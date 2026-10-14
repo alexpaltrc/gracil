@@ -31,3 +31,8 @@ fields can.
 - In a long list, Tab reaches only the rows in sight and a few beyond, the ones that are built
   (spec §77.3); the mouse wheel shows the rest.
 - When Iced's buttons learn to take focus, `focus.rs` can give way to them.
+
+*Update (2026-10-13):* the dial's **Stop** is reached too. The dial offers a ring for each of its
+parts, pause and stop, and Enter or Space presses the one holding it. A button holding the ring
+looks as if the pointer were on it, so it lights up and shows its reminder; a disabled button is
+skipped. **Ctrl+Z** undoes **Clear** while its **Undo** line shows.

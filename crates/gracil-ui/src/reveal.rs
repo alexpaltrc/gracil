@@ -16,10 +16,6 @@ use iced::{
 
 use crate::motion;
 
-/// How quickly it unfolds, in seconds (the time to cover about two thirds): a little slower
-/// than the pill's stone, since it moves more.
-const EASE: f32 = 0.06;
-
 /// How far the contents travel as they come out, in logical pixels.
 const SLIDE: f32 = 10.0;
 
@@ -130,7 +126,7 @@ impl<Message: Clone> Widget<Message, Theme, Renderer> for Reveal<'_, Message> {
                 state.shown,
                 target,
                 motion::elapsed(state.last_frame, *now),
-                EASE,
+                motion::QUICK,
             );
             if next == target {
                 state.shown = target;

@@ -15,6 +15,8 @@ pub(super) fn windows_contrast() -> Option<style::Contrast> {
         background: color(contrast.background),
         text: color(contrast.text),
         highlight: color(contrast.highlight),
+        highlight_text: color(contrast.highlight_text),
+        disabled: color(contrast.disabled),
     })
 }
 
@@ -57,7 +59,7 @@ impl Gracil {
         let contrast = windows_contrast();
         if contrast != self.contrast {
             self.contrast = contrast;
-            style::set_contrasting(contrast.is_some());
+            style::set_contrast(contrast);
             self.theme = style::theme(self.palette());
             self.shift = None;
         }

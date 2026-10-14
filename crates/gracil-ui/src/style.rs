@@ -4,7 +4,7 @@
 //! still temporary (§78). Screens only ever refer to these names, so restyling Gracil happens
 //! here.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::RwLock;
 use std::time::Duration;
 
 use iced::theme::{Mode, Palette};
@@ -56,19 +56,30 @@ pub struct Contrast {
     pub background: Color,
     pub text: Color,
     pub highlight: Color,
+    /// Text on `highlight`.
+    pub highlight_text: Color,
+    /// Controls that can't be used now: Windows' gray text.
+    pub disabled: Color,
 }
 
-/// Whether a contrast theme is on, so the roles beyond the palette follow it too.
-static CONTRASTING: AtomicBool = AtomicBool::new(false);
+/// The contrast theme's colors while one is on, so the roles beyond the palette follow it too.
+static CONTRAST: RwLock<Option<Contrast>> = RwLock::new(None);
 
-/// Says whether a contrast theme is on, before the window is drawn with `contrast_palette`.
-pub fn set_contrasting(on: bool) {
-    CONTRASTING.store(on, Ordering::Relaxed);
+/// Says which contrast theme is on, if any, before the window is drawn with `contrast_palette`.
+pub fn set_contrast(contrast: Option<Contrast>) {
+    if let Ok(mut current) = CONTRAST.write() {
+        *current = contrast;
+    }
+}
+
+/// The contrast theme's colors while one is on.
+pub fn contrast() -> Option<Contrast> {
+    CONTRAST.read().ok().and_then(|current| *current)
 }
 
 /// Whether a contrast theme is on, for the few faint touches that need a solid stand-in.
 pub fn contrasting() -> bool {
-    CONTRASTING.load(Ordering::Relaxed)
+    contrast().is_some()
 }
 
 /// The palette while a contrast theme is on: its background, its text, and its highlight for
@@ -247,6 +258,24 @@ pub fn notice(theme: &Theme) -> text::Style {
 /// A text-only button that comes forward on hover. Used for every quiet action.
 pub fn quiet_button(theme: &Theme, status: button::Status) -> button::Style {
     let palette = theme.palette();
+    // In a contrast theme every text is one color, so the pointer shows as Windows' own
+    // highlight, and what can't be used now in its gray text.
+    if let Some(contrast) = contrast() {
+        let (background, text_color) = match status {
+            button::Status::Hovered | button::Status::Pressed => (
+                Some(Background::Color(contrast.highlight)),
+                contrast.highlight_text,
+            ),
+            button::Status::Disabled => (None, contrast.disabled),
+            button::Status::Active => (None, contrast.text),
+        };
+        return button::Style {
+            background,
+            text_color,
+            border: Border::default().rounded(RADIUS),
+            ..button::Style::default()
+        };
+    }
     let secondary = tokens(theme).secondary;
     let text_color = match status {
         button::Status::Hovered | button::Status::Pressed => palette.text,
@@ -265,6 +294,14 @@ pub fn quiet_button(theme: &Theme, status: button::Status) -> button::Style {
 /// which one is showing and that picking it again puts it away.
 pub fn picked_row(theme: &Theme, status: button::Status) -> button::Style {
     let palette = theme.palette();
+    // A faint surface doesn't show in a contrast theme: an edge in the text's color does.
+    if contrasting() {
+        let style = quiet_button(theme, status);
+        return button::Style {
+            border: style.border.width(1.0).color(palette.text),
+            ..style
+        };
+    }
     button::Style {
         background: Some(Background::Color(palette.text.scale_alpha(0.07))),
         text_color: palette.text,
@@ -283,10 +320,13 @@ pub fn action_button(theme: &Theme, status: button::Status) -> button::Style {
             tokens.accent.scale_alpha(0.8),
             tokens.on_accent.scale_alpha(0.8),
         ),
-        button::Status::Disabled => (
-            palette.text.scale_alpha(0.06),
-            tokens.secondary.scale_alpha(0.6),
-        ),
+        button::Status::Disabled => match contrast() {
+            Some(contrast) => (Color::TRANSPARENT, contrast.disabled),
+            None => (
+                palette.text.scale_alpha(0.06),
+                tokens.secondary.scale_alpha(0.6),
+            ),
+        },
         button::Status::Active => (tokens.accent, tokens.on_accent),
     };
     button::Style {
@@ -312,11 +352,26 @@ pub fn drop_zone(theme: &Theme, hovered: bool) -> container::Style {
     }
 }
 
+/// What lies behind the drop area's contents: the window, tinted while files are dragged over.
+pub fn zone_surface(theme: &Theme, hovered: bool) -> Color {
+    let palette = theme.palette();
+    if hovered {
+        mix(palette.background, palette.primary, 0.12)
+    } else {
+        palette.background
+    }
+}
+
 /// The file drawer: a soft surface that sits below the focus without competing with it.
 pub fn drawer(theme: &Theme) -> container::Style {
+    // In a contrast theme, an edge in the text's color instead of a faint surface.
+    let edge = if contrasting() { 1.0 } else { 0.0 };
     container::Style {
         background: Some(Background::Color(theme.palette().text.scale_alpha(0.04))),
-        border: Border::default().rounded(RADIUS),
+        border: Border::default()
+            .rounded(RADIUS)
+            .width(edge)
+            .color(theme.palette().text),
         ..container::Style::default()
     }
 }

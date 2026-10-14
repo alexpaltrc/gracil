@@ -11,11 +11,13 @@ use std::time::Instant;
 use gracil_core::queue::JobId;
 use iced::alignment::Vertical;
 use iced::mouse;
+use iced::widget::Canvas;
 use iced::widget::canvas::{self, Action, Event, Frame, Geometry, LineCap, Path, Stroke};
 use iced::widget::text::Alignment;
-use iced::{Color, Point, Rectangle, Renderer, Size, Theme, window};
+use iced::{Color, Element, Point, Rectangle, Renderer, Size, Theme, window};
 
 use crate::app::Message;
+use crate::focus::{Part, Scope, keyed_parts};
 use crate::motion::{self, approach};
 use crate::style::{self, size};
 
@@ -31,15 +33,10 @@ const GAP: f32 = 7.0;
 /// centre. At 0.404 the bottom button is a quarter of the middle's area.
 const DIVIDER: f32 = 0.404;
 
-/// How quickly each value catches up, in seconds (the time to cover about two thirds).
-const FILL_EASE: f32 = 0.28;
-const SYMBOL_EASE: f32 = 0.05;
-const HOVER_EASE: f32 = 0.07;
 /// How long the marble takes to breathe in and out while Gracil gets ready, in seconds.
 const BREATH: f32 = 1.6;
 /// How faint the marble's middle gets at the bottom of a breath.
 const BREATH_DEPTH: f32 = 0.45;
-const BREATH_EASE: f32 = 0.3;
 
 /// What the ring stands for. When it changes, the ring shows the new one as it is, without
 /// sweeping from the old one.
@@ -68,7 +65,7 @@ pub struct Dial {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Part {
+enum Button {
     PauseResume,
     Stop,
 }
@@ -82,7 +79,7 @@ pub struct State {
     play: f32,
     hover_top: f32,
     hover_bottom: f32,
-    pressed: Option<Part>,
+    pressed: Option<Button>,
     last_frame: Option<Instant>,
     /// How much the marble breathes, from 0 (steady) to 1, and where in its breath it is.
     breathing: f32,
@@ -98,15 +95,15 @@ impl Dial {
         if self.paused { 1.0 } else { 0.0 }
     }
 
-    fn enabled(&self, part: Part) -> bool {
+    fn enabled(&self, part: Button) -> bool {
         match part {
-            Part::PauseResume => self.paused || self.can_pause,
-            Part::Stop => self.can_stop,
+            Button::PauseResume => self.paused || self.can_pause,
+            Button::Stop => self.can_stop,
         }
     }
 
     /// The enabled button under the cursor, if any.
-    fn part_at(&self, bounds: Rectangle, cursor: mouse::Cursor) -> Option<Part> {
+    fn part_at(&self, bounds: Rectangle, cursor: mouse::Cursor) -> Option<Button> {
         let position = cursor.position_in(bounds)?;
         let center = Point::new(bounds.width / 2.0, bounds.height / 2.0);
         let radius = middle_radius(bounds.size());
@@ -114,27 +111,27 @@ impl Dial {
             return None;
         }
         let part = if self.can_stop && position.y > center.y + DIVIDER * radius {
-            Part::Stop
+            Button::Stop
         } else {
-            Part::PauseResume
+            Button::PauseResume
         };
         self.enabled(part).then_some(part)
     }
 
-    fn message(&self, part: Part) -> Message {
+    fn message(&self, part: Button) -> Message {
         match part {
-            Part::Stop => Message::Cancel,
-            Part::PauseResume if self.paused => Message::Resume,
-            Part::PauseResume => Message::Pause,
+            Button::Stop => Message::Cancel,
+            Button::PauseResume if self.paused => Message::Resume,
+            Button::PauseResume => Message::Pause,
         }
     }
 
-    fn targets(&self, hovered: Option<Part>) -> [f32; 5] {
+    fn targets(&self, hovered: Option<Button>) -> [f32; 5] {
         [
             self.target_fill(),
             self.target_play(),
-            f32::from(hovered == Some(Part::PauseResume)),
-            f32::from(hovered == Some(Part::Stop)),
+            f32::from(hovered == Some(Button::PauseResume)),
+            f32::from(hovered == Some(Button::Stop)),
             f32::from(self.getting_ready && !self.paused && !motion::still()),
         ]
     }
@@ -177,11 +174,11 @@ impl canvas::Program<Message> for Dial {
             Event::Window(window::Event::RedrawRequested(now)) => {
                 let elapsed = motion::elapsed(state.last_frame, *now);
                 let [fill, play, top, bottom, breathing] = self.targets(hovered);
-                state.fill = approach(state.fill, fill, elapsed, FILL_EASE);
-                state.play = approach(state.play, play, elapsed, SYMBOL_EASE);
-                state.hover_top = approach(state.hover_top, top, elapsed, HOVER_EASE);
-                state.hover_bottom = approach(state.hover_bottom, bottom, elapsed, HOVER_EASE);
-                state.breathing = approach(state.breathing, breathing, elapsed, BREATH_EASE);
+                state.fill = approach(state.fill, fill, elapsed, motion::STEADY);
+                state.play = approach(state.play, play, elapsed, motion::QUICK);
+                state.hover_top = approach(state.hover_top, top, elapsed, motion::QUICK);
+                state.hover_bottom = approach(state.hover_bottom, bottom, elapsed, motion::QUICK);
+                state.breathing = approach(state.breathing, breathing, elapsed, motion::STEADY);
                 state.breath = if state.breathing > 0.0 {
                     (state.breath + elapsed / BREATH).fract()
                 } else {
@@ -308,7 +305,7 @@ impl canvas::Program<Message> for Dial {
         } else {
             center
         };
-        let color = symbol(state.hover_top, self.enabled(Part::PauseResume));
+        let color = symbol(state.hover_top, self.enabled(Button::PauseResume));
         for (pause, play) in pause_play_shapes() {
             let corners: Vec<Point> = pause
                 .iter()
@@ -376,6 +373,75 @@ impl canvas::Program<Message> for Dial {
             mouse::Interaction::default()
         }
     }
+}
+
+impl Dial {
+    /// The dial, its Pause and Stop each reachable with Tab and pressed with Enter or Space
+    /// (ADR 0059), drawn `side` pixels wide.
+    pub fn keyed(self, scope: Scope, side: f32) -> Element<'static, Message> {
+        let pause = Part {
+            place: if self.can_stop {
+                pause_place
+            } else {
+                middle_place
+            },
+            radius: if self.can_stop {
+                pause_radius
+            } else {
+                middle_radius
+            },
+            message: self
+                .enabled(Button::PauseResume)
+                .then(|| self.message(Button::PauseResume)),
+        };
+        let mut parts = vec![pause];
+        if self.can_stop {
+            parts.push(Part {
+                place: stop_place,
+                radius: stop_radius,
+                message: Some(Message::Cancel),
+            });
+        }
+        keyed_parts(scope, Canvas::new(self).width(side).height(side), parts)
+    }
+}
+
+/// The middle of the dial, around its centre.
+fn middle_place(bounds: Size) -> Rectangle {
+    let radius = middle_radius(bounds);
+    Rectangle::new(
+        Point::new(bounds.width / 2.0 - radius, bounds.height / 2.0 - radius),
+        Size::new(2.0 * radius, 2.0 * radius),
+    )
+}
+
+/// The top of the middle, which pauses and resumes, down to where Stop begins.
+fn pause_place(bounds: Size) -> Rectangle {
+    let middle = middle_place(bounds);
+    let radius = middle_radius(bounds);
+    Rectangle {
+        height: radius * (1.0 + DIVIDER),
+        ..middle
+    }
+}
+
+fn pause_radius(bounds: Size) -> f32 {
+    middle_radius(bounds) * 0.6
+}
+
+/// The bottom of the middle, which stops.
+fn stop_place(bounds: Size) -> Rectangle {
+    let radius = middle_radius(bounds);
+    let top = bounds.height / 2.0 + DIVIDER * radius;
+    let height = radius * (1.0 - DIVIDER);
+    Rectangle::new(
+        Point::new(bounds.width / 2.0 - radius * 0.85, top),
+        Size::new(radius * 1.7, height),
+    )
+}
+
+fn stop_radius(bounds: Size) -> f32 {
+    stop_place(bounds).height / 2.0
 }
 
 /// Where a dial drawn in `bounds` puts its ring: the ring's radius, the width of its filled part,
@@ -478,18 +544,18 @@ mod tests {
 
         let compressing = dial(false, true);
         let top = compressing.part_at(bounds, at(middle, middle - radius * 0.5));
-        assert_eq!(top, Some(Part::PauseResume));
+        assert_eq!(top, Some(Button::PauseResume));
         assert!(matches!(
-            compressing.message(Part::PauseResume),
+            compressing.message(Button::PauseResume),
             Message::Pause
         ));
         assert!(matches!(
-            dial(true, false).message(Part::PauseResume),
+            dial(true, false).message(Button::PauseResume),
             Message::Resume
         ));
 
         let bottom = compressing.part_at(bounds, at(middle, middle + radius * 0.8));
-        assert_eq!(bottom, Some(Part::Stop));
+        assert_eq!(bottom, Some(Button::Stop));
         assert_eq!(compressing.part_at(bounds, at(2.0, 2.0)), None);
 
         // While getting ready only Stop answers.
@@ -500,7 +566,7 @@ mod tests {
         );
         assert_eq!(
             preparing.part_at(bounds, at(middle, middle + radius * 0.8)),
-            Some(Part::Stop)
+            Some(Button::Stop)
         );
     }
 
@@ -517,7 +583,7 @@ mod tests {
         };
         assert_eq!(
             mini.part_at(bounds, at(middle, middle + radius * 0.8)),
-            Some(Part::PauseResume)
+            Some(Button::PauseResume)
         );
     }
 }

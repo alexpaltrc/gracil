@@ -20,9 +20,6 @@ use crate::focus::{self, Ring, Scope};
 use crate::motion;
 use crate::style::{self, size, space};
 
-/// How quickly the stone catches up, in seconds (the time to cover about two thirds).
-const EASE: f32 = 0.07;
-
 pub struct Pill<'a, Message> {
     content: Element<'a, Message>,
     selected: usize,
@@ -179,8 +176,12 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
             Event::Window(window::Event::RedrawRequested(now)) => {
                 let state = tree.state.downcast_mut::<State>();
                 let at = state.at.unwrap_or(target);
-                let next =
-                    motion::approach(at, target, motion::elapsed(state.last_frame, *now), EASE);
+                let next = motion::approach(
+                    at,
+                    target,
+                    motion::elapsed(state.last_frame, *now),
+                    motion::QUICK,
+                );
                 if next == target {
                     state.at = Some(target);
                     state.last_frame = None;

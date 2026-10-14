@@ -192,15 +192,36 @@ pub fn keyed<'a, Message: 'a>(
     scope: Scope,
     button: impl Into<Element<'a, Message>>,
 ) -> Element<'a, Message> {
+    keyed_if(scope, true, button)
+}
+
+/// A button that the keyboard can reach while it can be pressed: Tab passes over it otherwise,
+/// as Windows does with a control that can't be used now.
+pub fn keyed_if<'a, Message: 'a>(
+    scope: Scope,
+    enabled: bool,
+    button: impl Into<Element<'a, Message>>,
+) -> Element<'a, Message> {
     Element::new(Keyed {
         scope,
+        enabled,
         content: button.into(),
     })
 }
 
 struct Keyed<'a, Message> {
     scope: Scope,
+    enabled: bool,
     content: Element<'a, Message>,
+}
+
+/// Whether `event` is one that a button or a hint reads where the pointer is from.
+fn reads_the_pointer(event: &Event) -> bool {
+    matches!(
+        event,
+        Event::Mouse(mouse::Event::CursorMoved { .. } | mouse::Event::CursorLeft)
+            | Event::Window(iced::window::Event::RedrawRequested(_))
+    )
 }
 
 impl<Message> Widget<Message, Theme, Renderer> for Keyed<'_, Message> {
@@ -248,7 +269,11 @@ impl<Message> Widget<Message, Theme, Renderer> for Keyed<'_, Message> {
     ) {
         let ring = tree.state.downcast_mut::<Ring>();
         ring.scope = self.scope;
-        ring.offer(layout.bounds(), operation);
+        if self.enabled {
+            ring.offer(layout.bounds(), operation);
+        } else {
+            ring.held = false;
+        }
         self.content
             .as_widget_mut()
             .operate(&mut tree.children[0], layout, renderer, operation);
@@ -293,6 +318,13 @@ impl<Message> Widget<Message, Theme, Renderer> for Keyed<'_, Message> {
             shell.capture_event();
             return;
         }
+        // Holding the ring, the button lights up as under the pointer, and a hint around it
+        // says its few words, so the keyboard learns what the pointer would.
+        let cursor = if ring.held && reads_the_pointer(event) {
+            mouse::Cursor::Available(layout.bounds().center())
+        } else {
+            cursor
+        };
         self.content.as_widget_mut().update(
             &mut tree.children[0],
             event,
@@ -315,6 +347,12 @@ impl<Message> Widget<Message, Theme, Renderer> for Keyed<'_, Message> {
         cursor: mouse::Cursor,
         viewport: &Rectangle,
     ) {
+        let ring = tree.state.downcast_ref::<Ring>();
+        let cursor = if ring.held {
+            mouse::Cursor::Available(layout.bounds().center())
+        } else {
+            cursor
+        };
         self.content.as_widget().draw(
             &tree.children[0],
             renderer,
@@ -324,9 +362,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Keyed<'_, Message> {
             cursor,
             viewport,
         );
-        tree.state
-            .downcast_ref::<Ring>()
-            .draw(renderer, theme, layout.bounds(), RADIUS);
+        ring.draw(renderer, theme, layout.bounds(), RADIUS);
     }
 
     fn mouse_interaction(
@@ -360,6 +396,196 @@ impl<Message> Widget<Message, Theme, Renderer> for Keyed<'_, Message> {
             renderer,
             viewport,
             translation,
+        )
+    }
+}
+
+/// One of the places inside a drawn control that the ring can stop at, like the dial's Pause and
+/// Stop: where it is within the control, how round its ring is, and what pressing it sends.
+pub struct Part<Message> {
+    pub place: fn(Size) -> Rectangle,
+    pub radius: fn(Size) -> f32,
+    /// None while it can't be pressed: Tab passes over it then.
+    pub message: Option<Message>,
+}
+
+/// A drawn control whose parts the keyboard can reach one by one. Holding the ring, a part lights
+/// up as under the pointer.
+pub fn keyed_parts<'a, Message: Clone + 'a>(
+    scope: Scope,
+    content: impl Into<Element<'a, Message>>,
+    parts: Vec<Part<Message>>,
+) -> Element<'a, Message> {
+    Element::new(KeyedParts {
+        scope,
+        content: content.into(),
+        parts,
+    })
+}
+
+struct KeyedParts<'a, Message> {
+    scope: Scope,
+    content: Element<'a, Message>,
+    parts: Vec<Part<Message>>,
+}
+
+impl<Message> KeyedParts<'_, Message> {
+    /// The part holding the ring, if any, and where it is.
+    fn held(&self, rings: &[Ring], bounds: Rectangle) -> Option<(usize, Rectangle)> {
+        let at = rings.iter().position(|ring| ring.held)?;
+        let part = self.parts.get(at)?;
+        let place = (part.place)(bounds.size());
+        Some((at, place + Vector::new(bounds.x, bounds.y)))
+    }
+}
+
+impl<Message: Clone> Widget<Message, Theme, Renderer> for KeyedParts<'_, Message> {
+    fn size(&self) -> Size<Length> {
+        self.content.as_widget().size()
+    }
+
+    fn size_hint(&self) -> Size<Length> {
+        self.content.as_widget().size_hint()
+    }
+
+    fn tag(&self) -> tree::Tag {
+        tree::Tag::of::<Vec<Ring>>()
+    }
+
+    fn state(&self) -> tree::State {
+        tree::State::new(vec![Ring::new(self.scope); self.parts.len()])
+    }
+
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.content)]
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        tree.diff_children(std::slice::from_ref(&self.content));
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        self.content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits)
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        let bounds = layout.bounds();
+        let rings = tree.state.downcast_mut::<Vec<Ring>>();
+        rings.resize(self.parts.len(), Ring::new(self.scope));
+        for (ring, part) in rings.iter_mut().zip(&self.parts) {
+            ring.scope = self.scope;
+            if part.message.is_some() {
+                let place = (part.place)(bounds.size()) + Vector::new(bounds.x, bounds.y);
+                ring.offer(place, operation);
+            } else {
+                ring.held = false;
+            }
+        }
+        self.content
+            .as_widget_mut()
+            .operate(&mut tree.children[0], layout, renderer, operation);
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        let rings = tree.state.downcast_mut::<Vec<Ring>>();
+        let mut dropped = false;
+        for ring in rings.iter_mut() {
+            dropped |= ring.drop_on_click(event);
+        }
+        if dropped {
+            shell.request_redraw();
+        }
+        let held = self.held(rings, layout.bounds());
+        if let Some((at, _)) = held
+            && is_press(event)
+        {
+            if let Some(message) = self.parts[at].message.clone() {
+                shell.publish(message);
+            }
+            shell.capture_event();
+            return;
+        }
+        let cursor = match held {
+            Some((_, place)) if reads_the_pointer(event) => {
+                mouse::Cursor::Available(place.center())
+            }
+            _ => cursor,
+        };
+        self.content.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            layout,
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut Renderer,
+        theme: &Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.content.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout,
+            cursor,
+            viewport,
+        );
+        let rings = tree.state.downcast_ref::<Vec<Ring>>();
+        if let Some((at, place)) = self.held(rings, layout.bounds()) {
+            let radius = (self.parts[at].radius)(layout.bounds().size());
+            rings[at].draw(renderer, theme, place, radius);
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &Renderer,
+    ) -> mouse::Interaction {
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout,
+            cursor,
+            viewport,
+            renderer,
         )
     }
 }

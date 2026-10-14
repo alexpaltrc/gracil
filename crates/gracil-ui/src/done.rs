@@ -84,12 +84,18 @@ impl canvas::Program<Message> for Done {
             (0.0, 0.0)
         };
 
-        // The ring the marble filled, whole.
+        // The ring the marble filled, whole: in the accent when it went well, quieter when nothing
+        // came out smaller, so it never looks like a success it wasn't.
+        let ring_color = if self.went_well {
+            tokens.accent
+        } else {
+            tokens.secondary.scale_alpha(0.5)
+        };
         frame.stroke(
             &Path::circle(center, ring),
             Stroke::default()
                 .with_width(ring_width)
-                .with_color(tokens.accent),
+                .with_color(ring_color),
         );
 
         // The middle fills with green, growing out from its centre.
@@ -135,7 +141,7 @@ impl canvas::Program<Message> for Done {
             ),
             max_width: bounds.width,
             color: palette.text.scale_alpha(amount),
-            size: AMOUNT_SIZE.into(),
+            size: fitting(&self.headline, bounds.width).into(),
             font: style::FONT,
             align_x: Alignment::Center,
             align_y: Vertical::Center,
@@ -151,6 +157,17 @@ impl canvas::Program<Message> for Done {
 fn stages(progress: f32) -> [f32; 3] {
     let part = |from: f32, to: f32| ease_out(((progress - from) / (to - from)).clamp(0.0, 1.0));
     [part(0.0, 0.4), part(0.25, 0.7), part(0.4, 1.0)]
+}
+
+/// The headline's size: as large as it is meant to be, or a little smaller when a longer line, in
+/// a language with longer words, would otherwise not fit on one line in `width`.
+fn fitting(headline: &str, width: f32) -> f32 {
+    // Segoe UI's characters average a little over half the text size in width.
+    let wide = headline.chars().count() as f32 * 0.55;
+    if wide <= 0.0 {
+        return AMOUNT_SIZE;
+    }
+    (width / wide).clamp(size::BODY, AMOUNT_SIZE)
 }
 
 /// Fast at first, settling softly.

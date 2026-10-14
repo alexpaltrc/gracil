@@ -148,6 +148,21 @@ impl Queue {
         true
     }
 
+    /// Puts back jobs taken off the list, where they were, as Undo after Clear does. A job whose
+    /// file was added again meanwhile stays out. Returns the ids put back.
+    pub fn restore(&mut self, jobs: Vec<Job>) -> Vec<JobId> {
+        let mut restored = Vec::new();
+        for job in jobs {
+            if let Entry::Vacant(slot) = self.keys.entry(key(&job.path)) {
+                slot.insert(job.id);
+                restored.push(job.id);
+                self.jobs.push(job);
+            }
+        }
+        self.jobs.sort_by_key(|job| job.id);
+        restored
+    }
+
     /// Removes everything except the running job (§34).
     pub fn clear(&mut self) {
         let keys = &mut self.keys;
@@ -278,5 +293,21 @@ mod tests {
         queue.remove(id);
         assert!(queue.apply(id, JobEvent::Complete).is_ok());
         queue.set_fraction(id, Some(1.0));
+    }
+
+    #[test]
+    fn restored_jobs_go_back_where_they_were() {
+        let mut queue = queue(&["a.mp4", "b.mp4", "c.mp4"]);
+        let taken: Vec<Job> = queue.jobs()[..2].to_vec();
+        for job in &taken {
+            queue.remove(job.id);
+        }
+        // Added again meanwhile: it stays as it is now, and its old entry stays out.
+        queue.add(paths(&["b.mp4"]));
+        let restored = queue.restore(taken.clone());
+        assert_eq!(restored, vec![taken[0].id]);
+        let names: Vec<String> = queue.jobs().iter().map(Job::file_name).collect();
+        assert_eq!(names, ["a.mp4", "c.mp4", "b.mp4"]);
+        assert!(queue.find(&PathBuf::from(r"C:\V\a.mp4")).is_some());
     }
 }

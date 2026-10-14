@@ -26,3 +26,8 @@ list's height seemed to need its rows measured ahead of time.
 - A small widget, `reveal.rs`, wraps the list. Like the dial and the pill, it asks for frames
   only while it moves (spec §51).
 - No new settings and no new dependencies.
+
+*Update (2026-10-13):* the same quick ease now brings each new view in. When the window's view
+changes (the work, the finished view, the question before leaving, files dragged over it), it
+fades in from the surface behind it (`appear.rs`). All of Gracil's movements share two speeds,
+quick and steady, set in one place (`motion.rs`).

@@ -34,7 +34,13 @@ pub enum Failure {
     /// 0029, ADR 0033).
     AsSmallAsItGets,
     CouldNotSave,
+    /// A finished result couldn't be put in place; choosing again may work.
+    CouldNotPlace,
     NameTaken,
+    /// Another program holds the file open.
+    InUse,
+    /// The file is no longer where it was: deleted, moved, or on a drive that was unplugged.
+    Gone,
     /// An animated image (ADR 0034, item 1).
     Animated,
     /// GIF, camera RAW or JPEG XL (ADR 0034, item 1).
@@ -299,6 +305,10 @@ fn video_outcome(result: Result<Compressed, CompressError>, source: &Path) -> Ou
             info!("already as small as it gets");
             Outcome::Failed(Failure::AsSmallAsItGets)
         }
+        Err(_) if !source.exists() => {
+            warn!("the file is no longer there");
+            Outcome::Failed(Failure::Gone)
+        }
         Err(e) => {
             warn!(error = %e, "compression failed");
             Outcome::Failed(match e {
@@ -325,6 +335,10 @@ fn image_outcome(result: Result<images::CompressedImage, ImageError>, source: &P
         Err(ImageError::AsSmallAsItGets) => {
             info!("image already as small as it gets");
             Outcome::Failed(Failure::AsSmallAsItGets)
+        }
+        Err(_) if !source.exists() => {
+            warn!("the image is no longer there");
+            Outcome::Failed(Failure::Gone)
         }
         Err(e) => {
             warn!(error = %e, "image compression failed");
@@ -380,13 +394,29 @@ pub fn place(
         }
         .map_err(|e| {
             warn!(error = %e, ?choice, "could not place result");
-            match e.kind() {
-                io::ErrorKind::AlreadyExists => Failure::NameTaken,
-                _ => Failure::CouldNotSave,
-            }
+            placing_failure(&e, &source)
         });
         let _ = block_on(sender.send(placed));
     })
+}
+
+/// Why a result couldn't be put in place, in the user's terms.
+fn placing_failure(error: &io::Error, source: &Path) -> Failure {
+    // Windows' "being used by another process", "locked by another process", and ReplaceFile's
+    // "couldn't remove the original", which is nearly always the same thing.
+    const IN_USE: [i32; 3] = [32, 33, 1175];
+    if error.kind() == io::ErrorKind::AlreadyExists {
+        Failure::NameTaken
+    } else if !source.exists() {
+        Failure::Gone
+    } else if error
+        .raw_os_error()
+        .is_some_and(|code| IN_USE.contains(&code))
+    {
+        Failure::InUse
+    } else {
+        Failure::CouldNotPlace
+    }
 }
 
 /// Deletes a result the user did not keep. The original is never involved.
