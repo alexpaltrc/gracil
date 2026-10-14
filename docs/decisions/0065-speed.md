@@ -32,6 +32,10 @@ and every safeguard of ADRs 0049, 0051, 0063 and 0064 still holds.
    inside them. A hint only changes which levels are measured first: the level chosen is always
    one measured to reach the target, and on a score curve that falls steadily it is the same
    level as without a hint.
+4. **Finding out what the computer can do, all at once.** At start, FFmpeg's listings and each
+   graphics card encoder's test encodes run at the same time, each card's settings still tried
+   best first; the first card in the usual order (ADR 0052) whose test passed is used. Nothing
+   is kept from one start to the next.
 
 **Consequences.**
 
@@ -50,3 +54,6 @@ and every safeguard of ADRs 0049, 0051, 0063 and 0064 still holds.
 
   A second 1080p video like the first measured 2 levels instead of 5 (about 15 s instead of
   37 s), and chose the same level.
+- Starting the engine (finding FFmpeg and what the computer can do) went from about 525 ms to
+  about 485 ms on the reference computer. Cards that are listed but come after the one used are
+  now tested too, at the same time; their tests fail or pass quietly.

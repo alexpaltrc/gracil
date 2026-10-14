@@ -31,7 +31,10 @@ and points to FFmpeg's source commit and to the builder's scripts with every lib
 
 ## Capabilities
 
-Detected once per process (`Capabilities::detect`):
+Detected once per process (`Capabilities::detect`), never kept from one run to the next. The
+listings (`-hwaccels`, `-filters`, `-h encoder=libx265`, `-codecs`) and each listed card
+encoder's test encodes run at the same time, on scoped threads; each card's tiers are still tried
+best first, and the first card in the order below whose test passed is used (ADR 0065).
 
 - **Card encoder** (ADR 0052): `hevc_nvenc`, then `hevc_qsv`, then `hevc_amf`; the first that is
   listed *and* passes a three-frame test encode is used. A listed encoder says nothing about the

@@ -7,6 +7,7 @@
 use std::collections::HashSet;
 use std::io;
 use std::process::Stdio;
+use std::thread;
 
 use tracing::info;
 
@@ -139,24 +140,54 @@ pub struct Capabilities {
 }
 
 impl Capabilities {
+    /// Every listing and every card's test encodes run at once, each card's tiers still best
+    /// first, so detecting takes about as long as the slowest card (ADR 0065). Nothing is kept
+    /// from one run of Gracil to the next: a new driver or card is seen at the next start.
     pub fn detect(toolchain: &Toolchain, encoders: &Encoders) -> Self {
-        let on_the_card = VideoEncoder::ON_THE_CARD
+        let listed: Vec<VideoEncoder> = VideoEncoder::ON_THE_CARD
             .into_iter()
             .filter(|encoder| encoders.contains(encoder.name()))
-            .find_map(|encoder| {
-                HardwareLevel::BEST_FIRST
-                    .into_iter()
-                    .find(|&level| card_encodes(toolchain, encoder, level))
-                    .map(|level| (encoder, level))
-            });
+            .collect();
+        let listing = |args: &'static [&'static str]| move || capture(toolchain, args);
+        let (tiers, hwaccels, filters, x265_help) = thread::scope(|scope| {
+            let cards: Vec<_> = listed
+                .iter()
+                .map(|&encoder| {
+                    scope.spawn(move || {
+                        HardwareLevel::BEST_FIRST
+                            .into_iter()
+                            .find(|&level| card_encodes(toolchain, encoder, level))
+                    })
+                })
+                .collect();
+            let hwaccels = scope.spawn(listing(&["-hide_banner", "-hwaccels"]));
+            let filters = scope.spawn(listing(&["-hide_banner", "-filters"]));
+            let x265 = scope.spawn(listing(&["-hide_banner", "-h", "encoder=libx265"]));
+            let joined = |result: thread::Result<io::Result<String>>| {
+                result.unwrap_or_else(|_| Err(io::Error::other("a listing thread failed")))
+            };
+            let tiers: Vec<Option<HardwareLevel>> = cards
+                .into_iter()
+                .map(|card| card.join().ok().flatten())
+                .collect();
+            (
+                tiers,
+                joined(hwaccels.join()),
+                joined(filters.join()),
+                joined(x265.join()),
+            )
+        });
+        // The first card in order of preference whose test passed.
+        let on_the_card = listed
+            .into_iter()
+            .zip(tiers)
+            .find_map(|(encoder, level)| level.map(|level| (encoder, level)));
         let (encoder, hardware) =
             on_the_card.unwrap_or((VideoEncoder::X265, HardwareLevel::Legacy));
         let cuda_decode = encoder == VideoEncoder::Nvenc
-            && capture(toolchain, &["-hide_banner", "-hwaccels"])
-                .is_ok_and(|listing| listing.lines().any(|line| line.trim() == "cuda"));
-        let filters = capture(toolchain, &["-hide_banner", "-filters"]).unwrap_or_default();
-        let x265_10bit = capture(toolchain, &["-hide_banner", "-h", "encoder=libx265"])
-            .is_ok_and(|help| help.contains("yuv420p10le"));
+            && hwaccels.is_ok_and(|listing| listing.lines().any(|line| line.trim() == "cuda"));
+        let filters = filters.unwrap_or_default();
+        let x265_10bit = x265_help.is_ok_and(|help| help.contains("yuv420p10le"));
 
         let capabilities = Self {
             encoder,

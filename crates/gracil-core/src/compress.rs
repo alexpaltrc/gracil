@@ -44,8 +44,16 @@ impl Engine {
 
     /// An engine for an FFmpeg that has already been found.
     pub fn with(resolved: Resolved) -> Self {
-        let capabilities = Capabilities::detect(&resolved.toolchain, &resolved.encoders);
-        let decoders = Decoders::list(&resolved.toolchain).unwrap_or_else(|error| {
+        // What FFmpeg decodes is listed while the hardware is detected (ADR 0065).
+        let (capabilities, decoders) = std::thread::scope(|scope| {
+            let decoders = scope.spawn(|| Decoders::list(&resolved.toolchain));
+            let capabilities = Capabilities::detect(&resolved.toolchain, &resolved.encoders);
+            let decoders = decoders
+                .join()
+                .unwrap_or_else(|_| Err(io::Error::other("the listing thread failed")));
+            (capabilities, decoders)
+        });
+        let decoders = decoders.unwrap_or_else(|error| {
             warn!(%error, "could not list what FFmpeg decodes");
             Decoders::default()
         });
