@@ -98,6 +98,10 @@ and every safeguard of ADRs 0049, 0051, 0063 and 0064 still holds.
   of processor → 34.6 s, 160 s; 1080p 10-bit 22.4 s, 103 s → 19.4 s, 96 s. The quality measure
   on the processor stays the bottleneck, as ADR 0030 found; above 1440p the samples still go one
   at a time.
+
+  Everything together, first video of its kind, desktop left alone (same levels, scores and
+  predicted sizes as before): 1080p 8-bit 41.9 s → 34.4 s and 206 s → 157 s of processor; 1080p
+  10-bit 25.2 s → 18.7 s and 116 s → 96 s; 2160p 114.8 s → 95.2 s and 649 s → 495 s.
 - Starting the engine (finding FFmpeg and what the computer can do) went from about 525 ms to
   about 485 ms on the reference computer. Cards that are listed but come after the one used are
   now tested too, at the same time; their tests fail or pass quietly.
