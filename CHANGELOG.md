@@ -70,10 +70,10 @@ with it.
   Gracil** and **Exit**. The window's name in the taskbar says how the work goes too, for example
   "Gracil · compressing 42%". If a file is compressing, waiting, or finished and waiting for your
   choice, Exit first asks, and tells you exactly what would happen.
-- Click the marble next to the clock and a small window opens beside it, wherever your taskbar is.
-  It shows the file being compressed and how far along it is, and its ring pauses and resumes
-  (stopping is left to the big window). It also says how many more files are waiting and where a
-  finished one went, and you can drop more files on it. When a file is done, you can choose
+- Click the marble next to the clock and a small window opens at once beside it, wherever your
+  taskbar is. It shows the file being compressed and how far along it is, and its ring pauses and
+  resumes (stopping is left to the big window). It also says how many more files are waiting and
+  where a finished one went, and you can drop more files on it. When a file is done, you can choose
   **Replace** or **Save copy** right there, without opening the big window. It stays open while you
   do other things until you close it or click the marble again; **Open Gracil** in it brings up the
   big window.

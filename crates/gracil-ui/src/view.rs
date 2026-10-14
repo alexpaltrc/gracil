@@ -58,6 +58,10 @@ const MINI_NAME_CHARS: usize = 22;
 
 pub fn view(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     if state.is_mini(window) {
+        // Kept hidden between openings, it draws nothing, so nothing in it moves.
+        if !state.mini_is_open() {
+            return column![].into();
+        }
         return mini(state, window);
     }
     let hovering = state.hovering == Some(window);

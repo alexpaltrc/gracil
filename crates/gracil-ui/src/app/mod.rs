@@ -137,8 +137,13 @@ pub struct Gracil {
     unseen_problem: Option<JobId>,
     /// The file that went wrong unseen, which the mini-window shows first while it is open.
     problem_in_mini: Option<JobId>,
-    /// The mini-window next to the tray icon, while it is open (spec §55).
+    /// The mini-window next to the tray icon (spec §55), once made; it is kept, hidden, while
+    /// closed.
     mini: Option<window::Id>,
+    /// Its handle, once Windows has made it.
+    mini_handle: Option<u64>,
+    /// Whether the mini-window is open.
+    mini_shown: bool,
     /// Windows just shown but still out of sight, until they have drawn themselves, so they never
     /// appear blank (white) first: their handle, how many frames they have started and where
     /// they belong.
@@ -220,6 +225,8 @@ pub enum Message {
     /// The mini-window's "Open Gracil".
     OpenMain,
     CloseMini,
+    /// Time to make the mini-window, hidden, so the first click on the tray icon shows it at once.
+    MakeMini,
     /// The mini-window exists, still hidden, and can be put next to the tray icon.
     MiniReady(u64),
     /// The mini-window is on screen; it is put in place again in case the screen's scale
@@ -320,6 +327,8 @@ impl Gracil {
             unseen_problem: None,
             problem_in_mini: None,
             mini: None,
+            mini_handle: None,
+            mini_shown: false,
             revealing: HashMap::new(),
             settings,
             summary: Summary::default(),
@@ -331,6 +340,7 @@ impl Gracil {
         let tasks = Task::batch([
             system::theme().map(Message::ThemeChanged),
             work::start_engine().map(Message::EngineStarted),
+            after(windows::MINI_MADE_AFTER, Message::MakeMini),
         ]);
         (state, tasks)
     }
@@ -605,27 +615,26 @@ impl Gracil {
                 self.show_main()
             }
             Message::CloseMini => self.close_mini(),
-            Message::MiniReady(handle) => {
-                self.place_mini(handle);
-                match self.mini {
-                    Some(id) => self
-                        .reveal(id, handle)
-                        .chain(Task::done(Message::MiniShown(handle))),
-                    None => Task::none(),
-                }
-            }
+            // Without the tray icon there is nothing to click.
+            Message::MakeMini if self.tray.is_some() => self.make_mini(),
+            Message::MakeMini => Task::none(),
+            Message::MiniReady(handle) => self.on_mini_ready(handle),
             Message::MiniShown(handle) => {
-                if !self.mini.is_some_and(|id| self.revealing.contains_key(&id)) {
+                if self.mini_shown && !self.mini.is_some_and(|id| self.revealing.contains_key(&id))
+                {
                     self.place_mini(handle);
                 }
                 Task::none()
             }
             Message::Outside(Outside::Request(request)) => self.on_request(request),
             Message::Outside(Outside::Breath(breath)) => self.breathe(breath),
-            Message::Outside(Outside::Tray(TrayEvent::Toggle)) => match self.mini {
-                Some(_) => self.close_mini(),
-                None => self.open_mini(),
-            },
+            Message::Outside(Outside::Tray(TrayEvent::Toggle)) => {
+                if self.mini_shown {
+                    self.close_mini()
+                } else {
+                    self.open_mini()
+                }
+            }
             Message::Outside(Outside::Tray(TrayEvent::Open)) => self.show_main(),
             Message::Outside(Outside::Tray(TrayEvent::ExplorerMenu)) => {
                 self.toggle_explorer_menu();

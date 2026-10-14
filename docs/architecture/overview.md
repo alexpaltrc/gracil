@@ -97,8 +97,10 @@ confirmation; with nothing running it cancels nothing and leaves at once. If the
 created, closing the window behaves as Exit.
 
 **Mini-window.** A click on the tray icon opens a second Iced window (`view::mini`), undecorated,
-always on top and off the taskbar (ADR 0021). It opens hidden; `gracil_windows::place_near_tray`
-puts it against the taskbar's edge on the icon's screen, and only then is it shown. The app keeps
+always on top and off the taskbar (ADR 0021). Making a window takes about half a second, showing
+one a few hundredths, so it is made once, hidden, two seconds after start (or at the first click),
+and closing only hides it; while hidden it draws nothing. `gracil_windows::place_near_tray` puts it
+against the taskbar's edge on the icon's screen each time it is shown. The app keeps
 its `window::Id` apart from the main window's, so closing it never counts as closing Gracil, and
 drag-and-drop tracks which window files hover over. Its setting lives in
 `settings.rs` (`settings.txt` in the data folder) and is toggled from the tray menu. A

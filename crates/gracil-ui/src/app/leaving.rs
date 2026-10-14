@@ -107,7 +107,7 @@ impl Gracil {
         self.requested
             && !self.resident
             && !self.window_shown
-            && self.mini.is_none()
+            && !self.mini_shown
             && self.running.is_empty()
             && self.waiting_to_compress() == 0
             && !self

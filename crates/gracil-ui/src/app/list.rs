@@ -230,7 +230,7 @@ impl Gracil {
 
     /// Marks a problem the user hasn't seen, when no window is open.
     pub(super) fn note_problem(&mut self, id: JobId) {
-        if self.main.is_none() && self.mini.is_none() {
+        if self.main.is_none() && !self.mini_shown {
             self.unseen_problem = Some(id);
         }
     }

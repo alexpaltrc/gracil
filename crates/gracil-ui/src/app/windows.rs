@@ -19,6 +19,10 @@ const REVEAL_AT_THE_LATEST: Duration = Duration::from_secs(3);
 /// The mini-window's size, in logical pixels.
 const MINI_SIZE: Size = Size::new(340.0, 108.0);
 
+/// How long after starting the mini-window is made, hidden, for the first click on the tray icon:
+/// late enough not to slow a main window opening at start.
+pub(super) const MINI_MADE_AFTER: Duration = Duration::from_secs(2);
+
 /// Gives the window Gracil's icon; a window without it still works.
 pub(super) fn give_icon(handle: u64) {
     if let Err(error) = gracil_windows::set_window_icon(handle) {
@@ -51,15 +55,32 @@ impl Gracil {
         }
     }
 
-    /// Opens the mini-window next to the tray icon (spec §55). It opens hidden, is put in place,
-    /// and only then shown, so it never appears somewhere else first.
+    /// Opens the mini-window next to the tray icon (spec §55). It is shown out of sight, and put
+    /// in place only once it has drawn itself, so it never appears white or somewhere else first.
     pub(super) fn open_mini(&mut self) -> Task<Message> {
         // It opens on whatever went wrong.
         if let Some(id) = self.unseen_problem.take() {
             self.problem_in_mini = Some(id);
         }
-        if let Some(id) = self.mini {
-            return window::gain_focus(id);
+        if self.mini_shown {
+            return self.mini.map_or_else(Task::none, window::gain_focus);
+        }
+        self.mini_shown = true;
+        match (self.mini, self.mini_handle) {
+            // Kept from last time: only shown again.
+            (Some(id), Some(handle)) => self.show_mini(id, handle),
+            // Still being made: shown as soon as it is (`MiniReady`).
+            (Some(_), None) => Task::none(),
+            (None, _) => self.make_mini(),
+        }
+    }
+
+    /// Makes the mini-window, hidden. Making a window takes about half a second, and showing one
+    /// a few hundredths, so it is made once and kept, hidden, between openings: a moment after
+    /// Gracil starts (`MINI_MADE_AFTER`), or at the first click if that comes sooner.
+    pub(super) fn make_mini(&mut self) -> Task<Message> {
+        if self.mini.is_some() {
+            return Task::none();
         }
         let (id, open) = window::open(window::Settings {
             size: MINI_SIZE,
@@ -81,12 +102,31 @@ impl Gracil {
         open.then(window::raw_id::<Message>).map(Message::MiniReady)
     }
 
+    /// The mini-window exists: it is shown if it was asked for meanwhile, or else waits hidden.
+    pub(super) fn on_mini_ready(&mut self, handle: u64) -> Task<Message> {
+        self.mini_handle = Some(handle);
+        match self.mini {
+            Some(id) if self.mini_shown => self.show_mini(id, handle),
+            _ => Task::none(),
+        }
+    }
+
+    fn show_mini(&mut self, id: window::Id, handle: u64) -> Task<Message> {
+        self.place_mini(handle);
+        self.reveal(id, handle)
+            .chain(Task::done(Message::MiniShown(handle)))
+    }
+
+    /// Hides the mini-window; it is kept for the next time.
     pub(super) fn close_mini(&mut self) -> Task<Message> {
         self.problem_in_mini = None;
-        match self.mini.take() {
+        if !std::mem::take(&mut self.mini_shown) {
+            return Task::none();
+        }
+        match self.mini {
             Some(id) => {
                 self.revealing.remove(&id);
-                dismiss(id)
+                window::set_mode(id, window::Mode::Hidden)
             }
             None => Task::none(),
         }
@@ -101,6 +141,11 @@ impl Gracil {
     /// Whether `window` is the mini-window.
     pub fn is_mini(&self, window: window::Id) -> bool {
         self.mini == Some(window)
+    }
+
+    /// Whether the mini-window is open, rather than kept hidden or not made yet.
+    pub fn mini_is_open(&self) -> bool {
+        self.mini_shown
     }
 
     /// Opens the main window, or brings it forward if it is open already.

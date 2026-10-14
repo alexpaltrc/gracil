@@ -22,7 +22,11 @@ setting does not justify one.
    Windows where the icon is (`Shell_NotifyIconGetRect`), finds that screen's work area, and puts
    the window against the edge the taskbar takes, centred on the icon and always inside the work
    area. It is placed once more after it appears, in case that screen's scale changed its size.
-   Without an icon to go by, it takes the main screen's clock corner.
+   Without an icon to go by, it takes the main screen's clock corner. *Update (2026-10-14):*
+   making the window took 400–500 ms at every click, nearly all of the wait. It is now made once,
+   hidden, two seconds after Gracil starts (or at the first click, if sooner), and closing it only
+   hides it; while hidden it draws nothing. A click shows it in 15–50 ms (115 ms the first time),
+   still out of sight until it has drawn itself and then placed by the icon.
 4. The setting **Show mini-window when compressing from File Explorer** is a checkable item in the
    tray menu, saved as one line in `<data folder>\settings.txt`. A missing or damaged
    file means the default (on).
