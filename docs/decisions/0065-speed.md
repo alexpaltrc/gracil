@@ -19,6 +19,11 @@ and every safeguard of ADRs 0049, 0051, 0063 and 0064 still holds.
    files that changed alone: each file's share of every count is remembered, and a change takes
    off its old share and adds its new one. Clear and Stop take files off in one pass. In debug
    builds, every change to a list of up to 2,048 files is checked against a full count.
+2. **Samples stay on the graphics card.** Decoded by NVIDIA's decoder, a sample's frames stay on
+   the card for the encoder, as they do in the real encode, and only the reference the encoded
+   sample is compared with is copied out (8-bit and 10-bit 4:2:0 sources; others as before). The
+   encoded frames and the scores are bit-identical to before; copying every frame out and back in
+   cost about a fifth of the processor.
 
 **Consequences.**
 
@@ -26,3 +31,11 @@ and every safeguard of ADRs 0049, 0051, 0063 and 0064 still holds.
   0.7 ms per change on the reference computer (some 40 s of the window's time in all, and a
   slower window as the list grew); now about 40 ms in all, the same per change whatever the
   list's length.
+- Getting a video ready, measured on the reference computer with synthetic 60 s clips (same
+  levels, scores and predicted sizes before and after; wall time, then FFmpeg's processor time):
+
+  | Clip | Before | Samples on the card |
+  |---|---|---|
+  | 1080p 8-bit | 41.9 s, 206 s | 36.7 s, 164 s |
+  | 1080p 10-bit | 25.2 s, 116 s | 21.6 s, 104 s |
+  | 2160p 8-bit | 114.8 s, 649 s | 95.3 s, 497 s |

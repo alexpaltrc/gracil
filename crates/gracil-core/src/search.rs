@@ -90,6 +90,11 @@ pub fn find_level(
         return Found::Fallback;
     }
 
+    let pixel_format = info
+        .streams
+        .iter()
+        .find(|stream| stream.index == index)
+        .and_then(|stream| stream.pixel_format.as_deref());
     let mut search = Search {
         toolchain,
         input: &plan.input,
@@ -98,6 +103,8 @@ pub fn find_level(
         attempt: plan.attempt,
         capabilities: &plan.capabilities,
         picture: plan.picture,
+        cuda_frames: pixel_format
+            .and_then(|format| cuda_download(format, plan.capabilities.ten_bit(encoder))),
         starts: sample_starts(duration),
         duration,
         control,
@@ -298,6 +305,9 @@ struct Search<'a> {
     capabilities: &'a Capabilities,
     /// The video's width and height as stored, when the source says.
     picture: Option<(u32, u32)>,
+    /// How decoded frames are copied out of the graphics card for the reference, when they can
+    /// stay there for the encoder (see [`cuda_download`]).
+    cuda_frames: Option<&'static str>,
     starts: Vec<Duration>,
     duration: Duration,
     control: &'a JobControl,
@@ -403,6 +413,11 @@ impl<'a> Search<'a> {
         // With VMAF on the GPU too, the frames never leave it; otherwise they are handed over in
         // ordinary memory, where the reference is measured on the CPU (ADR 0030).
         let on_gpu = self.attempt.hw_decode && self.capabilities.vmaf_cuda;
+        // Otherwise, decoded on the card, the frames stay there for the encoder, as in the real
+        // encode, and only the reference is copied out (ADR 0065).
+        let download = self
+            .cuda_frames
+            .filter(|_| self.attempt.hw_decode && !on_gpu);
         let mut args: Vec<OsString> = Vec::with_capacity(64);
         let mut push = |values: &[&str]| args.extend(values.iter().map(OsString::from));
         push(&["-hide_banner", "-nostdin", "-nostats", "-v", "info"]);
@@ -411,6 +426,8 @@ impl<'a> Search<'a> {
             push(&["-init_hw_device", "cuda=gpu", "-filter_hw_device", "gpu"]);
             push(&["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]);
             push(&["-hwaccel_device", "gpu"]);
+        } else if download.is_some() {
+            push(&["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]);
         } else if self.attempt.hw_decode {
             push(&["-hwaccel", "cuda"]);
         }
@@ -421,8 +438,9 @@ impl<'a> Search<'a> {
 
         // The source, changed in size and rate as the real encode will be, feeds both the
         // encoder and the reference.
-        let mut changes = plan::video_filters(self.rate, on_gpu, encoder, self.capabilities);
-        let format = if on_gpu {
+        let gpu_frames = on_gpu || download.is_some();
+        let mut changes = plan::video_filters(self.rate, gpu_frames, encoder, self.capabilities);
+        let format = if gpu_frames {
             String::new()
         } else {
             changes.pop().unwrap_or_default()
@@ -448,6 +466,11 @@ impl<'a> Search<'a> {
             graph.push_str("[source]null[encode];");
             graph.push_str(&format!(
                 "[reference]scale_cuda={scale_gpu}format=yuv420p[ref]"
+            ));
+        } else if let Some(download) = download {
+            graph.push_str("[source]null[encode];");
+            graph.push_str(&format!(
+                "[reference]hwdownload,format={download},{scale_cpu}format=yuv420p[ref]"
             ));
         } else {
             graph.push_str(&format!("[source]{format}[encode];"));
@@ -495,6 +518,20 @@ impl<'a> Search<'a> {
 
 /// How each sample's frames are pooled into one score, and how many are measured.
 const VMAF_OPTIONS: &str = "pool=harmonic_mean:n_subsample=2";
+
+/// The format to copy frames of `pixel_format` out of the graphics card in, for a source whose
+/// frames can stay on the card for the encoder: 8-bit or 10-bit 4:2:0, as nearly every camera and
+/// phone records, the 10-bit kind only when the encoder writes 10-bit (`ten_bit`). The card hands
+/// such frames to the encoder exactly as FFmpeg's own conversion would, so the samples encode
+/// and score the same, to the last bit (measured on 8-bit, 10-bit and 4K clips). Anything else
+/// is copied out as before, before both branches.
+fn cuda_download(pixel_format: &str, ten_bit: bool) -> Option<&'static str> {
+    match pixel_format {
+        "yuv420p" | "nv12" => Some("nv12"),
+        "yuv420p10le" | "p010le" if ten_bit => Some("p010le"),
+        _ => None,
+    }
+}
 
 /// Where the samples start: one per [`SAMPLE_EVERY`] of video, up to [`MAX_SAMPLES`], each
 /// centred in an equal share of the video.
@@ -683,6 +720,87 @@ mod tests {
         assert_eq!(found, Some(35));
         assert_eq!(measured[0], 35);
         assert!(measured.len() <= fresh, "{measured:?}");
+    }
+
+    /// The arguments of one NVENC sample of a 1080p video, joined.
+    fn sample_line(
+        cuda_frames: Option<&'static str>,
+        hw_decode: bool,
+        rate: Option<Rate>,
+    ) -> String {
+        let toolchain = Toolchain::stand_in();
+        let control = JobControl::default();
+        let capabilities = Capabilities {
+            encoder: VideoEncoder::Nvenc,
+            cuda_decode: true,
+            hardware: standard::HardwareLevel::Full,
+            x265_10bit: true,
+            vmaf: true,
+            vmaf_cuda: false,
+        };
+        let search = Search {
+            toolchain: &toolchain,
+            input: Path::new(r"C:\v\a.mp4"),
+            stream: 0,
+            rate,
+            attempt: Attempt {
+                encoder: VideoEncoder::Nvenc,
+                hw_decode,
+                preservation: plan::Preservation::Full,
+            },
+            capabilities: &capabilities,
+            picture: Some((1920, 1080)),
+            cuda_frames,
+            starts: Vec::new(),
+            duration: Duration::from_secs(60),
+            control: &control,
+            measured: BTreeMap::new(),
+        };
+        search
+            .sample_args(Duration::from_secs(8), 30)
+            .iter()
+            .map(|arg| arg.to_str().unwrap_or_default().to_owned())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    #[test]
+    fn decoded_on_the_card_the_frames_stay_there_for_the_encoder() {
+        for (pixel_format, download) in [("yuv420p", "nv12"), ("yuv420p10le", "p010le")] {
+            let frames = cuda_download(pixel_format, true);
+            assert_eq!(frames, Some(download));
+            let line = sample_line(frames, true, None);
+            assert!(
+                line.contains("-hwaccel cuda -hwaccel_output_format cuda -ss 8.000"),
+                "{line}"
+            );
+            assert!(
+                line.contains(&format!(
+                    "[0:0]split[source][reference];[source]null[encode];\
+                     [reference]hwdownload,format={download},format=yuv420p[ref]"
+                )),
+                "{line}"
+            );
+            assert!(!line.contains("scale_cuda"), "{line}");
+        }
+        // The frame rate changes on the card, as in the real encode.
+        let line = sample_line(Some("nv12"), true, Some(Rate { num: 30, den: 1 }));
+        assert!(line.contains("[0:0]fps=30/1,split[source][reference];[source]null[encode]"));
+    }
+
+    #[test]
+    fn other_sources_are_copied_out_of_the_card_first() {
+        // 4:4:4, 12-bit, and 10-bit for an 8-bit encoder.
+        assert_eq!(cuda_download("yuv444p", true), None);
+        assert_eq!(cuda_download("yuv420p12le", true), None);
+        assert_eq!(cuda_download("yuv420p10le", false), None);
+        let line = sample_line(None, true, None);
+        assert!(line.contains("-noautorotate -hwaccel cuda -ss"), "{line}");
+        assert!(line.contains("[source]format=p010le[encode];[reference]format=yuv420p[ref]"));
+        // Decoding on the processor after the card failed.
+        let line = sample_line(Some("nv12"), false, None);
+        assert!(!line.contains("hwaccel"), "{line}");
+        assert!(line.contains("[source]format=p010le[encode];[reference]format=yuv420p[ref]"));
     }
 
     #[test]

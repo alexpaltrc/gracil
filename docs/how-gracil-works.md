@@ -289,6 +289,9 @@ see a difference. So instead of squeezing every video the same amount, Gracil me
   it normally. Easy videos come out much smaller; demanding ones keep the detail they need.
 - This takes a few seconds to a minute, while Gracil shows that it's getting ready. Stop works
   the whole time.
+- With an NVIDIA graphics card, the short moments stay on the card while they are compressed,
+  and only what they are compared with goes to the processor. That makes getting ready quicker
+  and leaves the processor freer, with exactly the same result.
 - Very short videos, and videos the measurement can't handle, use a safe standard amount
   instead.
 

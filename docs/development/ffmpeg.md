@@ -105,10 +105,24 @@ whole search. One FFmpeg process per sample does both jobs, writing nothing to d
 -map [vmaf] -f null -
 ```
 
-The loopback decoder (`-dec 0:0`) decodes what the encoder just produced. GPU decoding is used
-without `-hwaccel_output_format`, so both branches get ordinary frames; if it fails, the sample is
-retried on the CPU. The last `VMAF score:` line in the error output is the score; standard output
-lists every encoded frame's size.
+The loopback decoder (`-dec 0:0`) decodes what the encoder just produced. The last `VMAF score:`
+line in the error output is the score; standard output lists every encoded frame's size.
+
+**CUDA decoding (ADR 0065).** For an 8-bit or 10-bit 4:2:0 source (`pix_fmt` `yuv420p` or
+`yuv420p10le`, the 10-bit kind only for a 10-bit tier), the sample is decoded with `-hwaccel cuda
+-hwaccel_output_format cuda`: the encoder takes the CUDA frames as they are (after `fps`, as in the
+real encode), and only the reference is copied out:
+
+```text
+[0:N]fps…,split[source][reference];[source]null[encode];
+[reference]hwdownload,format=nv12|p010le,format=yuv420p[ref]
+```
+
+No `scale_cuda` conversion is used. Measured on 8-bit, 10-bit, 60 fps and 4K clips, the encoded
+frames and the scores are bit-identical to decoding into ordinary frames, and the samples take
+about a fifth less processor. Other sources (4:4:4, 12-bit, 10-bit with an 8-bit tier) are decoded
+with `-hwaccel cuda` alone, so both branches get ordinary frames. Either way, if GPU decoding
+fails, the sample is retried on the CPU.
 
 VMAF measures every other frame (`n_subsample=2`, ADR 0030). With `libvmaf_cuda`, the input is
 decoded with `-hwaccel_output_format cuda` on a named device (`-init_hw_device cuda=gpu

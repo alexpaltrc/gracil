@@ -67,6 +67,8 @@ with it.
   like. Exit no longer keeps you waiting either.
 - With tens of thousands of files on the list, the window stays as smooth as with a few, and
   **Clear** and **Stop** answer at once.
+- Videos spend less time getting ready, above all on computers with an NVIDIA graphics card, and
+  leave the processor freer meanwhile. The result is exactly the same as before.
 - Gracil never lets the computer run too hot, and it never has to stop to cool down. It keeps
   the graphics card at about 70 °C at most, whether it is NVIDIA, Intel or AMD, as long as the
   card tells Windows its temperature: above that it eases off little by
