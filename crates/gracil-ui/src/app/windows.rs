@@ -23,6 +23,24 @@ const MINI_SIZE: Size = Size::new(340.0, 108.0);
 /// late enough not to slow a main window opening at start.
 pub(super) const MINI_MADE_AFTER: Duration = Duration::from_secs(2);
 
+/// Brings a new window into view once its first frame is on screen (ADR 0066). By the time this
+/// is asked, Iced has drawn that frame and handed it to Windows, and waiting for Windows to put
+/// what it was handed on screen is enough; it is waited for twice, to be safe. Where that can't be
+/// waited for, a short moment is, as before. Whichever comes first of this and the third frame
+/// brings the window into view.
+fn composed(id: window::Id) -> Task<Message> {
+    let (done, waited) = iced::futures::channel::oneshot::channel();
+    std::thread::spawn(move || {
+        let flushed = (0..2).try_for_each(|_| gracil_windows::wait_for_screen());
+        if let Err(error) = flushed {
+            warn!(%error, "could not wait for the screen; waiting a moment instead");
+            std::thread::sleep(SETTLE_AFTER_FIRST_FRAME);
+        }
+        let _ = done.send(());
+    });
+    Task::perform(waited, move |_| Message::Drawn(id))
+}
+
 /// Gives the window Gracil's icon; a window without it still works.
 pub(super) fn give_icon(handle: u64) {
     if let Err(error) = gracil_windows::set_window_icon(handle) {
@@ -46,11 +64,8 @@ impl Gracil {
         };
         *frames += 1;
         match *frames {
-            1 => after(SETTLE_AFTER_FIRST_FRAME, Message::Drawn(id)),
-            FRAMES_BEFORE_REVEAL.. => {
-                self.bring_into_view(id);
-                Task::none()
-            }
+            1 => composed(id),
+            FRAMES_BEFORE_REVEAL.. => self.bring_into_view(id),
             _ => Task::none(),
         }
     }
@@ -176,22 +191,34 @@ impl Gracil {
             Ok(home) => home,
             Err(error) => {
                 warn!(%error, "could not move a new window aside");
-                return show;
+                return Task::batch([show, self.in_view(id)]);
             }
         };
         self.revealing.insert(id, (handle, 0, home));
         Task::batch([show, after(REVEAL_AT_THE_LATEST, Message::Reveal(id))])
     }
 
-    pub(super) fn bring_into_view(&mut self, id: window::Id) {
+    pub(super) fn bring_into_view(&mut self, id: window::Id) -> Task<Message> {
         let Some((handle, _, home)) = self.revealing.remove(&id) else {
-            return;
+            return Task::none();
         };
         if self.mini == Some(id) {
             // Placed again: the screen's scale may have changed its size meanwhile.
             self.place_mini(handle);
         } else if let Err(error) = gracil_windows::unpark(handle, home) {
             warn!(%error, "could not bring a new window into view");
+        }
+        self.in_view(id)
+    }
+
+    /// A window is in view. Once the main window is, Gracil finds out what the computer can do,
+    /// if nothing asked for it sooner (ADR 0066): until then, that work would only slow the
+    /// window's first moment.
+    fn in_view(&mut self, id: window::Id) -> Task<Message> {
+        if self.main == Some(id) {
+            self.start_engine()
+        } else {
+            Task::none()
         }
     }
 
@@ -223,18 +250,35 @@ impl Gracil {
             None => TrayState::Idle,
         };
         // The tip shows whole percentages, so it follows the work more finely than the picture.
-        let getting_ready = self
-            .working()
-            .is_some_and(|job| job.state == JobState::Preparing);
+        // It is also what screen readers read, so every quiet state has words of its own
+        // (ADR 0066).
+        let working = self.working();
+        let getting_ready = working.is_some_and(|job| job.state == JobState::Preparing);
+        let downloading = working.is_some_and(|job| self.downloading.contains(&job.id));
+        let low_battery = self.breath.battery != pace::Battery::Fine
+            && self.left() > 0
+            && working.is_none_or(|job| self.waiting_for_battery(job.state));
+        let text = self.text;
         let tip = match (state, done) {
+            (TrayState::Error | TrayState::Paused, _) => text.tray_tip(state),
+            _ if low_battery => text.tray_low_battery.to_owned(),
             // Nothing has moved yet: it says so, as the window does, rather than "0%".
+            (TrayState::Processing(_), Some(done)) if downloading && done <= 0.0 => {
+                text.tray_downloading.to_owned()
+            }
             (TrayState::Processing(_), Some(done)) if getting_ready && done <= 0.0 => {
-                self.text.tray_getting_ready.to_owned()
+                text.tray_getting_ready.to_owned()
             }
-            (TrayState::Processing(_), Some(done)) => {
-                self.text.tray_tip(TrayState::Processing(done))
+            (TrayState::Processing(_), Some(done)) => text.tray_tip(TrayState::Processing(done)),
+            _ if self.waiting_count() > 0 => text.tray_waiting(self.waiting_count()),
+            // Files are on the list, and what the computer can do isn't known yet.
+            _ if self.left() > 0 && matches!(self.engine, EngineState::Starting) => {
+                text.tray_getting_ready.to_owned()
             }
-            _ => self.text.tray_tip(state),
+            _ => match self.finished() {
+                Some(finished) => text.tray_done(&finished),
+                None => text.tray_tip(state),
+            },
         };
         (state, tip)
     }

@@ -9,6 +9,7 @@
 use std::io;
 
 use windows_sys::Win32::Foundation::RECT;
+use windows_sys::Win32::Graphics::Dwm::DwmFlush;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GetWindowRect, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER, SetWindowPos,
 };
@@ -31,6 +32,20 @@ pub fn park(window: u64) -> io::Result<(i32, i32)> {
     }
     move_to(window, PARKED, PARKED)?;
     Ok((rect.left, rect.top))
+}
+
+/// Waits until Windows has put on screen every frame windows have handed it so far: then a new
+/// window's first frame is there, and it can come into view without a white flash. Returns at
+/// once with an error where Windows can't be waited for that way.
+pub fn wait_for_screen() -> io::Result<()> {
+    // SAFETY: takes no arguments; it only waits for the desktop's next composition.
+    #[allow(unsafe_code)]
+    let result = unsafe { DwmFlush() };
+    if result < 0 {
+        Err(io::Error::from_raw_os_error(result))
+    } else {
+        Ok(())
+    }
 }
 
 /// Puts a parked window back where it was.

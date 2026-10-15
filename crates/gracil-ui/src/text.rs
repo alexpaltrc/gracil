@@ -106,6 +106,20 @@ pub struct Text {
     pub prepare_question: &'static str,
     /// The tray's tip and the window's title while the work is getting ready, before 1%.
     pub tray_getting_ready: &'static str,
+    /// A file kept only online is being downloaded before it is got ready (ADR 0066).
+    pub downloading: &'static str,
+    /// The tray's tip and the window's title while it is.
+    pub tray_downloading: &'static str,
+    /// The tray's tip and the window's title while a laptop's low battery holds the work.
+    pub tray_low_battery: &'static str,
+    /// The tray's tip and the window's title once the list is done and nothing came out smaller.
+    pub tray_done: &'static str,
+    /// The same when something did, with how much room was saved.
+    tray_done_smaller: fn(&str) -> String,
+    /// The tray's tip and the window's title while results wait for a choice and nothing runs.
+    tray_waiting: fn(usize, &str) -> String,
+    /// Under the count of files that failed, when they failed for different reasons.
+    most_often: fn(&str) -> String,
     smaller: fn(u32) -> String,
     in_all: fn(&str, u32) -> String,
     less: fn(&str) -> String,
@@ -122,8 +136,8 @@ pub struct Text {
     replaced_by: fn(&str) -> String,
     tray_tip: fn(TrayState) -> String,
     /// What Exit stops: how many files are being worked on, how many wait, and how many results
-    /// wait for a choice, each also written.
-    exit_explanation: fn([usize; 3], [&str; 3]) -> String,
+    /// wait for a choice, each also written; and whether folders are still being looked through.
+    exit_explanation: fn([usize; 3], [&str; 3], bool) -> String,
     failures: Failures,
 }
 
@@ -271,12 +285,48 @@ impl Text {
     }
 
     /// What Exit will do to the work in progress (spec §54.1): how many files being worked on
-    /// stop, how many files waiting are kept for next time, and how many results nobody chose
-    /// for are let go, to be made again next time (ADR 0009, ADR 0042).
-    pub fn exit_explanation(&self, stopping: usize, waiting: usize, unchosen: usize) -> String {
+    /// stop, how many files waiting are kept for next time, how many results nobody chose for
+    /// are let go, to be made again next time (ADR 0009, ADR 0042), and, when folders are still
+    /// being looked through, that they are kept too (ADR 0066).
+    pub fn exit_explanation(
+        &self,
+        stopping: usize,
+        waiting: usize,
+        unchosen: usize,
+        looking: bool,
+    ) -> String {
         let counts = [stopping, waiting, unchosen];
         let written = counts.map(number);
-        (self.exit_explanation)(counts, [&written[0], &written[1], &written[2]])
+        (self.exit_explanation)(counts, [&written[0], &written[1], &written[2]], looking)
+    }
+
+    /// The tray's tip and the window's title while results wait for a choice and nothing else
+    /// goes on: `Gracil · 2 files waiting for you`.
+    pub fn tray_waiting(&self, count: usize) -> String {
+        (self.tray_waiting)(count, &number(count))
+    }
+
+    /// The tray's tip and the window's title once the whole list is done: `Gracil · done, 130 MB
+    /// smaller`, or only that it is done when nothing came out smaller.
+    pub fn tray_done(&self, finished: &Finished) -> String {
+        if finished.compressed > 0 {
+            (self.tray_done_smaller)(
+                &self.size(finished.saved.original - finished.saved.compressed),
+            )
+        } else {
+            self.tray_done.to_owned()
+        }
+    }
+
+    /// Why the files that failed did, under their count (ADR 0066): the reason itself when they
+    /// all share it, otherwise the most frequent one.
+    pub fn fault_reason(&self, failure: Failure, shared_by_all: bool) -> String {
+        let reason = self.failure(failure);
+        if shared_by_all {
+            reason.to_owned()
+        } else {
+            (self.most_often)(reason)
+        }
     }
 
     /// Why something went wrong, as the "!" explains it.
@@ -307,7 +357,7 @@ impl Text {
 
 static ENGLISH: Text = Text {
     release_to_add: "Release to add",
-    looking: "Looking through the folder…",
+    looking: "Looking for videos and images…",
     looking_for_more: "looking for more",
     drop_files_here: "Drop videos or images here",
     or_choose_files: "or choose files",
@@ -325,7 +375,7 @@ static ENGLISH: Text = Text {
     clear_list: "Clear the list",
     getting_ready: "Getting ready",
     waiting: "Waiting",
-    ffmpeg_missing: "Gracil is missing its video tool. Download Gracil again from where you got it",
+    ffmpeg_missing: "Gracil is missing part of itself. Download Gracil again from where you got it",
     inside_zip: "Gracil is still inside its zip. Extract it to a folder first, then open it from there",
     compressing: "Compressing",
     paused: "Paused",
@@ -380,10 +430,20 @@ static ENGLISH: Text = Text {
     nothing_to_shrink: "Nothing to make smaller",
     nothing_compressed: "Nothing was compressed",
     always_tip: "What to do with each finished file",
-    forget_unfinished: "Forget these files",
+    forget_unfinished: "Don't continue with these files. They stay as they are",
     cannot_start: "Can't start",
     prepare_question: "Prepare to delete Gracil?",
     tray_getting_ready: "Gracil · getting ready",
+    downloading: "Downloading",
+    tray_downloading: "Gracil · downloading",
+    tray_low_battery: "Gracil · low battery, waiting",
+    tray_done: "Gracil · done",
+    tray_done_smaller: |amount| format!("Gracil · done, {amount} smaller"),
+    tray_waiting: |count, written| match count {
+        1 => "Gracil · 1 file waiting for you".to_owned(),
+        _ => format!("Gracil · {written} files waiting for you"),
+    },
+    most_often: |reason| format!("Most often: {reason}"),
     compressed: |count, written| match count {
         1 => "1 file compressed".to_owned(),
         _ => format!("{written} files compressed"),
@@ -393,15 +453,16 @@ static ENGLISH: Text = Text {
         _ => format!("{written} were already compressed"),
     },
     failed: |_, written| format!("{written} couldn't be compressed"),
-    in_line: |_, written| format!("{written} more waiting"),
+    in_line: |_, written| format!("{written} more to compress"),
     tray_tip: |state| match state {
         TrayState::Idle => "Gracil".to_owned(),
         TrayState::Processing(done) => format!("Gracil · compressing {}", progress(done.into())),
         TrayState::Paused => "Gracil · paused".to_owned(),
-        TrayState::Error => "Gracil · something needs your attention".to_owned(),
+        TrayState::Error => "Gracil · click to see what happened".to_owned(),
     },
     exit_explanation: |[stopping, waiting, unchosen],
-                       [stopping_written, written, unchosen_written]| {
+                       [stopping_written, written, unchosen_written],
+                       looking| {
         let mut parts = Vec::new();
         match stopping {
             0 => {}
@@ -422,26 +483,29 @@ static ENGLISH: Text = Text {
         match unchosen {
             0 => {}
             1 => parts.push(
-                "The finished file you haven't saved yet is let go, and will be compressed again \
-                 next time."
+                "The finished file still waiting for Replace or Save copy is discarded, and will \
+                 be compressed again next time."
                     .to_owned(),
             ),
             _ => parts.push(format!(
-                "The {unchosen_written} finished files you haven't saved yet are let go, and will \
-                 be compressed again next time."
+                "The {unchosen_written} finished files still waiting for Replace or Save copy are \
+                 discarded, and will be compressed again next time."
             )),
+        }
+        if looking {
+            parts.push("Folders still being looked through are kept for next time.".to_owned());
         }
         parts.join(" ")
     },
     failures: Failures {
         no_video: "This file has no video",
         unreadable: "This file can't be opened as a video or an image",
-        could_not_compress: "This file couldn't be compressed. Try adding it again",
+        could_not_compress: "This file couldn't be compressed, so it was left as it is. Try adding it again",
         not_smaller: "This file couldn't be made smaller than the original, so it was left as it is",
         as_small_as_it_gets: "This file is already compressed about as much as it can be, so it was left as it is",
         could_not_save: "The compressed file couldn't be saved in this folder. Make sure files can be saved there, then add it again",
         could_not_place: "The compressed file couldn't be saved in this folder. Make sure files can be saved there, then choose again",
-        name_taken: "Another file already has this file's new name, so the original was kept. Save a copy instead",
+        name_taken: "A file with the new name is already here, so nothing was replaced. Save a copy instead",
         in_use: "Another program is using this file. Close it, then choose again",
         gone: "This file is no longer where it was, so it was left alone",
         animated: "Gracil doesn't compress moving images, so it was left as it is",
@@ -457,7 +521,7 @@ static ENGLISH: Text = Text {
 
 static SPANISH: Text = Text {
     release_to_add: "Suelta para agregar",
-    looking: "Buscando en la carpeta…",
+    looking: "Buscando videos e imágenes…",
     looking_for_more: "buscando más",
     drop_files_here: "Suelta videos o imágenes aquí",
     or_choose_files: "o elige archivos",
@@ -471,11 +535,11 @@ static SPANISH: Text = Text {
     save_copy: "Guardar copia",
     replace_all: "Reemplazar todos",
     save_all_copies: "Guardar todos como copias",
-    clear: "Limpiar",
-    clear_list: "Limpiar la lista",
+    clear: "Vaciar",
+    clear_list: "Vaciar la lista",
     getting_ready: "Preparando",
     waiting: "En espera",
-    ffmpeg_missing: "A Gracil le falta su herramienta de video. Vuelve a descargarlo de donde lo obtuviste",
+    ffmpeg_missing: "A Gracil le falta una parte. Vuelve a descargarlo de donde lo obtuviste",
     inside_zip: "Gracil sigue dentro de su zip. Extráelo a una carpeta primero y ábrelo desde ahí",
     compressing: "Comprimiendo",
     paused: "En pausa",
@@ -495,7 +559,7 @@ static SPANISH: Text = Text {
     in_all: |change, percent| format!("En total: {change}, {percent}% más pequeño"),
     less: |amount| format!("{amount} menos"),
     files_left: |count, written| match count {
-        0 => "No queda ninguno".to_owned(),
+        0 => "No queda ningún archivo".to_owned(),
         1 => "Queda 1 archivo".to_owned(),
         _ => format!("Quedan {written} archivos"),
     },
@@ -529,10 +593,20 @@ static SPANISH: Text = Text {
     nothing_to_shrink: "No hay nada que reducir",
     nothing_compressed: "No se comprimió nada",
     always_tip: "Qué hacer con cada archivo terminado",
-    forget_unfinished: "Olvidar estos archivos",
+    forget_unfinished: "No continuar con estos archivos. Quedan como están",
     cannot_start: "No se puede iniciar",
     prepare_question: "¿Preparar para eliminar Gracil?",
     tray_getting_ready: "Gracil · preparando",
+    downloading: "Descargando",
+    tray_downloading: "Gracil · descargando",
+    tray_low_battery: "Gracil · batería baja, en espera",
+    tray_done: "Gracil · listo",
+    tray_done_smaller: |amount| format!("Gracil · listo, {amount} menos"),
+    tray_waiting: |count, written| match count {
+        1 => "Gracil · 1 archivo te espera".to_owned(),
+        _ => format!("Gracil · {written} archivos te esperan"),
+    },
+    most_often: |reason| format!("Lo más frecuente: {reason}"),
     compressed: |count, written| match count {
         1 => "1 archivo comprimido".to_owned(),
         _ => format!("{written} archivos comprimidos"),
@@ -546,8 +620,8 @@ static SPANISH: Text = Text {
         _ => format!("{written} no se pudieron comprimir"),
     },
     in_line: |count, written| match count {
-        1 => "1 más en espera".to_owned(),
-        _ => format!("{written} más en espera"),
+        1 => "1 más por comprimir".to_owned(),
+        _ => format!("{written} más por comprimir"),
     },
     compressing_files: |count, written| match count {
         1 => "Comprimiendo 1 archivo".to_owned(),
@@ -557,10 +631,11 @@ static SPANISH: Text = Text {
         TrayState::Idle => "Gracil".to_owned(),
         TrayState::Processing(done) => format!("Gracil · comprimiendo {}", progress(done.into())),
         TrayState::Paused => "Gracil · en pausa".to_owned(),
-        TrayState::Error => "Gracil · algo necesita tu atención".to_owned(),
+        TrayState::Error => "Gracil · haz clic para ver qué pasó".to_owned(),
     },
     exit_explanation: |[stopping, waiting, unchosen],
-                       [stopping_written, written, unchosen_written]| {
+                       [stopping_written, written, unchosen_written],
+                       looking| {
         let mut parts = Vec::new();
         match stopping {
             0 => {}
@@ -584,26 +659,32 @@ static SPANISH: Text = Text {
         match unchosen {
             0 => {}
             1 => parts.push(
-                "El archivo terminado que aún no guardaste se descarta y se volverá a comprimir la \
-                 próxima vez."
+                "El archivo terminado que espera Reemplazar o Guardar copia se descarta y se \
+                 volverá a comprimir la próxima vez."
                     .to_owned(),
             ),
             _ => parts.push(format!(
-                "Los {unchosen_written} archivos terminados que aún no guardaste se descartan y se \
-                 volverán a comprimir la próxima vez."
+                "Los {unchosen_written} archivos terminados que esperan Reemplazar o Guardar copia \
+                 se descartan y se volverán a comprimir la próxima vez."
             )),
+        }
+        if looking {
+            parts.push(
+                "Las carpetas que aún se están revisando se guardan para la próxima vez."
+                    .to_owned(),
+            );
         }
         parts.join(" ")
     },
     failures: Failures {
         no_video: "Este archivo no tiene video",
         unreadable: "Este archivo no se puede abrir como video ni como imagen",
-        could_not_compress: "Este archivo no se pudo comprimir. Intenta agregarlo de nuevo",
+        could_not_compress: "Este archivo no se pudo comprimir, así que se dejó como está. Intenta agregarlo de nuevo",
         not_smaller: "Este archivo no se pudo hacer más pequeño que el original, así que se dejó como está",
         as_small_as_it_gets: "Este archivo ya está comprimido casi al máximo, así que se dejó como está",
         could_not_save: "El archivo comprimido no se pudo guardar en esta carpeta. Comprueba que se pueden guardar archivos ahí y vuelve a agregarlo",
         could_not_place: "El archivo comprimido no se pudo guardar en esta carpeta. Comprueba que se pueden guardar archivos ahí y vuelve a elegir",
-        name_taken: "Ya hay otro archivo con el nuevo nombre de este archivo, así que se conservó el original. Guarda una copia en su lugar",
+        name_taken: "Ya hay aquí un archivo con el nombre nuevo, así que no se reemplazó nada. Guarda una copia en su lugar",
         in_use: "Otro programa está usando este archivo. Ciérralo y vuelve a elegir",
         gone: "Este archivo ya no está donde estaba, así que no se tocó",
         animated: "Gracil no comprime imágenes en movimiento, así que se dejó como está",
@@ -641,31 +722,80 @@ mod tests {
     fn exit_says_exactly_what_stops() {
         let en = Text::get(Language::English);
         assert!(
-            en.exit_explanation(1, 0, 0)
+            en.exit_explanation(1, 0, 0, false)
                 .starts_with("The file being compressed stops")
         );
-        assert!(!en.exit_explanation(1, 0, 0).contains("waiting"));
+        assert!(!en.exit_explanation(1, 0, 0, false).contains("waiting"));
         assert_eq!(
-            en.exit_explanation(0, 2, 0),
+            en.exit_explanation(0, 2, 0, false),
             "2 files waiting are kept for next time."
         );
         let es = Text::get(Language::Spanish);
         assert!(
-            es.exit_explanation(1, 1, 0)
+            es.exit_explanation(1, 1, 0, false)
                 .ends_with("1 archivo en espera se guarda para la próxima vez.")
         );
         assert!(
-            es.exit_explanation(4, 0, 0)
+            es.exit_explanation(4, 0, 0, false)
                 .starts_with("Los 4 archivos que se están comprimiendo se detienen")
         );
         assert_eq!(
-            en.exit_explanation(0, 0, 1),
-            "The finished file you haven't saved yet is let go, and will be compressed again \
-             next time."
+            en.exit_explanation(0, 0, 1, false),
+            "The finished file still waiting for Replace or Save copy is discarded, and will be \
+             compressed again next time."
+        );
+        assert_eq!(
+            en.exit_explanation(0, 0, 2, false),
+            "The 2 finished files still waiting for Replace or Save copy are discarded, and will \
+             be compressed again next time."
+        );
+        assert_eq!(
+            es.exit_explanation(0, 0, 1, false),
+            "El archivo terminado que espera Reemplazar o Guardar copia se descarta y se volverá \
+             a comprimir la próxima vez."
+        );
+        assert_eq!(
+            es.exit_explanation(0, 0, 3, false),
+            "Los 3 archivos terminados que esperan Reemplazar o Guardar copia se descartan y se \
+             volverán a comprimir la próxima vez."
+        );
+        // Folders still being looked through are kept, with nothing else under way too.
+        assert_eq!(
+            en.exit_explanation(0, 0, 0, true),
+            "Folders still being looked through are kept for next time."
         );
         assert!(
-            es.exit_explanation(0, 0, 3)
-                .starts_with("Los 3 archivos terminados")
+            es.exit_explanation(0, 1, 0, true).ends_with(
+                "Las carpetas que aún se están revisando se guardan para la próxima vez."
+            )
+        );
+    }
+
+    #[test]
+    fn quiet_states_have_words_for_the_tray_and_the_title() {
+        let (en, es) = (Text::get(Language::English), Text::get(Language::Spanish));
+        assert_eq!(en.tray_waiting(1), "Gracil · 1 file waiting for you");
+        assert_eq!(en.tray_waiting(3), "Gracil · 3 files waiting for you");
+        assert_eq!(es.tray_waiting(1), "Gracil · 1 archivo te espera");
+        assert_eq!(es.tray_waiting(2), "Gracil · 2 archivos te esperan");
+        let finished = Finished {
+            saved: Sizes {
+                original: 300 * 1024 * 1024,
+                compressed: 170 * 1024 * 1024,
+            },
+            compressed: 2,
+            ..Finished::default()
+        };
+        assert_eq!(en.tray_done(&finished), "Gracil · done, 130 MB smaller");
+        assert_eq!(es.tray_done(&finished), "Gracil · listo, 130 MB menos");
+        assert_eq!(en.tray_done(&Finished::default()), "Gracil · done");
+        assert_eq!(
+            en.fault_reason(Failure::InUse, false),
+            "Most often: Another program is using this file. Close it, then choose again"
+        );
+        assert_eq!(
+            es.fault_reason(Failure::InUse, true),
+            "Otro programa está usando este archivo. Ciérralo y vuelve a elegir"
         );
     }
 
@@ -691,6 +821,9 @@ mod tests {
         assert_eq!(en.unfinished(2), "2 files were left unfinished");
         assert_eq!(es.ready(1), "1 más por decidir");
         assert_eq!(es.ready(2), "2 más por decidir");
+        assert_eq!(es.files_left(0), "No queda ningún archivo");
+        assert_eq!(en.in_line(4), "4 more to compress");
+        assert_eq!(es.in_line(1), "1 más por comprimir");
         assert_eq!(
             es.files_left(15_031),
             "Quedan 15,031 archivos",

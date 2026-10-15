@@ -7,12 +7,23 @@ use super::*;
 const TIDY_BEFORE_LEAVING: Duration = Duration::from_secs(3);
 
 /// A quick likeness of the list of unfinished files: when it changes, the list is kept again.
-pub(super) type Kept = (usize, usize, usize, usize);
+pub(super) type Kept = (usize, usize, usize, usize, usize);
 
 /// The list of unfinished files is kept at most this often while it keeps changing, so a long
 /// list isn't written out for every file done. A sudden close loses at most this much: those
-/// files are simply compressed again.
+/// files are simply compressed again. Longer lists take longer to write out, so they are kept
+/// less often, up to [`KEEP_LONG_LISTS_EVERY`] (ADR 0066).
 const KEEP_EVERY: Duration = Duration::from_secs(30);
+const KEEP_LONG_LISTS_EVERY: Duration = Duration::from_secs(180);
+
+/// How often a list of `files` is kept: every [`KEEP_EVERY`] up to a thousand files, then that
+/// much more for each thousand, up to [`KEEP_LONG_LISTS_EVERY`].
+fn keep_every(files: usize) -> Duration {
+    let thousands = u32::try_from(files.div_ceil(1000).max(1)).unwrap_or(u32::MAX);
+    KEEP_EVERY
+        .saturating_mul(thousands)
+        .min(KEEP_LONG_LISTS_EVERY)
+}
 
 impl Gracil {
     /// Exit (spec §54.1): straight away when nothing is in progress; otherwise the window opens
@@ -26,10 +37,14 @@ impl Gracil {
         self.show_main()
     }
 
-    /// Whether leaving now loses nothing: no file is being worked on or waiting its turn, and no
-    /// result waits for a choice (each would be let go, to be made again next time).
+    /// Whether leaving now loses nothing: no file is being worked on or waiting its turn, no
+    /// result waits for a choice (each would be let go, to be made again next time), and no
+    /// folder is still being looked through (ADR 0066).
     pub(super) fn nothing_to_lose(&self) -> bool {
-        self.running.is_empty() && self.waiting_to_compress() == 0 && self.waiting_count() == 0
+        self.running.is_empty()
+            && self.waiting_to_compress() == 0
+            && self.waiting_count() == 0
+            && self.gathering == 0
     }
 
     /// Stops every file being worked on, leaving their originals as they were, and leaves once
@@ -106,21 +121,32 @@ impl Gracil {
     /// Whether this Gracil was started only for background work and that work is over: nothing
     /// waiting or running, and no result left for anyone to decide on (spec §53). While the
     /// mini-window is open, the user is still looking, so Gracil waits for it to close.
+    /// A problem nobody has seen yet keeps it too, so the marble in the warning color stays until
+    /// it is clicked (ADR 0066).
     pub(super) fn background_work_done(&self) -> bool {
         self.requested
             && !self.resident
             && !self.window_shown
             && !self.mini_shown
+            && self.unseen_problem.is_none()
+            && self.gathering == 0
             && self.running.is_empty()
             && self.waiting_to_compress() == 0
             && self.summary.ready == 0
     }
 
     /// The files not finished yet, to carry on with if Gracil closes now (ADR 0042): those still
-    /// offered from last time, every file waiting or being worked on, and every result nobody
-    /// chose for yet, which is deleted on leaving and so has to be made again.
+    /// offered from last time, every file waiting or being worked on, every result nobody chose
+    /// for yet, which is deleted on leaving and so has to be made again, and what is still being
+    /// looked through, looked through again next time (ADR 0066).
     pub(super) fn unfinished(&self) -> Vec<Unfinished> {
         let mut list = self.offered.clone();
+        for (paths, choice) in self.looks.values() {
+            list.extend(paths.iter().map(|path| Unfinished {
+                path: path.clone(),
+                choice: *choice,
+            }));
+        }
         list.extend(
             self.queue
                 .jobs()
@@ -137,7 +163,7 @@ impl Gracil {
         list
     }
 
-    /// Keeps the list of unfinished files when it has changed, at most every [`KEEP_EVERY`],
+    /// Keeps the list of unfinished files when it has changed, at most every [`keep_every`],
     /// and at once when nothing is left, so a finished list is never offered again.
     pub(super) fn keep_unfinished(&mut self) {
         let likeness = (
@@ -145,11 +171,12 @@ impl Gracil {
             self.summary.waiting_for_choice,
             self.queue.len(),
             self.offered.len(),
+            self.looks.len(),
         );
-        let nothing_left = likeness.0 == 0 && likeness.1 == 0 && likeness.3 == 0;
+        let nothing_left = likeness.0 == 0 && likeness.1 == 0 && likeness.3 == 0 && likeness.4 == 0;
         let due = match self.kept {
             Some((kept, _)) if kept == likeness => false,
-            Some((_, at)) => nothing_left || at.elapsed() >= KEEP_EVERY,
+            Some((_, at)) => nothing_left || at.elapsed() >= keep_every(self.queue.len()),
             // Nothing kept yet this time: a list from last time stays until it is let go.
             None => !nothing_left,
         };
@@ -157,5 +184,18 @@ impl Gracil {
             unfinished::save(self.unfinished());
             self.kept = Some((likeness, Instant::now()));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn longer_lists_are_kept_less_often() {
+        assert_eq!(keep_every(0), KEEP_EVERY);
+        assert_eq!(keep_every(1000), KEEP_EVERY);
+        assert_eq!(keep_every(2500), Duration::from_secs(90));
+        assert_eq!(keep_every(30_000), KEEP_LONG_LISTS_EVERY);
     }
 }

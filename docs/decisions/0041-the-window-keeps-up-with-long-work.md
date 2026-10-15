@@ -1,6 +1,8 @@
 # 0041 — The window keeps up with long work
 
-**Status:** Accepted, built (2026-10-04).
+**Status:** Accepted, built (2026-10-04). Item 1 narrowed by ADR 0066: only Direct3D 12 is built
+in, so `WGPU_BACKEND` can no longer pick another way to draw, and no particular graphics card is
+asked for.
 
 **Context.** After about five hours compressing a list of 15,078 files, Gracil's window stopped
 answering: pause and stop did nothing and **View files** never opened, while the tray marble kept

@@ -171,6 +171,8 @@ impl Gracil {
                 self.queue.set_fraction(id, fraction);
                 Task::none()
             }
+            // Followed in `handle`, before it gets here.
+            Report::Downloading(_) => Task::none(),
             Report::Prepared(prepared) => {
                 self.running.remove(&id);
                 self.transition(id, JobEvent::Ready);

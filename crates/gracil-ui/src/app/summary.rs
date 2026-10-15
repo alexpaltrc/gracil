@@ -67,6 +67,9 @@ pub struct Summary {
     pub(super) ready: usize,
     /// Files that can leave the list now (see [`Gracil::can_remove`]).
     pub(super) removable: usize,
+    /// Once the list is done with files that went wrong: the most frequent reason, and whether
+    /// all of them share it (see [`Gracil::common_fault`]).
+    pub(super) common_fault: Option<(Failure, bool)>,
 }
 
 /// The results of the files on the list, by file. Remembers which ones changed, so the
@@ -288,6 +291,29 @@ impl Tally {
     }
 }
 
+/// The most frequent reason among `outcomes` that went wrong, not merely already small, and
+/// whether every one of them shares it. A tie goes to the reason counted first.
+fn common_fault<'a>(outcomes: impl Iterator<Item = &'a Outcome>) -> Option<(Failure, bool)> {
+    let mut counts: Vec<(Failure, usize)> = Vec::new();
+    for outcome in outcomes {
+        let Outcome::Failed(failure) = outcome else {
+            continue;
+        };
+        if matches!(failure, Failure::NotSmaller | Failure::AsSmallAsItGets) {
+            continue;
+        }
+        match counts.iter_mut().find(|(known, _)| known == failure) {
+            Some((_, count)) => *count += 1,
+            None => counts.push((*failure, 1)),
+        }
+    }
+    let shared_by_all = counts.len() == 1;
+    let (failure, _) = counts
+        .into_iter()
+        .reduce(|most, next| if next.1 > most.1 { next } else { most })?;
+    Some((failure, shared_by_all))
+}
+
 /// Whether a file can leave the list now: it is not running and not being put in place.
 fn can_remove(job: &Job, outcome: Option<&Outcome>) -> bool {
     job.state.is_removable() && !matches!(outcome, Some(Outcome::Ready { placing: true, .. }))
@@ -340,14 +366,20 @@ impl Gracil {
         let counts = tally.counts;
         let busy =
             !self.running.is_empty() || self.gathering > 0 || counts.left > 0 || counts.ready > 0;
-        let finished = counts.finished;
+        let finished = (!busy
+            && counts.finished.compressed + counts.finished.already + counts.finished.failed > 0)
+            .then_some(counts.finished);
+        // Only once the list is done, when little else changes: it goes through the results.
+        let common_fault = finished
+            .filter(|finished| finished.failed > 0)
+            .and_then(|_| common_fault(self.outcomes.values()));
         Summary {
             left: counts.left,
             waiting_to_compress: counts.waiting,
             waiting_for_choice: counts.choosing,
             total: counts.total,
-            finished: (!busy && finished.compressed + finished.already + finished.failed > 0)
-                .then_some(finished),
+            finished,
+            common_fault,
             working: [&tally.video_compressing, &tally.compressing, &tally.active]
                 .into_iter()
                 .find_map(|set| set.first().copied()),
@@ -449,6 +481,12 @@ impl Gracil {
             .or_else(|| self.focused())
     }
 
+    /// Whether the mini-window shows the finished list, once it is done (ADR 0066): unless it
+    /// opened on a file that went wrong, or a file was picked to look at.
+    pub fn mini_shows_done(&self) -> bool {
+        self.problem_in_mini.is_none() && self.selected.is_none()
+    }
+
     /// What happens to every finished video without asking; `None` asks (ADR 0025).
     pub fn always(&self) -> Option<Choice> {
         self.settings.always
@@ -471,6 +509,54 @@ impl Gracil {
     /// Whether any file can leave the list now, so Clear has something to do.
     pub fn any_removable(&self) -> bool {
         self.summary.removable > 0
+    }
+
+    /// Opens the list on a file that went wrong, with what happened: the first one, or, pressed
+    /// again, the one after the last shown, round to the first after the last (ADR 0066).
+    pub(super) fn show_problem(&mut self) -> Task<Message> {
+        let jobs = self.queue.jobs();
+        let after = self
+            .last_problem
+            .and_then(|last| jobs.binary_search_by_key(&last, |job| job.id).ok())
+            .map_or(0, |index| index + 1);
+        let found = (after..jobs.len())
+            .chain(0..after)
+            .find(|&index| self.is_fault(jobs[index].id));
+        self.selected = found.map(|index| jobs[index].id);
+        self.last_problem = self.selected;
+        self.drawer_open = true;
+        // The list opens on that file, however far down it is.
+        match found {
+            Some(index) => {
+                self.drawer_scroll = self.drawer_scroll.showing(index);
+                self.drawer_scroll.restore()
+            }
+            None => Task::none(),
+        }
+    }
+
+    /// Whether a file kept only online is being downloaded to be got ready (ADR 0066).
+    pub fn is_downloading(&self, id: JobId) -> bool {
+        self.downloading.contains(&id)
+    }
+
+    /// Whether the finished list went well, so it is shown with the green middle and the check
+    /// mark: something came out smaller, and Stop set nothing aside in this round of work. Files
+    /// left unfinished from an earlier time don't count against it (ADR 0066).
+    pub fn went_well(&self, finished: &Finished) -> bool {
+        finished.compressed > 0 && !(self.stopped_in_round && !self.offered.is_empty())
+    }
+
+    /// Whether Gracil rests while the computer cools down, has just woken up or its battery is
+    /// very low: then nothing in the window breathes, as nothing moves (ADR 0066).
+    pub fn is_resting(&self) -> bool {
+        self.breath.resting || self.breath.battery == pace::Battery::VeryLow
+    }
+
+    /// Why the files that went wrong did, once the list is done (ADR 0066): the most frequent
+    /// reason, and whether every one of them shares it.
+    pub fn common_fault(&self) -> Option<(Failure, bool)> {
+        self.summary.common_fault
     }
 
     /// Whether `id` failed for a reason worth explaining: not merely already small.
@@ -560,6 +646,25 @@ mod tests {
         queue.restore(taken);
         check(&mut tally, &mut queue, &mut outcomes);
         assert_eq!(tally.counts.removable, queue.len());
+    }
+
+    #[test]
+    fn the_reason_most_files_failed_for_is_found() {
+        let failed = |failure| Outcome::Failed(failure);
+        let same = [
+            failed(Failure::InUse),
+            failed(Failure::NotSmaller),
+            failed(Failure::InUse),
+        ];
+        assert_eq!(common_fault(same.iter()), Some((Failure::InUse, true)));
+        let mixed = [
+            failed(Failure::Gone),
+            failed(Failure::NoRoom),
+            failed(Failure::NoRoom),
+            failed(Failure::AsSmallAsItGets),
+        ];
+        assert_eq!(common_fault(mixed.iter()), Some((Failure::NoRoom, false)));
+        assert_eq!(common_fault([failed(Failure::NotSmaller)].iter()), None);
     }
 
     /// The window's counts over thirty thousand files, kept up to date as each file is got ready

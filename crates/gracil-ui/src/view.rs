@@ -237,7 +237,15 @@ fn shown(state: &Gracil, hovering: bool) -> u64 {
     } else if state.selected.is_none() && state.finished().is_some() {
         2.hash(&mut hasher);
     } else if let Some(job) = state.focused() {
-        (3, job.id).hash(&mut hasher);
+        // While the ring stands for a whole round of files, the files taking turns in it don't
+        // bring the view in again, so a quick list of images doesn't flicker (ADR 0066).
+        match state
+            .list_progress()
+            .filter(|_| state.selected.is_none() && state.shows_dial(job))
+        {
+            Some(list) => (5, list.round).hash(&mut hasher),
+            None => (3, job.id).hash(&mut hasher),
+        }
     } else {
         (4, state.gathering > 0).hash(&mut hasher);
     }
@@ -257,18 +265,41 @@ fn focus(state: &Gracil, hovering: bool) -> Element<'_, Message> {
     match state.focused() {
         Some(job) => focused(state, job),
         None if state.gathering > 0 => text(state.text.looking).size(size::TITLE).into(),
-        None => column![
-            text(state.text.drop_files_here).size(size::TITLE),
-            keyed(
-                Scope::Main,
-                button(text(state.text.or_choose_files).size(size::BODY))
-                    .style(style::quiet_button)
-                    .on_press(Message::ChooseFiles)
-            ),
-        ]
-        .spacing(space::S)
-        .align_x(Center)
-        .into(),
+        None => {
+            let mut empty = column![
+                text(state.text.drop_files_here).size(size::TITLE),
+                keyed(
+                    Scope::Main,
+                    button(text(state.text.or_choose_files).size(size::BODY))
+                        .style(style::quiet_button)
+                        .on_press(Message::ChooseFiles)
+                ),
+            ]
+            .spacing(space::S)
+            .align_x(Center)
+            .max_width(320);
+            if let Some(notice) = cannot_work(state) {
+                empty = empty.push(
+                    text(notice)
+                        .size(size::CAPTION)
+                        .style(style::muted)
+                        .align_x(Center),
+                );
+            }
+            empty.into()
+        }
+    }
+}
+
+/// Why nothing could be compressed now, said from the start in the empty window rather than only
+/// once files fail (ADR 0066): Gracil was opened inside its zip, or part of it is missing.
+fn cannot_work(state: &Gracil) -> Option<&'static str> {
+    if crate::place::inside_zip() {
+        Some(state.text.inside_zip)
+    } else if matches!(state.engine, EngineState::Unavailable) {
+        Some(state.text.ffmpeg_missing)
+    } else {
+        None
     }
 }
 
@@ -277,8 +308,8 @@ fn focus(state: &Gracil, hovering: bool) -> Element<'_, Message> {
 fn finished_view<'a>(state: &'a Gracil, finished: &Finished) -> Element<'a, Message> {
     let done = Done {
         headline: state.text.headline(finished),
-        // Files left unfinished, by Stop or last time, mean the list isn't all done: no check.
-        went_well: finished.compressed > 0 && state.offered.is_empty(),
+        // Files Stop set aside mean the list isn't all done: no check.
+        went_well: state.went_well(finished),
     };
     let mut how = row![].spacing(space::S).align_y(Center);
     let summary = state.text.summary(finished);
@@ -301,11 +332,21 @@ fn finished_view<'a>(state: &'a Gracil, finished: &Finished) -> Element<'a, Mess
             .on_press(Message::ShowProblem),
         ));
     }
+    let mut why = column![].align_x(Center);
+    if let Some((failure, shared_by_all)) = state.common_fault() {
+        why = why.push(
+            text(state.text.fault_reason(failure, shared_by_all))
+                .size(size::CAPTION)
+                .style(style::muted)
+                .align_x(Center),
+        );
+    }
     column![
         Canvas::new(done)
             .width(Fill)
             .height(dial::SIZE + done::AMOUNT_ROOM),
         how,
+        why,
         // The way to a new start: back to the empty window, ready for the next files.
         container(keyed(
             Scope::Main,
@@ -347,6 +388,7 @@ fn dial(state: &Gracil, job: &Job) -> Dial {
         // Before the ring starts filling, its middle breathes, so a long first moment never
         // looks stuck (ADR 0055).
         getting_ready: preparing && fraction.is_none_or(|fraction| fraction <= 0.0),
+        resting: state.is_resting(),
     }
 }
 
@@ -372,7 +414,14 @@ fn focused<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
                 _ => status(state, job),
             },
         ),
-        None => (name(job, FOCUS_NAME_CHARS, size::TITLE), status(state, job)),
+        // The whole path on hover, for a name that is shortened or one of several alike.
+        None => (
+            hint_owned(
+                name(job, FOCUS_NAME_CHARS, size::TITLE),
+                job.path.display().to_string(),
+            ),
+            status(state, job),
+        ),
     };
     let mut content = column![title]
         .spacing(space::M)
@@ -434,11 +483,20 @@ fn mini(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     let hovering = state.hovering == Some(window);
     let body: Element<'_, Message> = if hovering {
         text(state.text.release_to_add).size(size::BODY).into()
+    } else if let Some(finished) = state.finished().filter(|_| state.mini_shows_done()) {
+        mini_done(state, &finished)
     } else {
         match state.mini_job() {
             Some(job) => mini_job(state, job),
             None if state.gathering > 0 => text(state.text.looking).size(size::BODY).into(),
-            None => text(state.text.drop_files_here).size(size::BODY).into(),
+            None => {
+                let mut empty =
+                    column![text(state.text.drop_files_here).size(size::BODY)].spacing(space::XS);
+                if let Some(notice) = cannot_work(state) {
+                    empty = empty.push(text(notice).size(size::CAPTION).style(style::muted));
+                }
+                empty.into()
+            }
         }
     };
     let side = column![
@@ -465,6 +523,36 @@ fn mini(state: &Gracil, window: window::Id) -> Element<'_, Message> {
     .padding(space::S)
     .style(move |theme| style::drop_zone(theme, hovering))
     .into()
+}
+
+/// The whole list is done, in the mini-window too (ADR 0066): how much room it saved, how it went,
+/// and what failed, whose "!" opens the big window on the first of those files.
+fn mini_done<'a>(state: &'a Gracil, finished: &Finished) -> Element<'a, Message> {
+    let mut details =
+        column![text(state.text.headline(finished)).size(size::BODY)].spacing(space::XS);
+    let summary = state.text.summary(finished);
+    if !summary.is_empty() {
+        details = details.push(text(summary).size(size::CAPTION).style(style::muted));
+    }
+    if finished.failed > 0 {
+        details = details.push(
+            row![
+                text(state.text.failed(finished.failed))
+                    .size(size::CAPTION)
+                    .style(style::muted),
+                keyed(
+                    Scope::Mini,
+                    button(text("!").size(size::BODY).style(style::notice))
+                        .padding([0.0, space::XS])
+                        .style(style::quiet_button)
+                        .on_press(Message::OpenProblem),
+                ),
+            ]
+            .spacing(space::XS)
+            .align_y(Center),
+        );
+    }
+    details.into()
 }
 
 fn mini_job<'a>(state: &'a Gracil, job: &'a Job) -> Element<'a, Message> {
@@ -518,6 +606,7 @@ fn exit_question(state: &Gracil) -> Element<'_, Message> {
         state.being_worked_on(),
         state.waiting_to_compress(),
         state.waiting_count(),
+        state.gathering > 0,
     );
     let question = if state.preparing_to_delete {
         state.text.prepare_question
@@ -699,6 +788,10 @@ fn status(state: &Gracil, job: &Job) -> Status {
                 }),
             },
         },
+        // A file kept only online comes down first, at the connection's pace (ADR 0066).
+        JobState::Preparing if state.is_downloading(job.id) => {
+            Status::plain(state.text.downloading)
+        }
         JobState::Preparing => Status::plain(state.text.getting_ready),
         JobState::Compressing => match job.fraction {
             Some(fraction) => Status::plain(crate::text::progress(fraction)),
@@ -812,21 +905,29 @@ fn name(job: &Job, max_chars: usize, text_size: f32) -> Element<'static, Message
 }
 
 fn footer(state: &Gracil) -> Element<'_, Message> {
-    let mut summary = state.text.files_left(state.left());
+    // How many are left, once there are any: with none left, the rest says it (ADR 0066).
+    let mut parts = Vec::new();
+    if state.left() > 0 {
+        parts.push(state.text.files_left(state.left()));
+    }
     // "More" to decide: besides the result already shown large, as in the mini-window.
     let shown_waiting = state.focused().is_some_and(|job| state.is_waiting(job.id));
     match state.waiting_count() - usize::from(shown_waiting) {
         0 => {}
-        n => summary.push_str(&format!("  ·  {}", state.text.ready(n))),
+        n => parts.push(state.text.ready(n)),
     }
     // The room freed so far, once there is more than one result to add up (spec §32.2).
     let (total, results) = state.total();
     if results >= 2 {
-        summary.push_str(&format!("  ·  {}", state.text.less(total)));
+        parts.push(state.text.less(total));
     }
     if state.gathering > 0 {
-        summary.push_str(&format!("  ·  {}", state.text.looking_for_more));
+        parts.push(state.text.looking_for_more.to_owned());
     }
+    if parts.is_empty() {
+        parts.push(state.text.files_left(0));
+    }
+    let summary = parts.join("  ·  ");
     let toggle = if state.drawer_open {
         state.text.hide_files
     } else {
@@ -902,7 +1003,11 @@ fn drawer(state: &Gracil) -> Element<'_, Message> {
     let below = (jobs.len() - shown.end) as f32 * ROW_HEIGHT;
     let rows = jobs[shown].iter().map(|job| {
         let line = row![
-            container(name(job, DRAWER_NAME_CHARS, size::BODY)).width(Fill),
+            // The whole path on hover, or with the ring (ADR 0066).
+            hint_owned(
+                container(name(job, DRAWER_NAME_CHARS, size::BODY)).width(Fill),
+                job.path.display().to_string(),
+            ),
             status_line(&drawer_status(state, job), size::CAPTION, Explain::Hover),
         ]
         .spacing(space::M)
@@ -965,6 +1070,25 @@ fn hint<'a>(content: impl Into<Element<'a, Message>>, words: &'static str) -> El
         container(text(words).size(size::CAPTION))
             .padding(space::S)
             .max_width(TOOLTIP_WIDTH),
+        tooltip::Position::Top,
+    )
+    .style(style::tooltip)
+    .gap(space::XS)
+    .into()
+}
+
+/// `content`, with words worked out as it is built, such as a file's whole path, on hover. A
+/// path can be one long word, so it breaks anywhere rather than running out of the tip.
+fn hint_owned<'a>(content: impl Into<Element<'a, Message>>, words: String) -> Element<'a, Message> {
+    tooltip(
+        content,
+        container(
+            text(words)
+                .size(size::CAPTION)
+                .wrapping(Wrapping::WordOrGlyph),
+        )
+        .padding(space::S)
+        .max_width(TOOLTIP_WIDTH),
         tooltip::Position::Top,
     )
     .style(style::tooltip)

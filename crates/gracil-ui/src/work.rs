@@ -198,6 +198,9 @@ impl Outcome {
 pub enum Report {
     /// How far compressing has gone.
     Progress(Option<f64>),
+    /// The file is kept only online and is being downloaded to be got ready (`true`, ADR 0066),
+    /// or it is downloaded now (`false`); otherwise it counts as downloading until it is ready.
+    Downloading(bool),
     /// Getting ready is done; the file waits its turn to compress (ADR 0040).
     Prepared(Prepared),
     Done(Outcome),
@@ -322,6 +325,10 @@ pub fn gather(paths: Vec<PathBuf>, only: Option<Kind>) -> Task<Found> {
 /// room for its result (ADR 0064).
 pub fn prepare_file(engine: Arc<Engine>, source: PathBuf, control: JobControl) -> Task<Report> {
     on_thread(report_failure, move |mut sender: Sender<Report>| {
+        // Said first, so the window says why getting it ready waits on the connection.
+        if Snapshot::of(&source).is_some_and(|original| original.online_only) {
+            let _ = block_on(sender.send(Report::Downloading(true)));
+        }
         let report = prepare(&engine, &source, &control);
         let _ = block_on(sender.send(report));
     })
