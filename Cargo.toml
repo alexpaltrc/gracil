@@ -28,8 +28,11 @@ strip = "symbols"
 exoquant = "0.2.0"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "tiff", "bmp"] }
 oxipng = { version = "9.1.5", default-features = false, features = ["parallel"] }
+pulp = { version = "0.22.3", default-features = false, features = ["std", "x86-v3"] }
+rayon = "1.12.0"
 rgb = "0.8.53"
 ssimulacra2 = "0.5.1"
+yuvxyb = "0.4.2"
 gracil-core = { path = "crates/gracil-core" }
 gracil-windows = { path = "crates/gracil-windows" }
 embed-resource = "3.0.11"

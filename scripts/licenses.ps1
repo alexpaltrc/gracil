@@ -59,6 +59,18 @@ foreach ($package in $libraries) {
     }
 }
 
+# Code from another project kept inside Gracil's own crates carries its license in a LICENSE file
+# in its folder, under crates\<crate>\src (ADR 0068): SSIMULACRA2's, for one.
+$kept = Get-ChildItem -LiteralPath (Join-Path $root 'crates') -Recurse -File -Filter 'LICENSE' |
+    Where-Object { $_.FullName -like '*\src\*' } |
+    Sort-Object FullName
+foreach ($file in $kept) {
+    $label = "$($file.Directory.Name), its code built into Gracil itself"
+    $text = ([System.IO.File]::ReadAllText($file.FullName)).Replace("`r`n", "`n").Trim()
+    if (-not $texts.Contains($text)) { $texts[$text] = New-Object System.Collections.Generic.List[string] }
+    $texts[$text].Add($label)
+}
+
 $sections = New-Object System.Collections.Generic.List[string]
 $sections.Add("The Rust libraries built into gracil.exe, and their licenses.")
 foreach ($entry in $texts.GetEnumerator()) {

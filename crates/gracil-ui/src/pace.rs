@@ -25,8 +25,9 @@ const IDLE_AFTER: Duration = Duration::from_secs(60);
 pub const READ_AHEAD: usize = 2;
 
 /// Memory an image needs while it is compressed, per pixel: the decoded picture, the copies the
-/// quality measure works on and the encoder's own.
-const BYTES_PER_PIXEL: u64 = 48;
+/// quality measure works on and the encoder's own. Measured peaks are about 115 bytes a pixel
+/// (ADR 0068), so this keeps a little to spare.
+const BYTES_PER_PIXEL: u64 = 120;
 
 /// When an image's size can't be told before decoding it, it is taken to be this large, as big
 /// as a phone's largest photos.

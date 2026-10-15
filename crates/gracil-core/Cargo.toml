@@ -11,18 +11,22 @@ license.workspace = true
 exoquant.workspace = true
 image.workspace = true
 oxipng.workspace = true
+pulp.workspace = true
+rayon.workspace = true
 rgb.workspace = true
-ssimulacra2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+yuvxyb.workspace = true
 
 [features]
 # The helpers in `testing`, for the other crates' tests.
 test-support = []
 
 [dev-dependencies]
+# The crate the quality measure comes from, to check its scores stay the same to the bit.
+ssimulacra2.workspace = true
 tracing-subscriber.workspace = true
 
 [lints]

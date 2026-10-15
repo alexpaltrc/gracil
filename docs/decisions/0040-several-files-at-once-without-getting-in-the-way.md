@@ -63,3 +63,7 @@ performance, yes; scaring the user, never", even with 15,000 files.
 
 *Amended by ADR 0044:* Stop now stops the whole list; the files waiting are offered with
 **Continue** instead of carrying on.
+
+*Update (2026-10-15, ADR 0068):* an image is now counted at 120 bytes a pixel, not 48: measured
+peaks while it compresses are about 115 bytes a pixel, so the old figure let too many large images
+start at once on a computer with little memory.

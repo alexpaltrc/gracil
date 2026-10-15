@@ -1,7 +1,9 @@
 # Builds cjpegli, Google's jpegli JPEG encoder, from its official repository at a pinned commit
 # (ADR 0034). It reads JPEG directly through the copy of libjpeg-turbo that jpegli includes, built
-# first without SIMD, so NASM is not needed. Needs git and Visual Studio Build Tools with the C++
-# workload, CMake and Ninja.
+# first. That copy uses the processor's SIMD instructions, which read a JPEG quicker, when NASM is
+# installed (on the PATH, or in its usual folders); without NASM it is built without them, as
+# before (ADR 0068). Needs git and Visual Studio Build Tools with the C++ workload, CMake and
+# Ninja.
 #
 #   scripts/build-jpegli.ps1        clone (once) and build into target/jpegli/build/tools/cjpegli.exe
 #
@@ -33,11 +35,25 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 git -C $source submodule update --init --recursive --quiet
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# libjpeg-turbo, static and with the static C runtime, as jpegli is built.
-$turboOptions = @(
-    '-DCMAKE_BUILD_TYPE=Release', '-DENABLE_SHARED=OFF', '-DENABLE_STATIC=ON', '-DWITH_SIMD=OFF',
+# libjpeg-turbo, static and with the static C runtime, as jpegli is built; with SIMD when NASM is
+# found.
+$nasm = (Get-Command nasm -ErrorAction SilentlyContinue).Source
+if (-not $nasm) {
+    $nasm = @("$env:ProgramFiles\NASM\nasm.exe", "$env:LOCALAPPDATA\bin\NASM\nasm.exe") |
+        Where-Object { Test-Path $_ } |
+        Select-Object -First 1
+}
+$simd = if ($nasm) {
+    Write-Host "Building libjpeg-turbo with SIMD, with $nasm"
+    @('-DWITH_SIMD=ON', "-DCMAKE_ASM_NASM_COMPILER=`"$nasm`"")
+} else {
+    Write-Host 'NASM not found: building libjpeg-turbo without SIMD'
+    @('-DWITH_SIMD=OFF')
+}
+$turboOptions = (@(
+    '-DCMAKE_BUILD_TYPE=Release', '-DENABLE_SHARED=OFF', '-DENABLE_STATIC=ON',
     '-DWITH_TURBOJPEG=OFF', '-DWITH_CRT_DLL=OFF', "-DCMAKE_INSTALL_PREFIX=`"$turbo\out`""
-) -join ' '
+) + $simd) -join ' '
 cmd /c "call `"$vcvars`" >nul && cd /d `"$source`" && cmake -G Ninja -B `"$turbo`" -S third_party\libjpeg-turbo $turboOptions && cmake --build `"$turbo`" --target install"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

@@ -44,6 +44,7 @@ impl Engine {
 
     /// An engine for an FFmpeg that has already been found.
     pub fn with(resolved: Resolved) -> Self {
+        share::start_shared_threads();
         // What FFmpeg decodes is listed while the hardware is detected (ADR 0065).
         let (capabilities, decoders) = std::thread::scope(|scope| {
             let decoders = scope.spawn(|| Decoders::list(&resolved.toolchain));
