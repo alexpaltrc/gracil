@@ -244,11 +244,11 @@ straining.
   while you use it than a laptop does, as long as it isn't warm or saving energy.
 - Large images need more memory, so Gracil starts fewer of them at once and always leaves at least
   half of the free memory for your programs.
-- Gracil and all its tools together may never take more than about two thirds of the computer's
-  memory: Windows refuses them more, so the computer never slows to a crawl. On a computer with
-  8 GB of memory or less, or little of it free, the next video waits for the current one to finish
-  before getting ready. An image so large it would need more
-  than half of all the memory is left as it is, with a small "!".
+- Gracil's tools together may never take more than about two thirds of the computer's memory:
+  Windows refuses them more, so the computer never slows to a crawl, and Gracil itself keeps
+  working when they reach that limit. On a computer with 8 GB of memory or less, or little of it
+  free, the next video waits for the current one to finish before getting ready. An image so
+  large it would need more than half of all the memory is left as it is, with a small "!".
 - Gracil only compresses a file when its drive has room for the result and 2 GB to spare, so the
   drive never fills up. When several files go to the same drive, each one counts the room the
   others will take. Otherwise the file is left as it is, and a small "!" says the drive is
@@ -491,7 +491,8 @@ Gracil never writes over your video while it works.
 - If FFmpeg stops answering (a damaged file, a network drive that stalled), Gracil waits five
   minutes (ten for a check of a video larger than 4K), then stops it and tries the next way of
   compressing. Time paused, resting or asleep doesn't count.
-- Results are put in place one at a time, in the order you chose them. Finished files you let go
+- Results on the same drive are put in place one at a time, in the order you chose them; a slow
+  network drive never holds up saving onto another drive. Finished files you let go
   (with **×**, **Clear**, or when **Undo** goes away) are deleted in the background, so the window
   never waits on a slow drive.
 - Very long names still work: when a name is near Windows' limit, Gracil shortens the end of the
@@ -545,15 +546,18 @@ folder by folder, and compressing starts with the first ones found while Gracil 
 it finds the first, the window says **Looking through the folder…**, and after that the line with
 **View files** says **looking for more**. Looking only reads the names of the files. On a cloud
 drive, each file is still downloaded when its turn comes to be compressed, and the smaller version
-is uploaded when it is saved, so that part goes as fast as your connection. A file that was kept
-only online needs room on your drive for its download as well as for its smaller version, and once
-Gracil is done with it, the cloud drive may free up that room again, as **Free up space** does.
+is uploaded when it is saved, so that part goes as fast as your connection. A large video's
+download is never mistaken for a stuck file, and pausing or **Stop** acts on it within moments. A
+file that was kept only online needs room on your drive for its download as well as for its
+smaller version, and once Gracil is done with it (saved, let go or removed from the list, even
+before it compressed), the cloud drive may free up that room again, as **Free up space** does.
 Each image is read from the drive only once, and a few are read ahead while others compress, so
 the waiting overlaps with the work, but never so many that they crowd your computer's memory.
 
-A folder brings in only your own files: hidden and system files, the Recycle Bin, Windows'
+A folder brings in only your own files: hidden files and folders, the Recycle Bin, Windows'
 `System Volume Information` and the extra files a Mac leaves on USB drives (names starting with
-`._`, and `.Trashes`) are left out. A hidden file you add by itself is still taken.
+`._`, and `.Trashes`) are left out. Folders you gave their own icon or look, which Windows marks
+as system or read-only, are still looked through. A hidden file you add by itself is still taken.
 
 If Gracil is already running, the files join its list. If Gracil wasn't running, it starts for
 that, and when it worked without opening the big window, it closes by itself once the work is

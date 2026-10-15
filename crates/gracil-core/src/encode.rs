@@ -2,7 +2,7 @@
 
 use std::ffi::OsString;
 use std::io::{self, BufRead, BufReader, Read};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -77,11 +77,14 @@ impl JobControl {
         }
         // With one tool, one that can't be paused leaves the job running, as before. With
         // several, those already paused stay so until resumed; the first failure is reported.
+        // One that couldn't be paused because it has just ended has nothing left to run, and
+        // counts as paused: the attempt after it then starts paused too.
         let mut result = Ok(());
         let mut paused_any = false;
-        for (_, child) in &slot.children {
+        for (_, child) in &mut slot.children {
             match suspend(child.id(), true) {
                 Ok(()) => paused_any = true,
+                Err(_) if matches!(child.try_wait(), Ok(Some(_))) => paused_any = true,
                 Err(error) if result.is_ok() => result = Err(error),
                 Err(_) => {}
             }
@@ -97,11 +100,13 @@ impl JobControl {
         let Some(suspend) = slot.paused else {
             return Ok(());
         };
-        // Every tool is resumed, even if one can't be: the first failure is reported.
+        // Every tool is resumed, even if one can't be: the first failure is reported. One that
+        // has ended meanwhile needs nothing.
         let mut result = Ok(());
-        for (_, child) in &slot.children {
+        for (_, child) in &mut slot.children {
             if let Err(error) = suspend(child.id(), false)
                 && result.is_ok()
+                && !matches!(child.try_wait(), Ok(Some(_)))
             {
                 result = Err(error);
             }
@@ -145,6 +150,10 @@ pub(crate) const PATIENCE: Duration = Duration::from_secs(5 * 60);
 /// The patience for measuring the quality of a video above 4K, whose samples can go far longer
 /// between words on a slow computer.
 pub(crate) const PATIENCE_ABOVE_4K: Duration = Duration::from_secs(10 * 60);
+
+/// How long after the computer wakes a tool's silence still doesn't count: its drives, network
+/// and graphics card may take that long to come back (ADR 0063).
+const AFTER_WAKING: Duration = Duration::from_secs(30);
 
 /// Runs `plan` to completion, calling `on_progress` after every progress block.
 pub fn run(
@@ -280,18 +289,18 @@ pub(crate) fn run_program_patient(
         thread::spawn(move || tail(stderr, ERROR_TAIL, &mut || watch.heard()))
     };
 
-    for line in BufReader::new(stdout).lines() {
-        let Ok(line) = line else { break };
+    // Read as bytes: a line that isn't valid text (a file name in another code page) must not
+    // stop the reading, or the tool would block on a full pipe.
+    let mut stdout = BufReader::new(stdout);
+    let mut bytes = Vec::new();
+    while matches!(stdout.read_until(b'\n', &mut bytes), Ok(read) if read > 0) {
         watch.heard();
-        on_line(&line);
+        on_line(String::from_utf8_lossy(&bytes).trim_end_matches(['\r', '\n']));
+        bytes.clear();
     }
 
     // Stdout closes when FFmpeg exits or is killed; collect its status.
-    let (status, cancelled) = {
-        let mut slot = control.lock();
-        let status = slot.take(token).map(|mut child| child.wait());
-        (status, slot.cancelled)
-    };
+    let (status, cancelled) = wait_for(control, token);
     let log = stderr_reader.join().unwrap_or_default();
     drop(finished);
     if let Some(watchdog) = watchdog {
@@ -300,11 +309,12 @@ pub(crate) fn run_program_patient(
 
     let outcome = match status {
         _ if cancelled => EncodeOutcome::Cancelled,
+        // A tool that ended well just as it was taken for stuck still finished.
+        Some(Ok(status)) if status.success() => EncodeOutcome::Finished,
         _ if watch.stalled.load(Ordering::Relaxed) => {
             warn!(?patience, error = %log, "a tool stopped answering and was stopped");
             EncodeOutcome::Stalled
         }
-        Some(Ok(status)) if status.success() => EncodeOutcome::Finished,
         Some(Ok(status)) => {
             warn!(%status, error = %log, "FFmpeg failed");
             EncodeOutcome::Failed {
@@ -321,6 +331,39 @@ pub(crate) fn run_program_patient(
     };
     (outcome, log)
 }
+
+/// Waits for the tool numbered `token` under `control` to end, and takes it out: its exit status,
+/// and whether the job was cancelled. The lock is never held while waiting, so pausing, cancelling
+/// and the watch over the other tools of the job go on meanwhile, and this tool can still be
+/// stopped while it takes its time to end.
+fn wait_for(control: &JobControl, token: u64) -> (Option<io::Result<ExitStatus>>, bool) {
+    loop {
+        {
+            let mut slot = control.lock();
+            let cancelled = slot.cancelled;
+            let Some(child) = slot.child(token) else {
+                return (None, cancelled);
+            };
+            match child.try_wait() {
+                Ok(None) => {}
+                Ok(Some(status)) => {
+                    slot.take(token);
+                    return (Some(Ok(status)), cancelled);
+                }
+                Err(error) => {
+                    if let Some(mut child) = slot.take(token) {
+                        let _ = child.kill();
+                    }
+                    return (Some(Err(error)), cancelled);
+                }
+            }
+        }
+        thread::sleep(ENDING_EVERY);
+    }
+}
+
+/// How often [`wait_for`] looks whether a tool has ended.
+const ENDING_EVERY: Duration = Duration::from_millis(10);
 
 /// When a running tool was last heard from, and whether it was stopped for going silent.
 struct Watch {
@@ -350,7 +393,9 @@ impl Watch {
 
 /// Stops the tool numbered `token` under `control` once it has been silent for `patience` while
 /// meant to be working, until `done` says it has ended. Paused or resting, and after a sleep, the
-/// wait starts again: nothing is expected of a tool that isn't running.
+/// wait starts again: nothing is expected of a tool that isn't running. For a while after the
+/// computer wakes, and after any long gap between two looks (the computer slept before Gracil
+/// heard of it), it starts again too, so time asleep never counts as silence.
 fn watch_over(
     watch: &Watch,
     control: &JobControl,
@@ -360,12 +405,19 @@ fn watch_over(
 ) {
     let tick = (patience / 10).clamp(Duration::from_millis(10), Duration::from_secs(5));
     let mut sleeps = share::sleeps();
+    let mut looked = Instant::now();
     loop {
         match done.recv_timeout(tick) {
             Err(RecvTimeoutError::Timeout) => {}
             Ok(()) | Err(RecvTimeoutError::Disconnected) => return,
         }
-        if control.is_paused() || share::sleeps() != sleeps {
+        let gap = looked.elapsed();
+        looked = Instant::now();
+        if control.is_paused()
+            || share::sleeps() != sleeps
+            || share::woke_within(AFTER_WAKING)
+            || gap > tick + AFTER_WAKING
+        {
             sleeps = share::sleeps();
             watch.heard();
             continue;
@@ -379,6 +431,7 @@ fn watch_over(
         }
         // Only a tool still running is stopped; one that just ended is left to report itself.
         if let Some(child) = slot.child(token)
+            && matches!(child.try_wait(), Ok(None))
             && child.kill().is_ok()
         {
             watch.stalled.store(true, Ordering::Relaxed);
@@ -544,7 +597,9 @@ mod tests {
                 )
                 .0
             });
-            // Says something every half second for about five seconds, then ends well.
+            // Says something every half second for about five seconds, then ends well. Its own
+            // patience is long enough that a slow start, with every test running, is never taken
+            // for silence.
             let talking = scope.spawn(|| {
                 let mut command = Command::new("powershell");
                 command.args([
@@ -557,7 +612,7 @@ mod tests {
                     command,
                     Vec::new(),
                     &control,
-                    Duration::from_secs(2),
+                    Duration::from_secs(20),
                     &mut |_| {},
                 )
                 .0
@@ -566,6 +621,30 @@ mod tests {
         });
         assert_eq!(silent, EncodeOutcome::Stalled);
         assert_eq!(talking, EncodeOutcome::Finished);
+    }
+
+    #[test]
+    fn output_that_isnt_text_doesnt_stop_the_reading() {
+        let control = JobControl::default();
+        let mut command = Command::new("powershell");
+        command.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$out = [Console]::OpenStandardOutput(); $out.Write([byte[]](0xff, 0xfe, 0x0a), 0, 3); \
+             $out.Flush(); 1..2000 | ForEach-Object { [Console]::Out.WriteLine('line ' + $_) }",
+        ]);
+        let mut lines = Vec::new();
+        let (outcome, _) = run_program_patient(
+            command,
+            Vec::new(),
+            &control,
+            Duration::from_secs(60),
+            &mut |line| lines.push(line.to_owned()),
+        );
+        assert_eq!(outcome, EncodeOutcome::Finished);
+        assert_eq!(lines.first().map(String::as_str), Some("\u{fffd}\u{fffd}"));
+        assert_eq!(lines.last().map(String::as_str), Some("line 2000"));
     }
 
     #[test]

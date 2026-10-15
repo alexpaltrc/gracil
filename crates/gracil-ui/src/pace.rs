@@ -376,6 +376,8 @@ pub fn working(activity: Activity) {
 pub fn sleeping(asleep: bool) {
     if asleep {
         share::note_sleep();
+    } else {
+        share::note_wake();
     }
     tell_watch(|told| {
         told.asleep = asleep;

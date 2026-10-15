@@ -6,8 +6,9 @@
 
 use std::collections::HashSet;
 use std::io;
-use std::process::Stdio;
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use tracing::info;
 
@@ -251,11 +252,11 @@ fn card_encodes(toolchain: &Toolchain, encoder: VideoEncoder, level: HardwareLev
     for (name, value) in options.chain(level_options) {
         command.arg(format!("-{name}:v")).arg(value);
     }
-    let status = command
+    command
         .args(["-f", "null", "-"])
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+        .stderr(Stdio::null());
+    let status = status_within(&mut command, CARD_TEST_PATIENCE);
     let works = status.as_ref().is_ok_and(|s| s.success());
     info!(
         works,
@@ -311,16 +312,16 @@ fn card_decodes(toolchain: &Toolchain, encoder: VideoEncoder, level: HardwareLev
     for (name, value) in options.chain(level_options) {
         command.arg(format!("-{name}:v")).arg(value);
     }
-    let status = command
+    command
         .args(["-f", "null", "-"])
         .stdin(Stdio::from(frame))
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+        .stderr(Stdio::null());
+    let status = status_within(&mut command, CARD_TEST_PATIENCE);
     // Gracil's own end of the pipe goes with the command, so the first FFmpeg never waits on
     // a reader that is gone.
     drop(command);
-    let _ = made.wait();
+    let _ = ended_within(&mut made, CARD_TEST_PATIENCE);
     let works = status.as_ref().is_ok_and(|s| s.success());
     info!(
         works,
@@ -330,6 +331,37 @@ fn card_decodes(toolchain: &Toolchain, encoder: VideoEncoder, level: HardwareLev
         "graphics card test decode"
     );
     works
+}
+
+/// How long a graphics card's test may take. A test that takes longer, as with a driver that
+/// hangs, is stopped and counts as the card not being able to.
+const CARD_TEST_PATIENCE: Duration = Duration::from_secs(20);
+
+/// How often a test is looked at to see whether it has ended.
+const ENDING_EVERY: Duration = Duration::from_millis(10);
+
+/// Runs `command` to its end, within `patience`.
+fn status_within(command: &mut Command, patience: Duration) -> io::Result<ExitStatus> {
+    ended_within(&mut command.spawn()?, patience)
+}
+
+/// Waits for `child` to end, within `patience`; past it, stops it and fails.
+fn ended_within(child: &mut Child, patience: Duration) -> io::Result<ExitStatus> {
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(status);
+        }
+        if started.elapsed() >= patience {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "the test took too long and was stopped",
+            ));
+        }
+        thread::sleep(ENDING_EVERY);
+    }
 }
 
 /// Whether an `ffmpeg -filters` listing has `name`, in lines like ` .. libvmaf  VV->V  ...`.

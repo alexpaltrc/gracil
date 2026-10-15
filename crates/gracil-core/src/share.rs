@@ -6,9 +6,10 @@
 //! quiet the tools and threads it starts and how much memory is free, and, through
 //! [`allow_threads`], how many processor threads Gracil may use right now.
 
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock, PoisonError};
 use std::thread;
+use std::time::{Duration, Instant};
 
 /// What the program running the engine does for it. Each is optional in effect: without a host,
 /// nothing is quieted and free memory is unknown.
@@ -105,6 +106,22 @@ pub fn note_sleep() {
 /// How many times the computer has gone to sleep, to compare before and after a step.
 pub(crate) fn sleeps() -> u64 {
     SLEEPS.load(Ordering::Relaxed)
+}
+
+/// When the computer last woke up, if it has slept since Gracil started.
+static WOKE: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// Tells the engine the computer has just woken up. For a while after it, a tool's silence is not
+/// taken for being stuck.
+pub fn note_wake() {
+    *WOKE.lock().unwrap_or_else(PoisonError::into_inner) = Some(Instant::now());
+}
+
+/// Whether the computer woke up less than `within` ago.
+pub(crate) fn woke_within(within: Duration) -> bool {
+    WOKE.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .is_some_and(|woke| woke.elapsed() < within)
 }
 
 #[cfg(test)]

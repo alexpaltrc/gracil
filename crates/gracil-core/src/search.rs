@@ -529,7 +529,9 @@ impl<'a> Search<'a> {
             match run.outcome {
                 EncodeOutcome::Finished => return run.sample(),
                 EncodeOutcome::Cancelled => return Err(Halt::Cancelled),
-                EncodeOutcome::Failed { .. } if share::sleeps() != sleeps && !tried_again => {
+                EncodeOutcome::Failed { .. } | EncodeOutcome::Stalled
+                    if share::sleeps() != sleeps && !tried_again =>
+                {
                     info!("the computer slept during a sample; measuring it again");
                     tried_again = true;
                 }

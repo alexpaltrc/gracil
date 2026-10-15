@@ -5,8 +5,8 @@ use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::panic::{self, AssertUnwindSafe};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::path::{Component, Path, PathBuf};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
@@ -211,8 +211,36 @@ fn report_failure() -> Report {
 /// A file got ready, handed from the thread that got it ready to the one that compresses it.
 #[derive(Debug, Clone)]
 pub struct Prepared {
-    stage: Arc<Mutex<Option<Stage>>>,
+    held: Arc<Held>,
     original: Snapshot,
+}
+
+/// What a file got ready holds, shared by every copy of its [`Prepared`].
+#[derive(Debug)]
+struct Held {
+    stage: Mutex<Option<Stage>>,
+    source: PathBuf,
+    original: Snapshot,
+}
+
+impl Drop for Held {
+    /// A file let go before it compressed (cleared, removed or stopped) is given back to its cloud
+    /// drive, if it was kept only online, as one done with any other way is (ADR 0064). Away
+    /// from the window, which a slow drive would otherwise freeze.
+    fn drop(&mut self) {
+        let never_compressed = self
+            .stage
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_some();
+        if never_compressed && self.original.online_only {
+            let (source, original) = (std::mem::take(&mut self.source), self.original);
+            let errand: Errand = Box::new(move || give_back(&source, original));
+            if let Err(errand) = CLEANER.run(errand) {
+                errand();
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -222,16 +250,20 @@ enum Stage {
 }
 
 impl Prepared {
-    fn new(stage: Stage, original: Snapshot) -> Self {
+    fn new(stage: Stage, source: &Path, original: Snapshot) -> Self {
         Self {
-            stage: Arc::new(Mutex::new(Some(stage))),
+            held: Arc::new(Held {
+                stage: Mutex::new(Some(stage)),
+                source: source.to_path_buf(),
+                original,
+            }),
             original,
         }
     }
 
     /// For an image, how many pixels it has, when its header told.
     pub fn pixels(&self) -> Option<u64> {
-        match self.stage.lock().ok()?.as_ref()? {
+        match self.held.stage.lock().ok()?.as_ref()? {
             Stage::Image(image) => image.pixels(),
             Stage::Video(_) => None,
         }
@@ -239,7 +271,7 @@ impl Prepared {
 
     /// For an image, how many bytes of it are held in memory, waiting their turn.
     pub fn bytes(&self) -> u64 {
-        let Ok(stage) = self.stage.lock() else {
+        let Ok(stage) = self.held.stage.lock() else {
             return 0;
         };
         match stage.as_ref() {
@@ -249,7 +281,7 @@ impl Prepared {
     }
 
     fn take(&self) -> Option<Stage> {
-        self.stage.lock().ok()?.take()
+        self.held.stage.lock().ok()?.take()
     }
 }
 
@@ -258,8 +290,9 @@ pub fn start_engine() -> Task<Option<Arc<Engine>>> {
     on_thread(
         || None,
         |mut sender: Sender<Option<Arc<Engine>>>| {
-            if let Some(dir) = toolchain::default_private_dir() {
-                tidy_leftovers(dir);
+            match toolchain::default_private_dir() {
+                Some(dir) => tidy_leftovers(dir),
+                None => swept(),
             }
             let engine = Engine::start();
             if engine.is_none() {
@@ -280,14 +313,45 @@ fn tidy_leftovers(private_dir: PathBuf) {
     let sweeping = thread::Builder::new()
         .name("gracil-sweep".into())
         .spawn(move || {
-            let swept = leftovers::sweep(&private_dir);
-            if swept != leftovers::Swept::default() {
-                info!(?swept, "files left by an earlier run");
+            let result = leftovers::sweep(&private_dir);
+            if result != leftovers::Swept::default() {
+                info!(swept = ?result, "files left by an earlier run");
             }
+            swept();
         });
     if let Err(error) = sweeping {
         warn!(%error, "files left by an earlier run stay until the next start");
+        swept();
     }
+}
+
+/// Whether the sweep of what an earlier run left is over, or won't happen.
+static SWEPT: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+
+/// The longest looking through files waits for the sweep.
+const SWEEP_PATIENCE: Duration = Duration::from_secs(10);
+
+/// Notes that the sweep is over.
+fn swept() {
+    let (done, news) = &SWEPT;
+    *done.lock().unwrap_or_else(PoisonError::into_inner) = true;
+    news.notify_all();
+}
+
+/// Waits for the sweep, at most [`SWEEP_PATIENCE`], when one of `paths` isn't there: the sweep
+/// may be about to put an original back where it was, as for a file left unfinished while it was
+/// being replaced (ADR 0017). Files that are there never wait, nor does anything once the sweep
+/// is over.
+fn wait_for_sweep_if_missing(paths: &[PathBuf]) {
+    let (done, news) = &SWEPT;
+    let is_done = || *done.lock().unwrap_or_else(PoisonError::into_inner);
+    if is_done() || paths.iter().all(|path| path.exists()) {
+        return;
+    }
+    let done = done.lock().unwrap_or_else(PoisonError::into_inner);
+    let _ = news
+        .wait_timeout_while(done, SWEEP_PATIENCE, |done| !*done)
+        .map_err(PoisonError::into_inner);
 }
 
 /// What looking through File Explorer's files and folders turns up (ADR 0037).
@@ -305,6 +369,7 @@ pub fn gather(paths: Vec<PathBuf>, only: Option<Kind>) -> Task<Found> {
     on_thread(
         || Found::Done,
         move |mut sender: Sender<Found>| {
+            wait_for_sweep_if_missing(&paths);
             media::gather_each(paths, only, &mut |files| {
                 let _ = block_on(sender.send(Found::Files(files)));
             });
@@ -346,15 +411,18 @@ fn prepare(engine: &Engine, source: &Path, control: &JobControl) -> Report {
         None
     };
     let report = match media::kind_of(source) {
+        Kind::Video if original.online_only && !download_now(source, control) => {
+            Report::Done(Outcome::Cancelled)
+        }
         Kind::Video => match compress::prepare(engine, source, control, &mut |_| {}) {
-            Ok(video) => Report::Prepared(Prepared::new(Stage::Video(video), original)),
+            Ok(video) => Report::Prepared(Prepared::new(Stage::Video(video), source, original)),
             Err(error) => Report::Done(video_outcome(Err(error), source, original)),
         },
         Kind::Image => {
             // Images are read in the background, below everything else (ADR 0063).
             gracil_windows::work_in_background();
             match images::prepare(source) {
-                Ok(image) => Report::Prepared(Prepared::new(Stage::Image(image), original)),
+                Ok(image) => Report::Prepared(Prepared::new(Stage::Image(image), source, original)),
                 Err(error) => Report::Done(image_outcome(Err(error), source, original)),
             }
         }
@@ -364,6 +432,33 @@ fn prepare(engine: &Engine, source: &Path, control: &JobControl) -> Report {
         give_back(source, original);
     }
     report
+}
+
+/// How much of a file kept only online is read at a time to bring it onto the computer.
+const DOWNLOAD_PIECE: usize = 1 << 20;
+
+/// Brings a file kept only online onto the computer by reading it through, a piece at a time,
+/// before any tool opens it (ADR 0064). A tool reading it itself would wait, silent, for the whole
+/// download, and a large one would be taken for stuck. Between pieces, a pause or rest waits and
+/// a stop stops: `false` when stopped. A file that can't be read is left for the tools to find
+/// out, as any other.
+fn download_now(source: &Path, control: &JobControl) -> bool {
+    let Ok(mut file) = fs::File::open(source) else {
+        return true;
+    };
+    let mut piece = vec![0; DOWNLOAD_PIECE];
+    loop {
+        while control.is_paused() && !control.is_cancelled() {
+            thread::sleep(Duration::from_millis(100));
+        }
+        if control.is_cancelled() {
+            return false;
+        }
+        match io::Read::read(&mut file, &mut piece) {
+            Ok(0) | Err(_) => return true,
+            Ok(_) => {}
+        }
+    }
 }
 
 /// Folders already found to take new files this run.
@@ -623,10 +718,11 @@ fn ready(
 /// Puts a result in place of the original or beside it, saved with `extension`. Returns where it
 /// ended up.
 ///
-/// Results are placed one after another, in the order chosen, by one worker that stays for the
-/// whole run (ADR 0064). An original that changed since it was compressed is left as it is and
-/// its result let go; a read-only original is never replaced, and its result stays for Save a
-/// copy.
+/// Results on one drive are placed one after another, in the order chosen, by one worker for that
+/// drive that stays for the whole run (ADR 0064), so a drive that stalls (a network share) holds
+/// up only its own. An original that changed since it was compressed is left as it is and its
+/// result let go; a read-only original is never replaced, and its result stays for Save a copy.
+/// The answer always comes, even if placing stops unexpectedly.
 pub fn place(
     temp: PathBuf,
     source: PathBuf,
@@ -635,17 +731,51 @@ pub fn place(
     choice: Choice,
 ) -> Task<Result<PathBuf, Failure>> {
     let (mut sender, receiver) = mpsc::channel(1);
+    let drive = drive_of(&source);
     let errand = Box::new(move || {
-        let placed = place_now(&temp, &source, &extension, original, choice);
+        let placed = panic::catch_unwind(AssertUnwindSafe(|| {
+            place_now(&temp, &source, &extension, original, choice)
+        }))
+        .unwrap_or_else(|_| {
+            error!("putting a result in place stopped unexpectedly");
+            Err(Failure::CouldNotPlace)
+        });
         let _ = block_on(sender.send(placed));
     });
-    match PLACER.run(errand) {
+    match placer_for(drive).run(errand) {
         Ok(()) => Task::stream(receiver),
         Err(_) => {
             error!("could not start putting results in place");
             Task::done(Err(Failure::CouldNotPlace))
         }
     }
+}
+
+/// The drive `source` is on, by its name alone (`C:` or `\\server\share`), so telling it asks
+/// nothing of a drive that may not answer. A folder mounted inside another drive counts as that
+/// drive, which only shares its worker.
+fn drive_of(source: &Path) -> OsString {
+    match source.components().next() {
+        Some(Component::Prefix(prefix)) => prefix.as_os_str().to_ascii_lowercase(),
+        _ => OsString::new(),
+    }
+}
+
+/// The workers that put results in place, one for each drive, made as first needed.
+static PLACERS: Mutex<Vec<(OsString, &'static Errands)>> = Mutex::new(Vec::new());
+
+/// The worker that puts results in place on `drive`.
+fn placer_for(drive: OsString) -> &'static Errands {
+    let mut placers = PLACERS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some((_, placer)) = placers.iter().find(|(known, _)| *known == drive) {
+        return placer;
+    }
+    // Kept for the whole run, like the worker itself; there is one for each drive used.
+    let placer: &'static Errands = Box::leak(Box::new(Errands::new("gracil-placer")));
+    placers.push((drive, placer));
+    placer
 }
 
 fn place_now(
@@ -761,8 +891,6 @@ struct Errands {
     line: OnceLock<Option<std::sync::mpsc::Sender<Errand>>>,
 }
 
-/// Puts results in place.
-static PLACER: Errands = Errands::new("gracil-placer");
 /// Deletes results nobody chose for.
 static CLEANER: Errands = Errands::new("gracil-cleaner");
 
@@ -826,5 +954,46 @@ fn on_thread<T: Send + 'static>(
             error!(%error, "could not start background work");
             Task::done(fallback())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    #[test]
+    fn each_drive_gets_its_own_placer() {
+        let drive = |path: &str| drive_of(Path::new(path));
+        assert_eq!(drive(r"C:\Videos\a.mp4"), drive(r"c:\Other\b.mp4"));
+        assert_ne!(drive(r"C:\Videos\a.mp4"), drive(r"D:\Videos\a.mp4"));
+        assert_ne!(drive(r"\\nas\videos\a.mp4"), drive(r"\\nas\photos\a.jpg"));
+        assert_eq!(drive(r"\\NAS\Videos\a.mp4"), drive(r"\\nas\videos\b.mp4"));
+        assert!(std::ptr::eq(
+            placer_for(drive(r"E:\a.mp4")),
+            placer_for(drive(r"e:\b.mp4"))
+        ));
+        assert!(!std::ptr::eq(
+            placer_for(drive(r"E:\a.mp4")),
+            placer_for(drive(r"F:\a.mp4"))
+        ));
+    }
+
+    #[test]
+    fn a_download_stops_when_asked() {
+        let dir = gracil_core::testing::fresh_dir("download");
+        let file = dir.join("online.mp4");
+        fs::write(&file, vec![7; 3 * DOWNLOAD_PIECE + 5]).unwrap();
+        assert!(download_now(&file, &JobControl::default()));
+        let stopped = JobControl::default();
+        stopped.cancel();
+        assert!(!download_now(&file, &stopped));
+        // A file that can't be read is left for the tools.
+        assert!(download_now(
+            &dir.join("missing.mp4"),
+            &JobControl::default()
+        ));
+        fs::remove_dir_all(dir).unwrap();
     }
 }
