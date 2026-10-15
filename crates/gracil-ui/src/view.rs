@@ -930,7 +930,12 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
     if parts.is_empty() {
         parts.push(state.text.files_left(0));
     }
-    let summary = parts.join("  ·  ");
+    // A long line wraps only between its parts, never inside one, so "View files" stays whole.
+    let summary = parts
+        .iter()
+        .map(|part| together(part))
+        .collect::<Vec<_>>()
+        .join("  ·  ");
     let toggle = if state.drawer_open {
         state.text.hide_files
     } else {
@@ -953,7 +958,7 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
         Some(finished) if state.selected.is_none() => {
             (finished.failed == 0 || state.drawer_open).then(|| toggle.to_owned())
         }
-        _ => Some(format!("{summary}  ·  {toggle}")),
+        _ => Some(format!("{summary}  ·  {}", together(toggle))),
     };
     let line: Element<'_, Message> = match line {
         Some(line) => keyed(
@@ -966,6 +971,11 @@ fn footer(state: &Gracil) -> Element<'_, Message> {
         None => Space::new().width(Fill).into(),
     };
     row![line, add].spacing(space::S).align_y(Center).into()
+}
+
+/// `words` kept on one line: their spaces don't break.
+fn together(words: &str) -> String {
+    words.replace(' ', "\u{a0}")
 }
 
 fn drawer(state: &Gracil) -> Element<'_, Message> {
