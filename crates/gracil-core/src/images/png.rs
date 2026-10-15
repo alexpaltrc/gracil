@@ -101,8 +101,6 @@ pub fn from_pixels(
 
 /// A version of the picture with at most `colors` colors.
 pub struct Palette {
-    pub colors: usize,
-    pub dithered: bool,
     /// The file, ready to write.
     pub png: Vec<u8>,
     /// What it looks like, pixel by pixel, to measure against the original.
@@ -162,12 +160,7 @@ pub fn palette(
     let png = raw
         .create_optimized_png(&quick_options())
         .map_err(|e| e.to_string())?;
-    Ok(Palette {
-        colors,
-        dithered,
-        png,
-        pixels: shown,
-    })
+    Ok(Palette { png, pixels: shown })
 }
 
 /// What a new PNG carries besides its pixels.
