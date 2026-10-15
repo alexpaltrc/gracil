@@ -33,7 +33,10 @@ ssimulacra2 = "0.5.1"
 gracil-core = { path = "crates/gracil-core" }
 gracil-windows = { path = "crates/gracil-windows" }
 embed-resource = "3.0.11"
-iced = { version = "0.14.0", default-features = false, features = ["wgpu", "tiny-skia", "thread-pool", "canvas", "advanced"] }
+iced = { version = "0.14.0", default-features = false, features = ["wgpu-bare", "tiny-skia", "thread-pool", "canvas", "advanced"] }
+# Only for its features: the window draws with Direct3D 12 alone, so Vulkan, OpenGL and the rest
+# of WGPU's ways to draw are left out of Gracil (ADR 0066). Kept in step with Iced's own WGPU.
+wgpu = { version = "=27.0.1", default-features = false, features = ["dx12", "wgsl", "std", "parking_lot"] }
 log = "0.4.34"
 rfd = { version = "0.17.2", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
@@ -43,4 +46,4 @@ tracing = "0.1.44"
 tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "std", "ansi"] }
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Ole", "Win32_System_Variant", "Win32_UI_Shell"] }
-windows-sys = { version = "0.61.2", features = ["Wdk_Graphics_Direct3D", "Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Diagnostics_ToolHelp", "Win32_System_IO", "Win32_System_JobObjects", "Win32_System_LibraryLoader", "Win32_System_Performance", "Win32_System_Pipes", "Win32_System_Power", "Win32_System_ProcessStatus", "Win32_System_Registry", "Win32_System_RemoteDesktop", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_Accessibility", "Win32_UI_HiDpi", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61.2", features = ["Wdk_Graphics_Direct3D", "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Diagnostics_ToolHelp", "Win32_System_IO", "Win32_System_JobObjects", "Win32_System_LibraryLoader", "Win32_System_Performance", "Win32_System_Pipes", "Win32_System_Power", "Win32_System_ProcessStatus", "Win32_System_Registry", "Win32_System_RemoteDesktop", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_Accessibility", "Win32_UI_HiDpi", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

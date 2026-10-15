@@ -34,8 +34,10 @@ Explorer's menu, if you turned them on in the menu of its marble.
 If Gracil isn't running when you send videos, it starts quietly and compresses them: without its
 big window when the **Always** line is on **Replace** or **Save copy**, and with it, to ask you,
 when it is on **Ask**, in the middle. The small window next to the clock opens so you can
-watch, unless you turned that off. When the work is done and you've closed the small window,
-Gracil quits again by itself. The next time you sign in to Windows, it starts as usual.
+watch, unless you turned that off. On **Replace** or **Save copy**, when the work is done and
+you've closed the small window, Gracil quits again by itself; if something went wrong, its marble
+turns to the warning color and Gracil waits until you click it. The next time you sign in to
+Windows, it starts as usual.
 
 ## After replacing a video, a file ending in ".bak" appeared next to it. What is it?
 

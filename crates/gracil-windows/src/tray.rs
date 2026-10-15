@@ -11,7 +11,7 @@ mod picture;
 
 use std::io;
 use std::ptr;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock, mpsc};
 use std::thread;
 
@@ -29,7 +29,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     PostMessageW, RegisterClassExW, RegisterWindowMessageW, SM_CXSMICON,
     SPI_SETCLIENTAREAANIMATION, SPI_SETHIGHCONTRAST, SetForegroundWindow, SetMenuDefaultItem,
     TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP, WM_CONTEXTMENU,
-    WM_ENDSESSION, WM_NULL, WM_QUERYENDSESSION, WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPED,
+    WM_ENDSESSION, WM_MOUSEMOVE, WM_NULL, WM_QUERYENDSESSION, WM_SETTINGCHANGE, WNDCLASSEXW,
+    WS_OVERLAPPED,
 };
 
 use crate::wide;
@@ -52,6 +53,8 @@ pub enum TrayState {
 pub enum TrayEvent {
     /// A click on the icon: show or hide the mini-window.
     Toggle,
+    /// The pointer came to the icon for the first time, so a click may follow. Sent once.
+    Pointed,
     /// Open in the icon's menu: show Gracil's window.
     Open,
     /// The menu's Send to setting was clicked, to turn it the other way.
@@ -146,6 +149,8 @@ struct Current {
 static SHARED: OnceLock<Shared> = OnceLock::new();
 /// The message File Explorer broadcasts when the taskbar is (re)created.
 static TASKBAR_CREATED: AtomicU32 = AtomicU32::new(0);
+/// Whether the pointer has come to the icon yet.
+static POINTED: AtomicBool = AtomicBool::new(false);
 
 impl Tray {
     /// Puts Gracil's icon in the notification area. `on_event` is called, on the icon's own thread,
@@ -235,8 +240,12 @@ impl Tray {
         }
     }
 
-    /// Where the icon is on the screen, in physical pixels, when the taskbar shows it.
+    /// Where the icon is on the screen, in physical pixels, when the taskbar shows it; `None`
+    /// before it is added, and the mini-window goes by the taskbar alone.
     pub(crate) fn anchor(&self) -> Option<crate::flyout::Area> {
+        if !SHARED.get().is_some_and(|shared| lock(shared).added) {
+            return None;
+        }
         let identifier = NOTIFYICONIDENTIFIER {
             cbSize: size_of::<NOTIFYICONIDENTIFIER>() as u32,
             hWnd: self.window as HWND,
@@ -279,7 +288,14 @@ fn run(started: mpsc::Sender<io::Result<usize>>) {
             return;
         }
     };
-    refresh(window);
+    // The icon is added from the loop below, so Gracil carries on starting at once instead of
+    // waiting on the taskbar, which can take a while just after signing in (ADR 0066). Until it
+    // is added, there is nothing to click and nothing to place the mini-window by.
+    // SAFETY: the window was just made on this thread; posting only queues a message.
+    #[allow(unsafe_code)]
+    unsafe {
+        PostMessageW(window, REFRESH, 0, 0)
+    };
     let _ = started.send(Ok(window as usize));
     let mut message = MSG::default();
     // SAFETY: `message` is a valid place for each message; the loop ends only if GetMessageW
@@ -356,6 +372,10 @@ unsafe extern "system" fn window_procedure(
             let event = (lparam as u32) & 0xFFFF;
             if event == NIN_SELECT || event == NIN_SELECT | NINF_KEY {
                 notify(TrayEvent::Toggle);
+            } else if event == WM_MOUSEMOVE {
+                if !POINTED.swap(true, Ordering::Relaxed) {
+                    notify(TrayEvent::Pointed);
+                }
             } else if event == WM_CONTEXTMENU {
                 let x = i32::from((wparam & 0xFFFF) as u16 as i16);
                 let y = i32::from(((wparam >> 16) & 0xFFFF) as u16 as i16);

@@ -5,12 +5,14 @@
 //! It animates itself: every value eases towards what the app says, and the dial only asks for
 //! new frames while something is still moving (spec §51).
 
+use std::cell::Cell;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use gracil_core::queue::JobId;
 use iced::alignment::Vertical;
 use iced::mouse;
+use iced::theme::Palette;
 use iced::widget::Canvas;
 use iced::widget::canvas::{self, Action, Event, Frame, Geometry, LineCap, Path, Stroke};
 use iced::widget::text::Alignment;
@@ -62,6 +64,9 @@ pub struct Dial {
     /// Gracil is getting ready and nothing has filled yet: the marble breathes softly, so the
     /// wait never looks stuck (ADR 0055).
     pub getting_ready: bool,
+    /// Gracil rests while the computer cools down, wakes up or runs low on battery: the marble
+    /// doesn't breathe, since nothing is happening (ADR 0066).
+    pub resting: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,6 +89,22 @@ pub struct State {
     /// How much the marble breathes, from 0 (steady) to 1, and where in its breath it is.
     breathing: f32,
     breath: f32,
+    /// Nothing is moving: the dial is drawn once into `still`, and drawn from it again while the
+    /// window draws for other reasons, until something changes (ADR 0066).
+    settled: bool,
+    still: canvas::Cache,
+    /// What `still` was drawn for.
+    still_for: Cell<Option<Still>>,
+}
+
+/// Everything a settled dial's picture depends on.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Still {
+    size: Size,
+    palette: Palette,
+    values: [f32; 4],
+    can_stop: bool,
+    can_pause: bool,
 }
 
 impl Dial {
@@ -132,10 +153,15 @@ impl Dial {
             self.target_play(),
             f32::from(hovered == Some(Button::PauseResume)),
             f32::from(hovered == Some(Button::Stop)),
-            f32::from(self.getting_ready && !self.paused && !motion::still()),
+            f32::from(self.getting_ready && !self.paused && !self.resting && !motion::still()),
         ]
     }
 }
+
+/// How often the dial draws while only what follows the work moves (the ring filling, the
+/// marble breathing): about thirty times a second, plenty for movements that slow, and half the
+/// drawing of every frame (spec §51, ADR 0066). What answers the pointer moves every frame.
+const STEADY_FRAME: Duration = Duration::from_millis(33);
 
 impl canvas::Program<Message> for Dial {
     type State = State;
@@ -189,6 +215,7 @@ impl canvas::Program<Message> for Dial {
             _ => {}
         }
 
+        let targets = self.targets(hovered);
         let current = [
             state.fill,
             state.play,
@@ -197,9 +224,16 @@ impl canvas::Program<Message> for Dial {
             state.breathing,
         ];
         // A breath never settles, so the dial keeps drawing while it breathes.
-        if current == self.targets(hovered) && state.breathing == 0.0 {
+        state.settled = current == targets && state.breathing == 0.0 && state.pressed.is_none();
+        if current == targets && state.breathing == 0.0 {
             state.last_frame = None;
-            None
+            return None;
+        }
+        // The pause symbol and the lit halves of the middle, which answer the pointer.
+        let quick_settled = current[1..4] == targets[1..4] && state.pressed.is_none();
+        if quick_settled {
+            let last = state.last_frame.unwrap_or_else(Instant::now);
+            Some(Action::request_redraw_at(last + STEADY_FRAME))
         } else {
             Some(Action::request_redraw())
         }
@@ -213,9 +247,47 @@ impl canvas::Program<Message> for Dial {
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
+        if !state.settled {
+            let mut frame = Frame::new(renderer, bounds.size());
+            self.paint(state, &mut frame, theme);
+            return vec![frame.into_geometry()];
+        }
+        let still = Still {
+            size: bounds.size(),
+            palette: theme.palette(),
+            values: [state.fill, state.play, state.hover_top, state.hover_bottom],
+            can_stop: self.can_stop,
+            can_pause: self.enabled(Button::PauseResume),
+        };
+        if state.still_for.get() != Some(still) {
+            state.still.clear();
+            state.still_for.set(Some(still));
+        }
+        vec![state.still.draw(renderer, bounds.size(), |frame| {
+            self.paint(state, frame, theme)
+        })]
+    }
+
+    fn mouse_interaction(
+        &self,
+        _state: &State,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+    ) -> mouse::Interaction {
+        if self.part_at(bounds, cursor).is_some() {
+            mouse::Interaction::Pointer
+        } else {
+            mouse::Interaction::default()
+        }
+    }
+}
+
+impl Dial {
+    /// Draws the dial as `state` has it into `frame`.
+    fn paint(&self, state: &State, frame: &mut Frame, theme: &Theme) {
         let palette = theme.palette();
         let tokens = style::tokens(theme);
-        let mut frame = Frame::new(renderer, bounds.size());
+        let bounds = Rectangle::with_size(frame.size());
         let center = frame.center();
         let scale = scale(bounds.size());
         let pipe_width = PIPE_WIDTH * scale;
@@ -331,7 +403,7 @@ impl canvas::Program<Message> for Dial {
         }
 
         if !self.can_stop {
-            return vec![frame.into_geometry()];
+            return;
         }
 
         // Stop sits in the middle of the bottom button; under the pointer the square gives way to
@@ -357,25 +429,8 @@ impl canvas::Program<Message> for Dial {
             align_y: Vertical::Center,
             ..canvas::Text::default()
         });
-
-        vec![frame.into_geometry()]
     }
 
-    fn mouse_interaction(
-        &self,
-        _state: &State,
-        bounds: Rectangle,
-        cursor: mouse::Cursor,
-    ) -> mouse::Interaction {
-        if self.part_at(bounds, cursor).is_some() {
-            mouse::Interaction::Pointer
-        } else {
-            mouse::Interaction::default()
-        }
-    }
-}
-
-impl Dial {
     /// The dial, its Pause and Stop each reachable with Tab and pressed with Enter or Space
     /// (ADR 0059), drawn `side` pixels wide.
     pub fn keyed(self, scope: Scope, side: f32) -> Element<'static, Message> {
@@ -532,6 +587,7 @@ mod tests {
             can_stop: true,
             stop_word: "Stop all",
             getting_ready: false,
+            resting: false,
         }
     }
 

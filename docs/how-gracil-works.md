@@ -19,8 +19,8 @@ install. Gracil comes as a zip; unpack it wherever you like, even on a USB drive
 folder next to itself, and nowhere else, so they go wherever the folder goes. If Gracil is on a
 drive it can't write to, it still compresses, it just doesn't remember your settings. To remove
 Gracil, delete its folder (see [Questions and answers](faq.md)). If you open Gracil straight from
-inside its zip, without unpacking it, it says so and asks you to extract it to a folder first, and
-it leaves Windows as it is until you open it from there.
+inside its zip, without unpacking it, it says so right away, under where to drop files, and asks
+you to extract it to a folder first, and it leaves Windows as it is until you open it from there.
 
 ## English and Spanish
 
@@ -98,15 +98,21 @@ pictures) below.
   **Space** presses the one with the ring. A button with the ring lights up as if you pointed at
   it, and shows its reminder, such as **Add files** for the **+**. Buttons you can't use yet are
   skipped. On the **Always** line, the arrow keys move the choice. With no ring, **Space** pauses
-  and resumes, **Esc** steps back (closes the list, or the small window next to the clock),
-  **Ctrl+O** chooses files and **Ctrl+Z** undoes **Clear**.
+  and resumes, **Esc** steps back (from the question before leaving, from a file you picked in the
+  list, then closes the list; in the small window next to the clock, it closes it), **Ctrl+O**
+  chooses files and
+  **Ctrl+Z** undoes **Clear**.
+- Screen readers can't read Gracil's window yet. Its name in the taskbar, which is also what the
+  marble next to the clock says, always tells how the work goes (see "Closing Gracil" below).
 - **View files**, under it, shows every video and image you added and how each one went: how much
   smaller it became, where it went (for example **−35% · Replaced**), or why it couldn't be
   compressed. With two or more done, a line at its top adds them all up, for example **In all:
   3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says how many are left, for
   example **12 files left · View files**. The count goes down as each file
-  finishes, until none are left. Only what is still on the list counts:
-  taking files off it, or **Clear**, takes them out of the total.
+  finishes; once none are left, the line says only what else there is, such as **2 more to
+  decide · View files**. Only what is still on the list counts:
+  taking files off it, or **Clear**, takes them out of the total. Point at a file's name, in the
+  list or above the ring, to see where it is: its whole path.
   The list unfolds gently from under that line and folds away when closed, quickly even with
   tens of thousands of files: Gracil only draws the rows you can see.
 - Click a file in **View files** to show it large; it stays lit in the list while it shows. To go
@@ -116,12 +122,16 @@ pictures) below.
 - When the whole list is done (nothing left waiting, being compressed or waiting for your choice),
   the window says so clearly: the ring stays full, its middle fills with green and a check mark
   draws itself, and just below, in large letters, how much room the list saved, for example **130 MB
-  smaller**. If nothing came out smaller, or files were left unfinished (by **Stop**, for example),
-  there is no check mark. When nothing came out smaller, the large line says **Nothing to make
+  smaller**. If nothing came out smaller, or **Stop** set files aside this time, there is no check
+  mark; files left unfinished from an earlier time don't take it away. When nothing came out
+  smaller, the large line says **Nothing to make
   smaller** (every file was already compressed) or **Nothing was compressed** (something went
   wrong). Under it, a quiet line says how the list went, for example **22 files compressed · 4 were
   already compressed**. Files that couldn't be compressed are counted apart, with a **!**: click it
-  and the list opens on the first of them, with what happened. Below that, **Clear the list** takes
+  and the list opens on the first of them, with what happened; come back and click it again for
+  the next one. Under the count, a quiet line says why: the reason itself when they all failed for
+  the same one, or the most frequent, for example **Most often: The drive is almost full…**.
+  Below that, **Clear the list** takes
   you back to the empty window, ready for your next files. Pick a file in **View files** to look at
   it (while files failed, the **!** is the way into the list); add more files and Gracil gets back
   to work.
@@ -183,15 +193,17 @@ FFmpeg comes inside Gracil's zip, in its `ffmpeg` folder, so there is nothing to
 never uses the internet. Its license and where to find its source code are in the `licenses`
 folder.
 
-If that folder is ever removed or damaged, Gracil can't compress videos: they show **Can't start**,
-with a **!** that says Gracil is missing its video tool. Download Gracil again from where you got
-it and it works as before. Gracil never
-downloads anything by itself.
+If that folder is ever removed or damaged, Gracil can't compress anything, videos or images: files
+show **Can't start**, with a **!** that says **Gracil is missing part of itself. Download Gracil
+again from where you got it**, and the empty window says the same right away, under where to drop
+files. Download Gracil again and it works as before. Gracil never downloads anything by itself.
 
 ## Choosing the fastest way to compress
 
-When Gracil starts, it checks what your computer can do. It does more than ask whether a feature
-exists: it runs a tiny test compression to be sure.
+Once Gracil's window is open, or as soon as you give it files, Gracil checks what your computer
+can do; a Gracil waiting quietly next to the clock does it a minute after it starts. It does more
+than ask whether a feature exists: it runs a tiny test compression to be sure. Waiting until then
+lets the window open sooner.
 
 - **With a graphics card that can compress video**, the card does the work: a recent NVIDIA
   card, an Intel one (including the graphics built into most Intel processors) or an AMD one. That
@@ -236,6 +248,11 @@ straining.
   Gracil carries on by itself.
 - Gracil only checks the computer while it is working, and only the graphics card it is using.
   With nothing to do, it leaves the computer alone.
+- Gracil's window is drawn by the graphics card Windows gives any ordinary window, so on a laptop
+  with two, it doesn't wake the larger one. The window only draws while something in it moves,
+  and the ring, which moves slowly, draws about thirty times a second rather than as often as the
+  screen allows. While Gracil rests, because the computer is warm, has just woken up or its
+  battery is very low, the marble doesn't breathe.
 - If the computer goes to sleep, Gracil rests with it, and once it wakes up it tries again
   whatever sleep interrupted.
 - While you are using the computer, Gracil takes on fewer images at once. When you have left it
@@ -543,14 +560,15 @@ Gracil looks through a folder in the background, so its window keeps responding 
 is large or lives on a network or cloud drive (OneDrive, Filen, a NAS…). The same goes for whatever
 you drop on the window or choose with **+**, however many files there are. Files join the list
 folder by folder, and compressing starts with the first ones found while Gracil keeps looking; until
-it finds the first, the window says **Looking through the folder…**, and after that the line with
-**View files** says **looking for more**. Looking only reads the names of the files. On a cloud
-drive, each file is still downloaded when its turn comes to be compressed, and the smaller version
-is uploaded when it is saved, so that part goes as fast as your connection. A large video's
-download is never mistaken for a stuck file, and pausing or **Stop** acts on it within moments. A
-file that was kept only online needs room on your drive for its download as well as for its
-smaller version, and once Gracil is done with it (saved, let go or removed from the list, even
-before it compressed), the cloud drive may free up that room again, as **Free up space** does.
+it finds the first, the window says **Looking for videos and images…**, and after that the line
+with **View files** says **looking for more**. Looking only reads the names of the files. On a
+cloud drive, each file is still downloaded when its turn comes to be compressed, and the smaller
+version is uploaded when it is saved, so that part goes as fast as your connection. A file kept
+only online says **Downloading** while it comes down. A large video's download is never mistaken
+for a stuck file, and pausing or **Stop** acts on it within moments. A file that was kept only
+online needs room on your drive for its download as well as for its smaller version, and once
+Gracil is done with it (saved, let go or removed from the list, even before it compressed), the
+cloud drive may free up that room again, as **Free up space** does.
 Each image is read from the drive only once, and a few are read ahead while others compress, so
 the waiting overlaps with the work, but never so many that they crowd your computer's memory.
 
@@ -560,8 +578,9 @@ A folder brings in only your own files: hidden files and folders, the Recycle Bi
 as system or read-only, are still looked through. A hidden file you add by itself is still taken.
 
 If Gracil is already running, the files join its list. If Gracil wasn't running, it starts for
-that, and when it worked without opening the big window, it closes by itself once the work is
-done.
+that. When the **Always** line is on **Replace** or **Save copy**, so the big window never opened,
+it closes by itself once the work is done and every file is in place, as soon as you have closed
+the small window if it opened, and clicked the marble if something went wrong.
 
 Gracil puts itself in **Send to** each time it starts, so after moving its folder, open it once
 from the new place. If you'd rather not have it there, untick **Show Gracil in Send to** in the
@@ -597,38 +616,50 @@ tells you how things are going:
   is, for the whole list when there is more than one file;
 - two bars: the compression is paused;
 - a marble in the warning color (orange-brown on a light taskbar, yellow on a dark one): something
-  went wrong while the window was closed. Click it and the small window opens on the file that
-  went wrong; the marble turns back to normal.
+  went wrong while the windows were closed. It shows once nothing is compressing any more, and
+  stays until you click it: the small window then opens on the file that went wrong, and the
+  marble turns back to normal.
 
 Pointing at the marble says the same in words, and so does Gracil's name in the taskbar and in
-Alt+Tab, for example "Gracil · compressing 42%", or "Gracil · getting ready" before the work
-starts moving. Right-click the marble for its menu: **Open
+Alt+Tab, which is also what screen readers read, for example **Gracil · compressing 42%**. Before
+the work starts moving it says **Gracil · getting ready**, or **Gracil · downloading** for a file
+kept only online; while results wait for you and nothing else goes on, **Gracil · 2 files waiting
+for you**; while a low battery holds the work, **Gracil · low battery, waiting**; once the list is
+done, **Gracil · done, 130 MB smaller** (or **Gracil · done**); and for the warning color,
+**Gracil · click to see what happened**. Right-click the marble for its menu: **Open
 Gracil**; then the settings, **Start with Windows**, **Show Gracil in Send to**, **Show Gracil in
 File Explorer's menu…** and **Show mini-window when compressing from File Explorer**; then **Prepare
 to delete Gracil** and **Exit**.
 
-Click the marble and a small window opens at once, right next to it, wherever your taskbar is. It
+Click the marble and a small window, the mini-window, opens at once, right next to it, wherever
+your taskbar is. It
 shows the file being compressed and how far along it is; click the middle of its circle to pause or
 carry on (stopping is only in the big window, where it is clear what stops). When a file is done, it
 shows how much smaller it became with **Replace** and **Save copy**, so you can choose right there
 without opening the big window (unless **Always** already chose for you). If more files finish while
 another is compressing, it says how many more are left to decide on and shows them one by one when
-the work is done. It also tells you how many more files are waiting after it and, once one is
-placed, where it went. If a file couldn't be compressed, click the small "!" beside it and the big
-window opens on that file, with the reason written out. You can drop more files or folders on it. It
+the work is done. It also tells you how many more files are still to compress, for example **3 more
+to compress**, and, once one is placed, where it went. If a file couldn't be compressed, click the
+small "!" beside it and the big window opens on that file, with the reason written out. When the
+whole list is done, it says so as the big window does: how much room was saved, how the list went
+and, with a "!" that opens the big window on the first of them, how many files couldn't be
+compressed. You can drop more files or folders on it. It
 stays open while you do other things; close it with its **×** or by clicking the marble again, and
-use **Open Gracil** in it to get the big window.
+use **Open Gracil** in it to get the big window. When Gracil started with Windows, the mini-window
+is only made the first time you point at the marble, so a Gracil waiting next to the clock all day
+costs as little as it can.
 
-When you compress from File Explorer, this small window opens by itself so you can see the
+When you compress from File Explorer, the mini-window opens by itself so you can see the
 work happen. If you'd rather it didn't, right-click the marble and untick **Show mini-window when
 compressing from File Explorer**. Gracil remembers your choice, and it never changes how files
 are compressed.
 
-**Exit** is how you quit Gracil. If nothing is compressing, waiting or waiting for your choice,
-Gracil quits straight away. Otherwise it first asks, and tells you exactly what will happen: the
-file being compressed stops and its original stays exactly as it was, files still waiting are kept
-for next time, and finished files you haven't saved yet are let go, to be compressed again next
-time (see below). Choose **Keep working**, the highlighted button, or press **Esc**, to carry on. If
+**Exit** is how you quit Gracil. If nothing is compressing, waiting or waiting for your choice, and
+no folder is still being looked through, Gracil quits straight away. Otherwise it first asks, and
+tells you exactly what will happen: the file being compressed stops and its original stays exactly
+as it was, files still waiting are kept for next time, finished files still waiting for **Replace**
+or **Save copy** are discarded, to be compressed again next time (see below), and folders still
+being looked through are kept for next time too. Choose **Keep working**, the highlighted button, or press **Esc**, to carry on. If
 the work finishes while you decide, the question goes away. Gracil quits within a few seconds, even
 if a file it was working on is on a slow network or cloud drive; only a file being put in its place
 is always finished first.
@@ -644,8 +675,9 @@ writes down the files that were left at once and stops its work, so you can carr
 If Gracil closes before its list is done, because you chose **Exit** while it worked, because
 something made it stop suddenly or because the computer was turned off, it remembers which files
 were left. The next time you open its window, a quiet line says so, for example **12 files were
-left unfinished**, with **Continue** to put them back on the list and carry on, and **×** to let
-them go. Files that were being compressed start again from their beginning; files already done
+left unfinished**, with **Continue** to put them back on the list and carry on, and **×** to not
+continue with them; they stay as they are. Folders Gracil was still looking through are looked
+through again. Files that were being compressed start again from their beginning; files already done
 aren't done again, except perhaps the last few before a sudden stop. Finished videos you
 hadn't chosen for count as unfinished, since they are deleted when Gracil closes. If you used
 File Explorer's **Replace** or **Save copy**, that choice comes back with them. The list stays

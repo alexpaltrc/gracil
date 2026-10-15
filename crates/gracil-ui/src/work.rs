@@ -198,6 +198,9 @@ impl Outcome {
 pub enum Report {
     /// How far compressing has gone.
     Progress(Option<f64>),
+    /// The file is kept only online and is being downloaded to be got ready (`true`, ADR 0066),
+    /// or it is downloaded now (`false`); otherwise it counts as downloading until it is ready.
+    Downloading(bool),
     /// Getting ready is done; the file waits its turn to compress (ADR 0040).
     Prepared(Prepared),
     Done(Outcome),
@@ -387,12 +390,25 @@ pub fn gather(paths: Vec<PathBuf>, only: Option<Kind>) -> Task<Found> {
 /// room for its result (ADR 0064).
 pub fn prepare_file(engine: Arc<Engine>, source: PathBuf, control: JobControl) -> Task<Report> {
     on_thread(report_failure, move |mut sender: Sender<Report>| {
-        let report = prepare(&engine, &source, &control);
+        // Said first, so the window says why getting it ready waits on the connection.
+        if Snapshot::of(&source).is_some_and(|original| original.online_only) {
+            let _ = block_on(sender.send(Report::Downloading(true)));
+        }
+        let mut downloaded = sender.clone();
+        let report = prepare(&engine, &source, &control, &mut || {
+            let _ = block_on(downloaded.send(Report::Downloading(false)));
+        });
         let _ = block_on(sender.send(report));
     })
 }
 
-fn prepare(engine: &Engine, source: &Path, control: &JobControl) -> Report {
+/// `downloaded` is called once a file kept only online is on the computer.
+fn prepare(
+    engine: &Engine,
+    source: &Path,
+    control: &JobControl,
+    downloaded: &mut dyn FnMut(),
+) -> Report {
     let Some(original) = Snapshot::of(source) else {
         warn!("the file is no longer there");
         return Report::Done(Outcome::Failed(Failure::Gone));
@@ -414,10 +430,11 @@ fn prepare(engine: &Engine, source: &Path, control: &JobControl) -> Report {
         Kind::Video if original.online_only && !download_now(source, control) => {
             Report::Done(Outcome::Cancelled)
         }
-        Kind::Video => match compress::prepare(engine, source, control, &mut |_| {}) {
-            Ok(video) => Report::Prepared(Prepared::new(Stage::Video(video), source, original)),
-            Err(error) => Report::Done(video_outcome(Err(error), source, original)),
-        },
+        Kind::Video if original.online_only => {
+            downloaded();
+            video_now(engine, source, control, original)
+        }
+        Kind::Video => video_now(engine, source, control, original),
         Kind::Image => {
             // Images are read in the background, below everything else (ADR 0063).
             gracil_windows::work_in_background();
@@ -432,6 +449,14 @@ fn prepare(engine: &Engine, source: &Path, control: &JobControl) -> Report {
         give_back(source, original);
     }
     report
+}
+
+/// Gets a video ready: its test samples choose its compression.
+fn video_now(engine: &Engine, source: &Path, control: &JobControl, original: Snapshot) -> Report {
+    match compress::prepare(engine, source, control, &mut |_| {}) {
+        Ok(video) => Report::Prepared(Prepared::new(Stage::Video(video), source, original)),
+        Err(error) => Report::Done(video_outcome(Err(error), source, original)),
+    }
 }
 
 /// How much of a file kept only online is read at a time to bring it onto the computer.

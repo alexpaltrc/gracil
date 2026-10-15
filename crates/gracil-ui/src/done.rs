@@ -4,10 +4,12 @@
 //!
 //! It plays once when it appears and then asks for no more frames (spec §51).
 
+use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
 use iced::alignment::Vertical;
 use iced::mouse;
+use iced::theme::Palette;
 use iced::widget::canvas::{self, Action, Event, Frame, Geometry, LineCap, LineJoin, Path, Stroke};
 use iced::widget::text::Alignment;
 use iced::{Point, Rectangle, Renderer, Size, Theme, window};
@@ -39,6 +41,11 @@ pub struct Done {
 pub struct State {
     started: Option<Instant>,
     progress: f32,
+    /// Once the entrance is over the picture stays as it is: drawn once into `still`, and drawn
+    /// from it again whenever the window draws for other reasons (ADR 0066).
+    still: canvas::Cache,
+    /// What `still` was drawn for: its size, the colors, the headline and whether it went well.
+    still_for: RefCell<Option<(Size, Palette, String, bool)>>,
 }
 
 impl canvas::Program<Message> for Done {
@@ -71,13 +78,38 @@ impl canvas::Program<Message> for Done {
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
+        if state.progress < 1.0 {
+            let mut frame = Frame::new(renderer, bounds.size());
+            self.paint(state.progress, &mut frame, theme);
+            return vec![frame.into_geometry()];
+        }
+        let still = (
+            bounds.size(),
+            theme.palette(),
+            self.headline.clone(),
+            self.went_well,
+        );
+        let mut still_for = state.still_for.borrow_mut();
+        if still_for.as_ref() != Some(&still) {
+            state.still.clear();
+            *still_for = Some(still);
+        }
+        vec![state.still.draw(renderer, bounds.size(), |frame| {
+            self.paint(1.0, frame, theme)
+        })]
+    }
+}
+
+impl Done {
+    /// Draws the finished view `progress` through its entrance into `frame`.
+    fn paint(&self, progress: f32, frame: &mut Frame, theme: &Theme) {
         let palette = theme.palette();
         let tokens = style::tokens(theme);
-        let mut frame = Frame::new(renderer, bounds.size());
+        let bounds = Rectangle::with_size(frame.size());
         let ring_bounds = Size::new(dial::SIZE, dial::SIZE);
         let (ring, ring_width, middle) = dial::ring(ring_bounds);
         let center = Point::new(bounds.width / 2.0, dial::SIZE / 2.0);
-        let [disc, check, amount] = stages(state.progress);
+        let [disc, check, amount] = stages(progress);
         let (disc, check) = if self.went_well {
             (disc, check)
         } else {
@@ -147,8 +179,6 @@ impl canvas::Program<Message> for Done {
             align_y: Vertical::Center,
             ..canvas::Text::default()
         });
-
-        vec![frame.into_geometry()]
     }
 }
 

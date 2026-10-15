@@ -175,8 +175,9 @@ fn forward_to(name: &str, arguments: &[OsString]) -> io::Result<()> {
                     WaitNamedPipeW(wide_name.as_ptr(), 1_000)
                 };
             }
-            // Not there yet: the running Gracil is still starting.
-            Err(_) => thread::sleep(Duration::from_millis(100)),
+            // Not there yet: the running Gracil is still starting. Tried again soon, so the
+            // request reaches it as soon as it listens (ADR 0066).
+            Err(_) => thread::sleep(Duration::from_millis(20)),
         }
     }
 }

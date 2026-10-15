@@ -166,6 +166,22 @@ pub struct Gracil {
     kept: Option<(Kept, Instant)>,
     /// The unfinished files as they were when Exit stopped the work, kept as they were.
     leaving_with: Option<Vec<Unfinished>>,
+    /// Whether finding out what the computer can do has started. It waits for the first window,
+    /// or the first files, so starting Gracil shows its window sooner (ADR 0066).
+    engine_asked: bool,
+    /// Files kept only online that are being downloaded before they are got ready (ADR 0066).
+    downloading: HashSet<JobId>,
+    /// What each look still going on was asked to look through, by its number, with the choice
+    /// it came with: kept for next time if Gracil closes before it is done (ADR 0066).
+    looks: HashMap<u64, (Vec<PathBuf>, Option<Choice>)>,
+    /// How many looks were started, to number the next one.
+    looks_started: u64,
+    /// Stop was pressed in this round of work: the files it set aside mean the list isn't all
+    /// done, so the finished view has no check mark (ADR 0066).
+    stopped_in_round: bool,
+    /// The file that went wrong the finished view's "!" showed last, so pressing it again shows
+    /// the next one.
+    last_problem: Option<JobId>,
 }
 
 #[derive(Debug, Clone)]
@@ -197,8 +213,8 @@ pub enum Message {
     Always(Option<Choice>),
     Placed(JobId, Choice, Result<PathBuf, Failure>),
     /// Files found in what File Explorer sent, with the choice it came with, by a look started
-    /// after that many presses of Stop.
-    Found(u64, Option<Choice>, work::Found),
+    /// after that many presses of Stop, and the look's number.
+    Found(u64, u64, Option<Choice>, work::Found),
     /// A file picked in the list is shown large; picking it again goes back to the work.
     Select(JobId),
     /// Back from a file picked in the list to what Gracil is working on.
@@ -248,8 +264,13 @@ pub enum Message {
     LetGoUnfinished,
     /// A key that means something to Gracil was pressed in one of its windows.
     Key(window::Id, Key),
-    /// The finished view's count of files that couldn't be compressed: the first of them is shown.
+    /// The finished view's count of files that couldn't be compressed: the first of them is
+    /// shown, or, pressed again, the next one.
     ShowProblem,
+    /// The same count in the mini-window: the big window opens on that file.
+    OpenProblem,
+    /// Time to find out what the computer can do, if nothing asked for it sooner (ADR 0066).
+    StartEngine,
     /// The mini-window's "!": the big window opens on that file, with the reason in words.
     Explain(JobId),
     Outside(Outside),
@@ -342,13 +363,29 @@ impl Gracil {
             offered: unfinished::load(),
             kept: None,
             leaving_with: None,
+            engine_asked: false,
+            downloading: HashSet::new(),
+            looks: HashMap::new(),
+            looks_started: 0,
+            stopped_in_round: false,
+            last_problem: None,
         };
+        // The engine starts once the first window is in view or the first files come, whichever
+        // is first (ADR 0066); a Gracil resting in the tray starts it a while later regardless.
         let tasks = Task::batch([
             system::theme().map(Message::ThemeChanged),
-            work::start_engine().map(Message::EngineStarted),
             after(windows::MINI_MADE_AFTER, Message::MakeMini),
+            after(ENGINE_WHEN_IDLE, Message::StartEngine),
         ]);
         (state, tasks)
+    }
+
+    /// Starts finding FFmpeg and what the computer can do, unless that has started already.
+    pub(super) fn start_engine(&mut self) -> Task<Message> {
+        if std::mem::replace(&mut self.engine_asked, true) {
+            return Task::none();
+        }
+        work::start_engine().map(Message::EngineStarted)
     }
 
     /// The same words as the tray's tip, so the taskbar and Alt+Tab say how the work goes too.
@@ -403,7 +440,7 @@ impl Gracil {
         // the most frequent messages.
         let recount = !matches!(
             message,
-            Message::Job(_, Report::Progress(_))
+            Message::Job(_, Report::Progress(_) | Report::Downloading(_))
                 | Message::ThemeFrame(_)
                 | Message::Frame(_)
                 | Message::DrawerScrolled(_)
@@ -412,6 +449,15 @@ impl Gracil {
         if recount {
             self.summary = self.summarize();
             self.round_from = self.summary.round_from;
+            // New work after Stop is a new round: what Stop set aside no longer counts against it.
+            if self.summary.left > 0 {
+                self.stopped_in_round = false;
+            }
+        }
+        // Only files still being got ready can be downloading.
+        if !self.downloading.is_empty() {
+            let running = &self.running;
+            self.downloading.retain(|id| running.contains_key(id));
         }
         self.keep_unfinished();
         // The work finished while Exit was being asked about: nothing is left to stop, so the
@@ -465,28 +511,26 @@ impl Gracil {
                 self.look_through(paths, None, None)
             }
             Message::Key(window, key) => self.on_key(window, key),
-            Message::ShowProblem => {
-                let found = self
-                    .queue
-                    .jobs()
-                    .iter()
-                    .position(|job| self.is_fault(job.id));
-                self.selected = found.map(|index| self.queue.jobs()[index].id);
-                self.drawer_open = true;
-                // The list opens on that file, however far down it is.
-                match found {
-                    Some(index) => {
-                        self.drawer_scroll = self.drawer_scroll.showing(index);
-                        self.drawer_scroll.restore()
-                    }
-                    None => Task::none(),
-                }
+            Message::ShowProblem => self.show_problem(),
+            Message::OpenProblem => {
+                let shown = self.show_problem();
+                Task::batch([self.show_main(), shown])
             }
+            Message::StartEngine => self.start_engine(),
             Message::ChooseFiles => Task::perform(choose_files(self.text), Message::FilesChosen),
             Message::FilesChosen(paths) => self.look_through(paths, None, None),
+            Message::Job(id, Report::Downloading(downloading)) => {
+                if downloading && self.running.contains_key(&id) {
+                    self.downloading.insert(id);
+                } else {
+                    self.downloading.remove(&id);
+                }
+                Task::none()
+            }
             Message::Job(id, report) => self.on_report(id, report),
             Message::Cancel => {
                 self.stop();
+                self.stopped_in_round = true;
                 Task::none()
             }
             Message::Pause => {
@@ -521,7 +565,7 @@ impl Gracil {
                 self.selected = (self.selected != Some(id)).then_some(id);
                 Task::none()
             }
-            Message::Found(stops, choice, found) => self.on_found(stops, choice, found),
+            Message::Found(stops, look, choice, found) => self.on_found(stops, look, choice, found),
             Message::ShowCurrent => {
                 self.selected = None;
                 Task::none()
@@ -580,16 +624,12 @@ impl Gracil {
                 Task::none()
             }
             Message::Frame(id) => self.on_frame(id),
-            Message::Drawn(id) => {
-                self.bring_into_view(id);
-                Task::none()
-            }
+            Message::Drawn(id) => self.bring_into_view(id),
             Message::Reveal(id) => {
                 if let Some((_, frames, _)) = self.revealing.get(&id) {
                     warn!(frames, "a new window took too long to draw; shown anyway");
                 }
-                self.bring_into_view(id);
-                Task::none()
+                self.bring_into_view(id)
             }
             Message::Rescaled(window) => {
                 window::raw_id::<Message>(window).map(Message::WindowReady)
@@ -624,9 +664,11 @@ impl Gracil {
                 self.show_main()
             }
             Message::CloseMini => self.close_mini(),
-            // Without the tray icon there is nothing to click.
-            Message::MakeMini if self.tray.is_some() => self.make_mini(),
+            // Without the tray icon there is nothing to click. A Gracil resting in the tray with
+            // no window makes it only once the pointer comes to the icon or files come (ADR 0066).
+            Message::MakeMini if self.tray.is_some() && !self.resting_in_tray() => self.make_mini(),
             Message::MakeMini => Task::none(),
+            Message::Outside(Outside::Tray(TrayEvent::Pointed)) => self.make_mini(),
             Message::MiniReady(handle) => self.on_mini_ready(handle),
             Message::MiniShown(handle) => {
                 if self.mini_shown && !self.mini.is_some_and(|id| self.revealing.contains_key(&id))
@@ -690,6 +732,12 @@ impl Gracil {
         }
     }
 
+    /// Whether Gracil was started with Windows and has shown nothing yet: then nothing is made
+    /// until it is needed, so a Gracil waiting in the tray all day costs as little as it can.
+    pub(super) fn resting_in_tray(&self) -> bool {
+        self.resident && !self.window_shown && !self.mini_shown && self.mini.is_none()
+    }
+
     fn toggle_explorer_menu(&mut self) {
         self.settings.explorer_menu = !self.settings.explorer_menu;
         if let Some(tray) = &self.tray {
@@ -722,6 +770,10 @@ impl Gracil {
         }
     }
 }
+
+/// How long after starting a Gracil that no window or file has asked for it finds out what the
+/// computer can do anyway, so the first file later starts at once (ADR 0066).
+const ENGINE_WHEN_IDLE: Duration = Duration::from_secs(60);
 
 /// Delivers `message` after `delay`, waited out on a thread of its own so none of Iced's workers
 /// is held up.

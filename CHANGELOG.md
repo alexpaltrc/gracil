@@ -162,10 +162,12 @@ with it.
 - When the whole list is done, the window says so clearly: the ring's middle fills with green and a
   check mark draws itself, and just below, in large letters, how much room the list saved, for
   example **130 MB smaller**, with a quiet line such as **22 files compressed · 4 were already
-  compressed**. If nothing came out smaller, or files were left unfinished, there is no check mark;
+  compressed**. If nothing came out smaller, or **Stop** set files aside, there is no check mark;
   when nothing came out smaller it says **Nothing to make smaller** or **Nothing was compressed**
   instead. Files that couldn't be compressed are counted apart, with a "!": click it to see the
-  first of them and what happened. Below it, **Clear the list** takes you back to the empty window,
+  first of them and what happened, and again for the next one; a quiet line under the count says
+  why they failed, or the most frequent reason. The small window next to the clock shows the same
+  once the list is done. Below it, **Clear the list** takes you back to the empty window,
   ready for your next files.
 - When a video is done, you see how much smaller it became, and its size before and after, for
   example **120 MB → 78 MB**. Then you choose: **Replace** puts it in place of the original,
@@ -221,8 +223,9 @@ with it.
 - If a file can't be made smaller, Gracil doesn't keep it. It says **Already compressed**, with
   no buttons, and says why just below.
 - Gracil comes with FFmpeg, the free tool it uses to compress video, so there is nothing else to
-  download. If that part of Gracil ever goes missing, files say **Can't start** with a "!"
-  explaining it: download Gracil again from where you got it and it works as before.
+  download. If that part of Gracil ever goes missing, the empty window says so right away and
+  files say **Can't start** with a "!" explaining it: download Gracil again from where you got it
+  and it works as before.
 - If a file changes while Gracil compresses it, Gracil leaves the file as it is now and lets the
   compressed version go, with a "!" saying so. Add it again to compress the new version.
 - A read-only file is never replaced, and Gracil never takes the mark off: **Replace** is turned
@@ -244,3 +247,18 @@ with it.
 - Files with very long names compress and save like any other, even on older USB drives.
 - Gracil's diary of what it did stops growing at about 20 MB a day.
 - Images waiting their turn never crowd your computer's memory.
+- The marble next to the clock, and the window's name in the taskbar, which screen readers read,
+  now say how things are in every moment: for example **Gracil · 2 files waiting for you**,
+  **Gracil · low battery, waiting**, **Gracil · downloading** or **Gracil · done, 130 MB
+  smaller**. When something went wrong, it says **Gracil · click to see what happened**, and the
+  marble keeps its warning color until you do.
+- Opened from inside its zip, Gracil says so in the empty window from the start.
+- A file kept only online says **Downloading** while it comes down.
+- Choosing **Exit** while Gracil is still looking through folders now asks first, and those folders
+  are kept for next time with the other unfinished files.
+- Pointing at a file's name shows its whole path.
+- Clearer words in several places, such as **3 more to compress**, **Looking for videos and
+  images…** and, in Spanish, **Vaciar la lista**.
+- Gracil's window opens a little sooner, and Gracil waiting next to the clock takes less from the
+  computer. On a laptop with two graphics cards, the window no longer wakes the larger one, and it
+  draws less often while only the ring moves.

@@ -65,8 +65,17 @@ impl Gracil {
         } else {
             Task::none()
         };
+        // Files to compress: what the computer can do is found out at once, alongside looking
+        // through them, and a Gracil resting in the tray makes its mini-window now (ADR 0066).
+        let mut early = Vec::new();
+        if !request.paths.is_empty() {
+            early.push(self.start_engine());
+            if self.tray.is_some() && self.mini.is_none() && self.resident {
+                early.push(self.make_mini());
+            }
+        }
         let gather = self.look_through(request.paths, request.only, request.choice);
-        Task::batch([show, gather])
+        Task::batch([show, gather].into_iter().chain(early))
     }
 
     /// Adds the files left unfinished last time, each with the choice File Explorer made for it.
@@ -101,15 +110,23 @@ impl Gracil {
         }
         self.gathering += 1;
         let stops = self.stops;
-        work::gather(paths, only).map(move |found| Message::Found(stops, choice, found))
+        self.looks_started += 1;
+        let look = self.looks_started;
+        // Kept while the look goes on: if Gracil closes first, it is carried on with next time.
+        self.looks.insert(look, (paths.clone(), choice));
+        work::gather(paths, only).map(move |found| Message::Found(stops, look, choice, found))
     }
 
     pub(super) fn on_found(
         &mut self,
         stops: u64,
+        look: u64,
         choice: Option<Choice>,
         found: work::Found,
     ) -> Task<Message> {
+        if matches!(found, work::Found::Done) {
+            self.looks.remove(&look);
+        }
         if stops != self.stops {
             // Started before Stop: what it finds is kept to carry on with later, not compressed.
             match found {
@@ -150,17 +167,22 @@ impl Gracil {
     /// being compressed again (spec §29). One still waiting, running or waiting for a choice stays
     /// as it is.
     pub(super) fn add(&mut self, paths: Vec<PathBuf>) -> Task<Message> {
-        let done_with: Vec<JobId> = paths
+        let done_with: HashSet<JobId> = paths
             .iter()
             .filter_map(|path| self.queue.find(path))
             .filter(|job| {
                 job.state.is_finished()
+                    && self.can_remove(job)
                     && !matches!(self.outcomes.get(&job.id), Some(Outcome::Ready { .. }))
             })
             .map(|job| job.id)
             .collect();
-        for id in done_with {
-            self.remove(id);
+        // All at once, as Clear does: one at a time, adding a folder of thousands again took
+        // seconds.
+        if !done_with.is_empty() {
+            for job in self.queue.remove_all(&done_with) {
+                self.taken(job).let_go();
+            }
         }
         // A file left unfinished and added again is on the list now, so it isn't offered too.
         if !self.offered.is_empty() {
@@ -172,6 +194,10 @@ impl Gracil {
         if added > 0 && matches!(self.engine, EngineState::Unavailable) {
             self.engine = EngineState::Starting;
             return work::start_engine().map(Message::EngineStarted);
+        }
+        if added > 0 {
+            // The first files: what the computer can do is found out now, if nothing asked yet.
+            return Task::batch([self.start_engine(), self.schedule()]);
         }
         self.schedule()
     }

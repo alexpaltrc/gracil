@@ -23,7 +23,7 @@ implementation that becomes difficult to maintain without measurable benefit sho
 
 # 2. Product philosophy
 
-Gracil does one thing: **Compress video.**
+Gracil does one thing: **Compress video.** *(Update, §77.1: videos and images.)*
 
 It should feel like a small, focused consumer application. The interaction philosophy should be
 closer to Squoosh than to HandBrake.
@@ -642,6 +642,10 @@ language setting. All interface wording lives in one place, so each language sta
 No unnecessary continuous redraws. Measure idle GPU, idle CPU, idle memory and active UI overhead
 from early prototypes.
 
+*Update (ADR 0066):* only WGPU's Direct3D 12 code is built in, and no particular graphics card is
+asked for. Movements that only follow the work draw about thirty times a second; what answers the
+pointer draws every frame. Drawings that stopped moving are drawn once and kept.
+
 # 52. Single-instance behavior
 
 Gracil behaves as one logical instance. Further invocations (launching again, Explorer commands,
@@ -691,6 +695,9 @@ Consequences for other sections:
 *Update (ADR 0055):* Exit also asks when finished results wait for a choice, and says they are
 let go and will be compressed again next time.
 
+*Update (ADR 0066):* Exit also asks while folders are still being looked through; they are kept
+for next time with the other unfinished files.
+
 # 55. Tray mini-window
 
 A compact tray-associated mini-window. Eventually: see the current operation, basic progress,
@@ -704,8 +711,13 @@ required. It shows the running video first; results that wait meanwhile are coun
 one at a time.
 
 *Update (ADR 0055):* the mini-window's dial pauses and resumes but has no stop; stopping is in the
-main window. When the tray icon turned red while no window was open, the mini-window opens on the
-file that went wrong.
+main window. When the tray icon turned to the warning color while no window was open, the
+mini-window opens on the file that went wrong.
+
+*Update (ADR 0066):* once the whole list is done, the mini-window shows the done view too: the
+room saved, how the list went, and the files that failed, whose "!" opens the main window on the
+first of them. A Gracil started with Windows makes the mini-window only when the pointer first
+comes to the tray icon or files come.
 
 # 56. Explorer-triggered mini-window
 
@@ -1197,6 +1209,9 @@ If a requirement becomes technically problematic, explain the conflict before ch
 All video processing is local. Do not upload videos, metadata, filenames or paths. No telemetry,
 no analytics, no crash reporting that sends user data without explicit future approval. Gracil
 works offline after installation, apart from the one-time FFmpeg download described in §2.2.
+
+*Update (ADR 0053):* there is no FFmpeg download: FFmpeg comes inside Gracil's zip, so Gracil never
+connects to the internet at all (§2.2).
 
 # 84. Definition of success
 

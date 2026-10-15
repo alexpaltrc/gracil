@@ -35,7 +35,6 @@ use tracing::{info, warn};
 fn main() -> iced::Result {
     // First, while this is the only thread (see `draw_with_direct3d`).
     gracil_windows::draw_with_direct3d();
-    logging::init();
 
     // Started as an administrator to write or remove File Explorer's main menu (ADR 0058): that
     // is all, with no window and no claim on the running Gracil.
@@ -46,6 +45,7 @@ fn main() -> iced::Result {
             (place::REMOVE_MAIN_MENU, false),
         ] {
             if flag == asked {
+                logging::init();
                 let written = place::write_main_menu(on);
                 logging::finish();
                 std::process::exit(if written { 0 } else { 1 });
@@ -55,9 +55,12 @@ fn main() -> iced::Result {
 
     let request = Request::parse(std::env::args_os().skip(1));
 
-    // One Gracil per session: a later launch hands its request over and leaves (ADR 0019).
+    // One Gracil per session: a later launch hands its request over and leaves (ADR 0019). It
+    // does so before opening the diary, which only the running Gracil writes, so handing over is
+    // as quick as it can be (ADR 0066).
     match gracil_windows::claim() {
         Ok(true) => {
+            logging::init();
             let serving = gracil_windows::serve(|arguments| {
                 outside::send(Outside::Request(Request::parse(arguments)));
             });
@@ -68,9 +71,15 @@ fn main() -> iced::Result {
         Ok(false) => match gracil_windows::forward(&request.to_arguments()) {
             Ok(()) => return Ok(()),
             // The running Gracil doesn't answer; do the work here rather than lose it.
-            Err(error) => warn!(%error, "the running Gracil didn't answer; working alone"),
+            Err(error) => {
+                logging::init();
+                warn!(%error, "the running Gracil didn't answer; working alone");
+            }
         },
-        Err(error) => warn!(%error, "could not check for a running Gracil"),
+        Err(error) => {
+            logging::init();
+            warn!(%error, "could not check for a running Gracil");
+        }
     }
 
     info!(version = gracil_core::VERSION, "Gracil started");
