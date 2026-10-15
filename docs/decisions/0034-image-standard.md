@@ -10,7 +10,9 @@ Windows (item 9); every descriptive PNG chunk is kept (item 5); palettes are mea
 most colors down (item 5); the file types are listed (item 1). *The dial and the tray for the
 whole list (item 13) were built 2026-10-04.* *Superseded in part by ADR 0040 (2026-10-04):*
 images no longer go before waiting videos; they compress beside the video being compressed
-(item 13).
+(item 13). *Updated 2026-10-15 by [ADR 0068](0068-images-sooner.md):* the same choices, made
+sooner: a result is measured only when it can be kept, palettes are made as they are needed, and
+the SSIMULACRA2 code lives inside Gracil, scoring to the same bit (items 4–6, 8, 9 and 12).
 
 **Context.** Images follow the video standard (ADR 0028, 0029, 0033): a file's first compression
 looks the same as the original; when that would not be clearly smaller, the file was already
@@ -46,7 +48,8 @@ the two images, about 80 means no difference at normal viewing, 70 is "high qual
    distances **1.5, 2.0, 2.5 and 3.0** and keeps the loosest whose SSIMULACRA2 is at least **80**
    and whose size is at most 80% of the original. It starts at 2.0 and moves one step looser or
    tighter, so at most three are measured. If none qualifies, nothing is written and the image gets
-   the quiet "!" (already about as small as it can get).
+   the quiet "!" (already about as small as it can get). Each distance is encoded first and
+   measured only when it, or a looser one it leads to, is small enough to keep (ADR 0068).
 5. **PNG, first compression:** lossless optimization (oxipng, preset 4; every descriptive
    chunk — color profile, gamma, text, dates, EXIF — is kept, so nothing the original says about
    itself is lost) always; plus a reduced palette (256, 128, 64 or 32 colors, with and without
@@ -54,19 +57,22 @@ the two images, about 80 means no difference at normal viewing, 70 is "high qual
    kept, when it is at most 80% of the original. Fewer colors hardly ever look better, so each
    kind of palette (plain, dithered) is measured from 256 colors down and stops at the first that
    falls short: usually two measurements instead of eight. The palettes are made side by side,
-   and the two kinds measured side by side, within about 1 GB of memory.
+   and the two kinds measured side by side, within about 1 GB of memory. Since ADR 0068 each
+   palette is made only once it is to be measured.
 6. **PNG, compressing again:** the same palettes, at SSIMULACRA2 **80** or more, automatically.
    Otherwise the quiet "!".
 7. **Never heavier.** Every result is checked against the original's size before it replaces
    anything (spec §40.1).
 8. **One scale for every image.** Every score is SSIMULACRA2 against the decoded original, so
    JPEG, HEIC, WebP and PNG are judged the same way. Gracil measures in its own process with the
-   `ssimulacra2` Rust crate (BSD-2).
+   `ssimulacra2` Rust crate (BSD-2), whose code lives inside Gracil since ADR 0068, giving the
+   same scores to the bit.
 9. **Engine.**
    - A JPEG goes to `cjpegli` as it is: jpegli reads it itself through libjpeg-turbo (BSD-3,
      IJG and zlib licenses), the copy jpegli's own repository includes. On three 12 MP photos this
      was about five times quicker than decoding to a PNG first (0.4 s against 2–2.5 s) and scored
-     the same or better against the original.
+     the same or better against the original. That copy is built without SIMD unless NASM is
+     installed where it is built (ADR 0068); the shipped one is built without.
    - Every other format is read inside Gracil: WebP, TIFF and BMP by the `image` Rust crate
      (MIT/Apache-2.0), HEIC, HEIF and AVIF by FFmpeg, which Gracil already runs hidden for video
      and which reads the tile grid of an iPhone photo already turned upright. FFmpeg drops a
@@ -105,7 +111,10 @@ the two images, about 80 means no difference at normal viewing, 70 is "high qual
     for now.
 12. **Very large images** have no limit. They take longer: for a 48 MP photo, jpegli takes about 2
     seconds and each SSIMULACRA2 measurement about 10, so compressing again can take about half a
-    minute.
+    minute. *Corrected by ADR 0068:* measured again on the reference computer, a measurement took
+    about 13 s and compressing a 48 MP photo again about 35 s; now a measurement takes about 4 s,
+    after the original's side is worked out once (mostly while jpegli encodes), and compressing
+    it again about 10 s.
 13. **Images and videos together** (spec §77.1, decision 5):
     - **One list** for every file, images and videos alike: nothing separate to learn.
     - **Images go first.** They take seconds and videos take minutes, so images added while videos

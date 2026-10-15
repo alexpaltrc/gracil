@@ -73,6 +73,9 @@ with it.
   still.
 - On a desktop computer, a few more photos compress at once while you use it. Laptops are
   unchanged.
+- Images are ready sooner, often in half the time or less, above all photos that were already
+  compressed, very large photos and PNG images, and Gracil uses less of the processor and memory
+  for them. What Gracil keeps is chosen exactly as before.
 - Intel and AMD graphics now read the videos too, not just compress them, when a quick test at
   start shows they can, so the processor stays freer. Otherwise nothing changes.
 - Gracil never lets the computer run too hot, and it never has to stop to cool down. It keeps

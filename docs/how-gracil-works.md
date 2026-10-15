@@ -457,7 +457,10 @@ makes them smaller, and you choose **Replace** or **Save copy**.
 - **Not accepted:** moving images (for now), camera RAW files, JPEG XL, and photos stored in HDR.
   They are left exactly as they are, and the "!" says why. They aren't offered in the file
   picker or in File Explorer's menu.
-- **How long:** a phone photo takes under a second; a large PNG a few seconds.
+- **How long:** a phone photo takes under a second, or a few seconds when it was already
+  compressed; a large PNG a few seconds; a very large photo compressed again about ten seconds.
+  Gracil only checks how a result looks when it could be kept, and while one photo is being made
+  smaller it already gets the original ready for that check.
 - **With videos.** Images and videos share one list. Images compress a few at a time on the
   processor while a video compresses on the graphics card.
 - **The circle for the whole list.** With more than one file, the whole circle stands for the whole
