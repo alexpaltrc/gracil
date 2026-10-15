@@ -7,6 +7,9 @@
 - Git
 - Visual Studio Build Tools with the C++ workload, CMake and Ninja: only to build jpegli
   (`scripts/build-jpegli.ps1`, ADR 0034), the JPEG encoder images will use
+- Optionally NASM (on `PATH`, or installed in `%ProgramFiles%\NASM`): with it, the build script
+  builds jpegli's JPEG reader with SIMD, which reads JPEGs quicker (ADR 0068). An existing
+  `target\jpegli\build` must be deleted for the script to build it again
 
 ## Everyday commands
 
