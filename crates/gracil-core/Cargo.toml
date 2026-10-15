@@ -11,6 +11,7 @@ license.workspace = true
 exoquant.workspace = true
 image.workspace = true
 oxipng.workspace = true
+rayon.workspace = true
 rgb.workspace = true
 ssimulacra2.workspace = true
 serde.workspace = true

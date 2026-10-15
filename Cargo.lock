@@ -784,6 +784,7 @@ dependencies = [
  "exoquant",
  "image",
  "oxipng",
+ "rayon",
  "rgb",
  "serde",
  "serde_json",

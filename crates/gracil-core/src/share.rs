@@ -7,7 +7,7 @@
 //! [`allow_threads`], how many processor threads Gracil may use right now.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, Once, OnceLock, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -68,6 +68,24 @@ pub fn processor_threads() -> usize {
 /// processor, at least one, and never more than Gracil is allowed right now.
 pub fn threads_for_one() -> usize {
     one_of(processor_threads(), ALLOWED.load(Ordering::Relaxed))
+}
+
+/// Sizes the threads the libraries built into Gracil share (oxipng's, and the quality measure's
+/// for images) to what one tool may use, each quieted as it starts, as Gracil's own threads are
+/// (ADR 0068). Without it they would take one thread for every processor thread, outside the
+/// background. Done once, when the engine starts; later calls do nothing.
+pub(crate) fn start_shared_threads() {
+    static STARTED: Once = Once::new();
+    STARTED.call_once(|| {
+        let built = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads_for_one())
+            .thread_name(|n| format!("gracil-shared-{n}"))
+            .start_handler(|_| worker_started())
+            .build_global();
+        if let Err(error) = built {
+            tracing::warn!(%error, "the shared threads were already started");
+        }
+    });
 }
 
 fn one_of(all: usize, allowed: usize) -> usize {
