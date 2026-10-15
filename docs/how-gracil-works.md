@@ -322,8 +322,11 @@ see a difference. So instead of squeezing every video the same amount, Gracil me
   one at a time.
 - While it runs, Gracil remembers how much compression the last video of the same kind needed
   (the same size and recorded the same way) and tries that first, so a list of similar videos,
-  such as those from one phone, gets ready quicker. It is never written down, and it never
-  changes how much a video is compressed: that is always measured.
+  such as those from one phone, gets ready quicker. For the first video of its kind, it starts
+  from a guess made from how much detail the video's own file holds. It is never written down,
+  and it never changes how much a video is compressed: that is always measured.
+- Each try also tells Gracil how quickly the picture changes from one strength to the next, so
+  it needs fewer tries to find the right one.
 - Very short videos, and videos the measurement can't handle, use a safe standard amount
   instead.
 
@@ -347,8 +350,11 @@ Gracil still only goes ahead when the result will be clearly smaller. If not eve
 harder would manage that, the video stays as it is, and it shows **Already compressed** with a
 small "!" saying it is already about as small as it can get.
 
-Checking this takes a little longer than usual for these videos, up to about a minute for a long
-Full HD video.
+Checking this takes a little longer than usual for these videos, up to about half a minute for a
+long Full HD video. A video that can't get any smaller is usually recognized much sooner: when
+the first tries say it is already very light, Gracil first compresses its short moments as hard
+as it ever would, without comparing them, and if even that wouldn't be clearly smaller, it stops
+there.
 
 ## Size and smoothness
 
