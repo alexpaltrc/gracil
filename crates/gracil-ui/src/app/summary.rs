@@ -67,6 +67,8 @@ pub struct Summary {
     pub(super) ready: usize,
     /// Files that can leave the list now (see [`Gracil::can_remove`]).
     pub(super) removable: usize,
+    /// This round's work by kind, in bytes (ADR 0069).
+    pub(super) work: [Weighed; 2],
     /// Once the list is done with files that went wrong: the most frequent reason, and whether
     /// all of them share it (see [`Gracil::common_fault`]).
     pub(super) common_fault: Option<(Failure, bool)>,
@@ -109,10 +111,59 @@ impl Outcomes {
     }
 }
 
+/// How much each file on the list weighs, in bytes, for the time left (ADR 0069). Remembers which
+/// ones changed, as [`Outcomes`] does.
+#[derive(Debug, Default)]
+pub struct Weights {
+    map: HashMap<JobId, u64>,
+    touched: Vec<JobId>,
+}
+
+impl Weights {
+    fn get(&self, id: JobId) -> u64 {
+        self.map.get(&id).copied().unwrap_or(0)
+    }
+
+    fn set(&mut self, id: JobId, bytes: u64) {
+        if self.map.insert(id, bytes) != Some(bytes) {
+            self.touched.push(id);
+        }
+    }
+
+    fn take_touched(&mut self) -> Vec<JobId> {
+        std::mem::take(&mut self.touched)
+    }
+
+    /// Lets go of files no longer on the list, once they are many: now and then rather than as
+    /// each one leaves.
+    fn tidy(&mut self, queue: &Queue) {
+        if self.map.len() > 2 * queue.len() + 1024 {
+            self.map.retain(|&id, _| queue.get(id).is_some());
+        }
+    }
+}
+
+/// One kind's work in the round, in bytes: all of it and what is finished.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) struct Weighed {
+    pub(super) total: u64,
+    pub(super) done: u64,
+}
+
+/// Where a kind's counts are kept: videos, then images.
+fn slot(kind: Kind) -> usize {
+    match kind {
+        Kind::Video => 0,
+        Kind::Image => 1,
+    }
+}
+
 /// What one file adds to the [`Summary`].
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 struct Part {
     kind: Option<Kind>,
+    /// Its size in bytes, as it was found (ADR 0069).
+    bytes: u64,
     state: Option<JobState>,
     in_round: bool,
     /// A result waiting for a choice.
@@ -128,9 +179,10 @@ struct Part {
 }
 
 impl Part {
-    fn of(job: &Job, outcome: Option<&Outcome>, round_from: Option<JobId>) -> Self {
+    fn of(job: &Job, outcome: Option<&Outcome>, bytes: u64, round_from: Option<JobId>) -> Self {
         Self {
             kind: Some(job.kind),
+            bytes,
             state: Some(job.state),
             in_round: round_from.is_some_and(|from| job.id >= from),
             choosing: outcome.is_some_and(Outcome::is_waiting),
@@ -172,6 +224,8 @@ struct Counts {
     round_done: usize,
     total: (Sizes, usize),
     finished: Finished,
+    /// The round's work by kind (see [`slot`]).
+    work: [Weighed; 2],
 }
 
 impl Counts {
@@ -201,6 +255,20 @@ impl Counts {
         step(&mut self.finished.compressed, part.placed.is_some());
         step(&mut self.finished.already, part.already);
         step(&mut self.finished.failed, part.failed);
+        if let Some(kind) = part.kind.filter(|_| part.in_round) {
+            let weigh = |bytes: &mut u64, yes: bool| {
+                if yes {
+                    *bytes = if add {
+                        *bytes + part.bytes
+                    } else {
+                        *bytes - part.bytes
+                    };
+                }
+            };
+            let work = &mut self.work[slot(kind)];
+            weigh(&mut work.total, true);
+            weigh(&mut work.done, finished);
+        }
     }
 }
 
@@ -222,16 +290,19 @@ pub(super) struct Tally {
 
 impl Tally {
     /// Counts the whole list again.
-    fn of(queue: &Queue, outcomes: &Outcomes, round_from: Option<JobId>) -> Self {
+    fn of(
+        queue: &Queue,
+        outcomes: &Outcomes,
+        weights: &Weights,
+        round_from: Option<JobId>,
+    ) -> Self {
         let mut tally = Self {
             round_from,
             ..Self::default()
         };
         for job in queue.jobs() {
-            tally.set(
-                job.id,
-                Some(Part::of(job, outcomes.get(&job.id), round_from)),
-            );
+            let part = Part::of(job, outcomes.get(&job.id), weights.get(job.id), round_from);
+            tally.set(job.id, Some(part));
         }
         tally
     }
@@ -241,13 +312,14 @@ impl Tally {
         &mut self,
         queue: &Queue,
         outcomes: &Outcomes,
+        weights: &Weights,
         ids: impl IntoIterator<Item = JobId>,
     ) {
         let round_from = self.round_from;
         for id in ids {
             let part = queue
                 .get(id)
-                .map(|job| Part::of(job, outcomes.get(&id), round_from));
+                .map(|job| Part::of(job, outcomes.get(&id), weights.get(id), round_from));
             self.set(id, part);
         }
     }
@@ -341,9 +413,15 @@ impl Gracil {
     pub(super) fn summarize(&mut self) -> Summary {
         let changed = self.queue.take_changed();
         let touched = self.outcomes.take_touched();
+        let weighed = self.weights.take_touched();
         let whole = changed.is_none();
-        let ids = changed.into_iter().flatten().chain(touched);
-        self.tally.recount(&self.queue, &self.outcomes, ids);
+        let ids = changed.into_iter().flatten().chain(touched).chain(weighed);
+        self.tally
+            .recount(&self.queue, &self.outcomes, &self.weights, ids);
+        // Files taken off the list now may still come back with Undo, with their weight.
+        if self.cleared.is_none() {
+            self.weights.tidy(&self.queue);
+        }
         // A round starts when work begins with nothing left to do, so every file before the first
         // one not done belongs to an earlier round.
         let next_to_compress = self.queue.first_waiting();
@@ -353,11 +431,11 @@ impl Gracil {
             .min();
         let round_from = self.round_from.or(first_unfinished);
         if whole || round_from != self.tally.round_from {
-            self.tally = Tally::of(&self.queue, &self.outcomes, round_from);
+            self.tally = Tally::of(&self.queue, &self.outcomes, &self.weights, round_from);
         } else if cfg!(debug_assertions) && self.queue.len() <= CHECKED_UP_TO {
             debug_assert_eq!(
                 self.tally,
-                Tally::of(&self.queue, &self.outcomes, round_from),
+                Tally::of(&self.queue, &self.outcomes, &self.weights, round_from),
                 "the summary drifted from the list"
             );
         }
@@ -393,7 +471,51 @@ impl Gracil {
             compressing: tally.compressing.iter().copied().collect(),
             ready: counts.ready,
             removable: counts.removable,
+            work: counts.work,
         }
+    }
+
+    /// Remembers how much the files just found weigh, for the time left (ADR 0069).
+    pub(super) fn weigh(&mut self, paths: &[PathBuf], bytes: &[u64]) {
+        for (path, &bytes) in paths.iter().zip(bytes) {
+            if let Some(id) = self.queue.find(path).map(|job| job.id) {
+                self.weights.set(id, bytes);
+            }
+        }
+    }
+
+    /// Follows the time left in this round of work (ADR 0069), after every message: from the
+    /// counts kept up to date and the few files being compressed, so it costs the same however
+    /// long the list.
+    pub(super) fn follow_time_left(&mut self, now: Instant) {
+        let summary = &self.summary;
+        let mut work = summary.work.map(|weighed| estimate::Work {
+            total: weighed.total as f64,
+            done: weighed.done as f64,
+        });
+        // The files being compressed count partway.
+        for &id in &summary.compressing {
+            if let Some(job) = self.queue.get(id) {
+                let fraction = job.fraction.unwrap_or(0.0).clamp(0.0, 1.0);
+                work[slot(job.kind)].done += fraction * self.weights.get(id) as f64;
+            }
+        }
+        let reading = estimate::Reading {
+            round: summary.round_from,
+            work,
+            files_done: summary.round_done,
+            working: !self.held
+                && self.breath.battery == pace::Battery::Fine
+                && !self.running.is_empty(),
+            gathering: self.gathering > 0,
+        };
+        self.estimate.follow(now, &reading);
+    }
+
+    /// About how long this round of work has left, when that is known well enough to show
+    /// (ADR 0069).
+    pub fn time_left(&self) -> Option<TimeLeft> {
+        self.estimate.time_left()
     }
 
     /// How far along the whole list is, for the ring and the tray, when this round of work has
@@ -574,10 +696,18 @@ mod tests {
     use super::*;
 
     /// Counts again only what changed, as [`Gracil::summarize`] does.
-    fn follow(tally: &mut Tally, queue: &mut Queue, outcomes: &mut Outcomes) {
+    fn follow(
+        tally: &mut Tally,
+        queue: &mut Queue,
+        outcomes: &mut Outcomes,
+        weights: &mut Weights,
+    ) {
         let changed = queue.take_changed().unwrap_or_default();
-        let ids = changed.into_iter().chain(outcomes.take_touched());
-        tally.recount(queue, outcomes, ids);
+        let ids = changed
+            .into_iter()
+            .chain(outcomes.take_touched())
+            .chain(weights.take_touched());
+        tally.recount(queue, outcomes, weights, ids);
     }
 
     fn sizes(original: u64, compressed: u64) -> Sizes {
@@ -596,12 +726,25 @@ mod tests {
             PathBuf::from(format!(r"C:\V\{i}.{extension}"))
         }));
         let from = queue.jobs()[3].id;
-        let mut tally = Tally::of(&queue, &outcomes, Some(from));
+        let mut weights = Weights::default();
+        let mut tally = Tally::of(&queue, &outcomes, &weights, Some(from));
         queue.take_changed();
-        let check = |tally: &mut Tally, queue: &mut Queue, outcomes: &mut Outcomes| {
-            follow(tally, queue, outcomes);
-            assert_eq!(*tally, Tally::of(queue, outcomes, Some(from)));
+        let check = |tally: &mut Tally,
+                     queue: &mut Queue,
+                     outcomes: &mut Outcomes,
+                     weights: &mut Weights| {
+            follow(tally, queue, outcomes, weights);
+            assert_eq!(*tally, Tally::of(queue, outcomes, weights, Some(from)));
         };
+        // Weighed after they joined the list, as files found are.
+        let ids: Vec<JobId> = queue.jobs().iter().map(|job| job.id).collect();
+        for &id in &ids {
+            weights.set(id, 1000);
+        }
+        check(&mut tally, &mut queue, &mut outcomes, &mut weights);
+        // Files 3 to 29 are in the round: 20 videos and 7 images.
+        assert_eq!(tally.counts.work[0].total, 20_000);
+        assert_eq!(tally.counts.work[1].total, 7000);
 
         let mut done = Vec::new();
         for (round, kind) in [Kind::Video, Kind::Image, Kind::Video]
@@ -609,10 +752,10 @@ mod tests {
             .enumerate()
         {
             let id = queue.start_preparing(kind).unwrap().id;
-            check(&mut tally, &mut queue, &mut outcomes);
+            check(&mut tally, &mut queue, &mut outcomes, &mut weights);
             queue.apply(id, JobEvent::Ready).unwrap();
             queue.apply(id, JobEvent::BeginCompressing).unwrap();
-            check(&mut tally, &mut queue, &mut outcomes);
+            check(&mut tally, &mut queue, &mut outcomes, &mut weights);
             queue.apply(id, JobEvent::BeginFinalizing).unwrap();
             queue.apply(id, JobEvent::Complete).unwrap();
             let outcome = match round {
@@ -625,9 +768,18 @@ mod tests {
                 _ => Outcome::Failed(Failure::CouldNotCompress),
             };
             outcomes.insert(id, outcome);
-            check(&mut tally, &mut queue, &mut outcomes);
+            check(&mut tally, &mut queue, &mut outcomes, &mut weights);
             done.push(id);
         }
+        // The first files of each kind are done, whichever round they are in.
+        let done_in_round = |kind| {
+            done.iter()
+                .filter(|&&id| id >= from && queue.get(id).unwrap().kind == kind)
+                .count() as u64
+                * 1000
+        };
+        assert_eq!(tally.counts.work[0].done, done_in_round(Kind::Video));
+        assert_eq!(tally.counts.work[1].done, done_in_round(Kind::Image));
         assert_eq!(tally.counts.finished.compressed, 1);
         assert_eq!(tally.counts.finished.already, 1);
         assert_eq!(tally.counts.finished.failed, 1);
@@ -637,15 +789,18 @@ mod tests {
         // A file leaving the list takes its result with it.
         queue.remove(done[0]);
         outcomes.remove(&done[0]);
-        check(&mut tally, &mut queue, &mut outcomes);
+        check(&mut tally, &mut queue, &mut outcomes, &mut weights);
         assert_eq!(tally.counts.total, (Sizes::default(), 0));
 
         let ids: HashSet<JobId> = queue.jobs()[..10].iter().map(|job| job.id).collect();
         let taken = queue.remove_all(&ids);
-        check(&mut tally, &mut queue, &mut outcomes);
+        check(&mut tally, &mut queue, &mut outcomes, &mut weights);
         queue.restore(taken);
-        check(&mut tally, &mut queue, &mut outcomes);
+        check(&mut tally, &mut queue, &mut outcomes, &mut weights);
         assert_eq!(tally.counts.removable, queue.len());
+        // A file weighed again counts again.
+        weights.set(queue.jobs()[20].id, 5000);
+        check(&mut tally, &mut queue, &mut outcomes, &mut weights);
     }
 
     #[test]
@@ -674,12 +829,13 @@ mod tests {
         let mut queue = Queue::default();
         let mut outcomes = Outcomes::default();
         queue.add((0..30_000).map(|i| PathBuf::from(format!(r"C:\P\{i}.jpg"))));
+        let mut weights = Weights::default();
         let first = queue.first_waiting();
-        let mut tally = Tally::of(&queue, &outcomes, first);
+        let mut tally = Tally::of(&queue, &outcomes, &weights, first);
         queue.take_changed();
         let started = Instant::now();
         while let Some(id) = queue.start_preparing(Kind::Image).map(|job| job.id) {
-            follow(&mut tally, &mut queue, &mut outcomes);
+            follow(&mut tally, &mut queue, &mut outcomes, &mut weights);
             for event in [
                 JobEvent::Ready,
                 JobEvent::BeginCompressing,
@@ -689,7 +845,7 @@ mod tests {
                 queue.apply(id, event).unwrap();
             }
             outcomes.insert(id, Outcome::Failed(Failure::NotSmaller));
-            follow(&mut tally, &mut queue, &mut outcomes);
+            follow(&mut tally, &mut queue, &mut outcomes, &mut weights);
         }
         let took = started.elapsed();
         assert_eq!(tally.counts.finished.already, 30_000);

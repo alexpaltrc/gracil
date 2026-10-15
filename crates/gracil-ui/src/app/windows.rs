@@ -269,7 +269,8 @@ impl Gracil {
             (TrayState::Processing(_), Some(done)) if getting_ready && done <= 0.0 => {
                 text.tray_getting_ready.to_owned()
             }
-            (TrayState::Processing(_), Some(done)) => text.tray_tip(TrayState::Processing(done)),
+            // With about how long is left, once that is known well enough (ADR 0069).
+            (TrayState::Processing(_), Some(done)) => text.tray_compressing(done, self.time_left()),
             _ if self.waiting_count() > 0 => text.tray_waiting(self.waiting_count()),
             // Files are on the list, and what the computer can do isn't known yet.
             _ if self.left() > 0 && matches!(self.engine, EngineState::Starting) => {

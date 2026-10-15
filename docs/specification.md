@@ -422,6 +422,13 @@ model IS final.
 *Current look (ADR 0014):* progress is a ring the marble fills clockwise, with pause/play and
 stop as symbols in its middle instead of the words in the sketch.
 
+*Update (ADR 0069):* the footer's count of files left is followed, once it is known well enough,
+by a coarse estimate of the time left ("12 files left, about 20 min · View files"), also in the
+tray's tip and the window's title while compressing. Rounded to about 5, 10, 20, 30 or 45 minutes,
+then whole hours; it never goes up in small steps; hidden while paused, resting, waiting for the
+battery, while folders are being looked through, before three files are done and in the last two
+minutes. Worked out from each kind's bytes and measured pace, not from the count of files.
+
 # 32. Drawer behavior
 
 Selecting the subtle file-count control opens the file drawer, which lets the user inspect the

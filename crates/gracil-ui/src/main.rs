@@ -9,6 +9,7 @@ mod appear;
 mod data;
 mod dial;
 mod done;
+mod estimate;
 mod explorer;
 mod focus;
 mod logging;
