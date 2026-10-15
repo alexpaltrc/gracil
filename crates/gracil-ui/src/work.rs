@@ -6,7 +6,7 @@ use std::fs;
 use std::io;
 use std::panic::{self, AssertUnwindSafe};
 use std::path::{Component, Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
@@ -290,8 +290,9 @@ pub fn start_engine() -> Task<Option<Arc<Engine>>> {
     on_thread(
         || None,
         |mut sender: Sender<Option<Arc<Engine>>>| {
-            if let Some(dir) = toolchain::default_private_dir() {
-                tidy_leftovers(dir);
+            match toolchain::default_private_dir() {
+                Some(dir) => tidy_leftovers(dir),
+                None => swept(),
             }
             let engine = Engine::start();
             if engine.is_none() {
@@ -312,14 +313,45 @@ fn tidy_leftovers(private_dir: PathBuf) {
     let sweeping = thread::Builder::new()
         .name("gracil-sweep".into())
         .spawn(move || {
-            let swept = leftovers::sweep(&private_dir);
-            if swept != leftovers::Swept::default() {
-                info!(?swept, "files left by an earlier run");
+            let result = leftovers::sweep(&private_dir);
+            if result != leftovers::Swept::default() {
+                info!(swept = ?result, "files left by an earlier run");
             }
+            swept();
         });
     if let Err(error) = sweeping {
         warn!(%error, "files left by an earlier run stay until the next start");
+        swept();
     }
+}
+
+/// Whether the sweep of what an earlier run left is over, or won't happen.
+static SWEPT: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+
+/// The longest looking through files waits for the sweep.
+const SWEEP_PATIENCE: Duration = Duration::from_secs(10);
+
+/// Notes that the sweep is over.
+fn swept() {
+    let (done, news) = &SWEPT;
+    *done.lock().unwrap_or_else(PoisonError::into_inner) = true;
+    news.notify_all();
+}
+
+/// Waits for the sweep, at most [`SWEEP_PATIENCE`], when one of `paths` isn't there: the sweep
+/// may be about to put an original back where it was, as for a file left unfinished while it was
+/// being replaced (ADR 0017). Files that are there never wait, nor does anything once the sweep
+/// is over.
+fn wait_for_sweep_if_missing(paths: &[PathBuf]) {
+    let (done, news) = &SWEPT;
+    let is_done = || *done.lock().unwrap_or_else(PoisonError::into_inner);
+    if is_done() || paths.iter().all(|path| path.exists()) {
+        return;
+    }
+    let done = done.lock().unwrap_or_else(PoisonError::into_inner);
+    let _ = news
+        .wait_timeout_while(done, SWEEP_PATIENCE, |done| !*done)
+        .map_err(PoisonError::into_inner);
 }
 
 /// What looking through File Explorer's files and folders turns up (ADR 0037).
@@ -337,6 +369,7 @@ pub fn gather(paths: Vec<PathBuf>, only: Option<Kind>) -> Task<Found> {
     on_thread(
         || Found::Done,
         move |mut sender: Sender<Found>| {
+            wait_for_sweep_if_missing(&paths);
             media::gather_each(paths, only, &mut |files| {
                 let _ = block_on(sender.send(Found::Files(files)));
             });

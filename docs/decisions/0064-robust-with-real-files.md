@@ -24,6 +24,11 @@ FFprobe opens it, so a long download is never taken for a stuck tool; pause and 
 pieces and Stop stops. A file let go after it got ready but before it compressed (Clear, removing
 it, Stop) is given back to the cloud drive too.
 
+*Update (2026-10-14), item 8:* looking through files waits for the sweep, ten seconds at most,
+when one of them isn't there and the sweep isn't over yet: the sweep may be about to put that
+original back, as for a file left unfinished while it was being replaced, and carrying on with the
+unfinished files must not drop it. Files that are there never wait.
+
 **Context.** A robustness review looked at what real computers and real folders do to Gracil
 that tests with tidy files don't: files that change while they compress, tools that stop
 answering, cloud drives, read-only files, hidden system folders, very long names, old USB drives,
