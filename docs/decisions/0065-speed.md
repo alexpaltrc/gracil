@@ -8,6 +8,11 @@ older processor (RTX 5060 with a Ryzen 5 5600G, 6 cores / 12 threads).
 than 20 seconds, as with a driver that hangs, is stopped and counts as the card not being able
 to, so starting never waits on it for good.
 
+*Update (2026-10-14), by [ADR 0067](0067-fewer-levels-measured.md):* with items 2 and 6 in place,
+at 1080p on the reference computer the graphics card's encoder, not the quality measure on the
+processor, is what limits getting ready (and the compression itself); measuring fewer levels is
+what shortens it now.
+
 **Context.** On that computer the graphics card compresses a video in a fraction of the time the
 processor needs to measure it: getting a video ready (ADR 0028, ADR 0030) is most of the wait. The
 window also went through the whole list after every change, which with tens of thousands of files

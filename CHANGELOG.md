@@ -71,6 +71,8 @@ with it.
   leave the processor freer meanwhile. The result is exactly the same as before. In a list of
   similar videos, such as those from one phone, each one after the first gets ready quicker
   still.
+- Videos get ready faster again, often in half the time, with exactly the same result. Videos that
+  are already compressed as far as they go are recognized much sooner, often in a few seconds.
 - On a desktop computer, a few more photos compress at once while you use it. Laptops are
   unchanged.
 - Intel and AMD graphics now read the videos too, not just compress them, when a quick test at

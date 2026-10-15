@@ -70,7 +70,10 @@ a card encoder (`hevc_nvenc`, then `hevc_qsv`, then `hevc_amf`), then a sub-seco
 succeed; the first encoder that passes is used, with its richest settings tier that passes (ADR
 0052). Before encoding, `gracil_core::search` measures short samples with VMAF to pick the video's
 quality level and predict its size (ADR 0028, ADR 0029); a video already compressed too hard to
-shrink that way is searched again at a slightly lower quality target (ADR 0033).
+shrink that way is searched again at a slightly lower quality target (ADR 0033). The search
+measures as few levels as it can: it steps by how fast the score falls, jumps where the size
+may stop being too big, and tells first, from one encode without the measure, whether anything
+can be small enough (ADR 0067).
 `gracil_core::standard` decides frame rate (to 30) and audio conversion; the picture size is never
 changed. Each job then walks a ladder of attempts, from fastest to most forgiving: NVENC with CUDA
 decoding → NVENC with software decoding → NVENC keeping only essential streams → `libx265` keeping

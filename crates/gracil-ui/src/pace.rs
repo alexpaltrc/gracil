@@ -106,6 +106,15 @@ const SMALL_MEMORY: u64 = 8 << 30;
 /// in flight in the quality measure and its encoder.
 const VIDEO_PREPARING_MEMORY: u64 = 2 << 30;
 
+/// How long a video compresses before the memory free is read for the next one to get ready
+/// beside it (ADR 0067): the compression takes most of what it needs in its first seconds.
+pub const MEMORY_SETTLES: Duration = Duration::from_secs(5);
+
+/// How often the memory free is read again while a video waits to get ready beside the one
+/// compressing (ADR 0067): memory freed later lets it start then, not only when the compression
+/// ends.
+pub const ROOM_AGAIN_EVERY: Duration = Duration::from_secs(5);
+
 /// Whether the next video may get ready while one compresses (ADR 0063): only with well over the
 /// memory it takes free, twice as much, and never on a computer with little memory. Unknown
 /// memory counts as enough, as before.

@@ -93,6 +93,9 @@ source within 1% or one second.
 - AMF: `hevc_amf` with the tier's options and `-qp_i <level> -qp_p <level>`: HEVC AMF has no
   constant-quality mode without a bitrate, so a constant quantizer is searched instead.
 - x265: `-preset medium -x265-params log-level=error -crf <level>`, 10-bit when supported.
+  `pools` follows the share of the processor the tools have at that moment (ADR 0049), and x265's
+  output depends on it, not only through the frames it encodes at once it picks from it: the
+  search and the encode can encode one level a little differently (ADR 0067, item 9).
 - HEVC is tagged `hvc1` so Apple devices and Windows players accept it.
 - **Size and frame rate** (`standard::output_rate`): the picture size is never changed (ADR 0033). An
   average above 30.5 fps becomes 30, or 30000/1001 for the NTSC family; slower videos are left as
@@ -103,12 +106,18 @@ source within 1% or one second.
 
 Before the first attempt, Gracil looks for the highest level (smallest file) whose VMAF reaches
 95: NVENC CQ and AMF QP 24–38, Quick Sync ICQ 20–36, x265 CRF 20–34. Between a level that reaches the target and one that misses
-it, the next guess is on a straight line through their scores; with only a level that reaches it,
-the search steps past it by the score it has to spare (about a point per level); otherwise it
-halves what is left. The first level measured is the one the last video with the same encoder,
-size step and source codec needed (`search::Hints`, in memory only, ADR 0065); the search for
-compressing again starts at the level the first search chose, or the one the last such video
-needed. Each step encodes 4 s samples, one per 15 s of video up to four, centred in
+it, the next guess is on a straight line through their scores; with only levels that reach it,
+the search steps past the highest by the score it has to spare, at the points per level it lost
+since the nearest measured level at most three below that also reaches it, or about a point per
+level without one (ADR 0067); otherwise it halves what is left. The first level measured is the
+one the last video with the same encoder, size step and source codec needed (`search::Hints`, in
+memory only, ADR 0065), or, for the first video of its kind, a guess from the source's bits per
+pixel of each frame: two below the top of the range at 0.03 or less, one lower per doubling
+(ADR 0067). The search for compressing again starts at the level the first search chose, or the
+one the last such video needed. When the highest level reaching the target is predicted too big,
+the next one measured is the highest whose size, estimated on a log scale from the sizes
+measured (0.11 per level when only one is known), is still too big (ADR 0067). The decision
+logic (`search::Chooser`) works over a `Meter`, so it is tested against score and size curves. Each step encodes 4 s samples, one per 15 s of video up to four, centred in
 equal shares of the video, and averages their scores. Every measured level is cached for the
 whole search. One FFmpeg process per sample does both jobs, writing nothing to disk:
 
@@ -140,8 +149,8 @@ with `-hwaccel cuda` alone, so both branches get ordinary frames. Either way, if
 fails, the sample is retried on the CPU.
 
 **Samples together (ADR 0065).** A level's samples run up to four at once, on scoped threads, each
-with `n_threads` = `threads_for_one` / K (at least one), so together they never use more VMAF
-threads than one alone; their scores are collected in sample order, so the pooled score and size
+with `threads_for_one` shared among them as evenly as it goes (six for four is 2, 2, 1, 1; at
+least one each, ADR 0067), so together they never use more VMAF threads than one alone; their scores are collected in sample order, so the pooled score and size
 are computed exactly as one at a time (and measured bit-identical). K is 1 with x265, for a
 picture measured above 1440p (or of unknown size), with less than 4 GB free, and while the app
 says the tools go easy (`share::go_easy`: efficiency mode or battery, which also means whenever
@@ -168,6 +177,15 @@ misses 95 is already predicted above 80%.
 again is allowed to lose a little: the search continues for the highest level reaching VMAF 90
 (NVENC CQ and AMF QP 24–42, Quick Sync ICQ 20–40, x265 CRF 20–38), at the video's own size. That level is used if predicted at most
 80% of the original; if not, nothing is encoded and `find_level` returns `Found::AsSmallAsItGets`.
+That search too gives up once a level below 90 is predicted above 80% (ADR 0067).
+
+**Is anything small enough? (ADR 0067)** Once per video, the samples are encoded at the top of
+the again range without the measure (the same arguments with `[0:N]fps…,<format>[encode]` and no
+`-dec` branch: byte-identical frame sizes, checked on the CUDA and processor paths). If even that
+is predicted above 80%, the answer is `AsSmallAsItGets` at once. It is done first for a source
+under 0.02 bits per pixel of each frame, otherwise when a measured level is too big and the top,
+estimated from it on a log scale, is at least 85% of the limit. If an encode fails, the size is
+taken as unknown and the search goes on.
 
 The search is skipped (fixed level: CQ 27, CRF 26) for videos under 6 s, of unknown length, under
 60 s with x265, or without `libvmaf`, and whenever a measurement fails. If no level reaches 95, the

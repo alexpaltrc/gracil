@@ -79,17 +79,33 @@ impl Gracil {
         {
             tasks.push(self.start_compressing(&engine, id));
         }
-        // The next video gets ready beside one compressing only with memory to spare (ADR 0063).
-        let room_beside = self.queue.count(Kind::Video, compressing) == 0
-            || pace::room_to_prepare_beside(
-                gracil_windows::total_memory(),
-                gracil_windows::free_memory(),
-            );
-        if self.queue.count(Kind::Video, getting_ready) == 0
-            && room_beside
-            && let Some(id) = self.queue.start_preparing(Kind::Video).map(|job| job.id)
-        {
-            tasks.push(self.start_preparing(&engine, id));
+        // The next video gets ready beside one compressing only with memory to spare (ADR 0063),
+        // read once the compression has taken what it needs, and again every few seconds while
+        // the next one waits (ADR 0067).
+        let video_compressing = self.queue.count(Kind::Video, compressing) > 0;
+        let settled = self
+            .video_started
+            .is_none_or(|at| at.elapsed() >= pace::MEMORY_SETTLES);
+        let room_beside = !video_compressing
+            || (settled
+                && pace::room_to_prepare_beside(
+                    gracil_windows::total_memory(),
+                    gracil_windows::free_memory(),
+                ));
+        if self.queue.count(Kind::Video, getting_ready) == 0 {
+            if room_beside
+                && let Some(id) = self.queue.start_preparing(Kind::Video).map(|job| job.id)
+            {
+                tasks.push(self.start_preparing(&engine, id));
+            } else if video_compressing
+                && self
+                    .queue
+                    .count(Kind::Video, |state| state == JobState::Pending)
+                    > 0
+                && !std::mem::replace(&mut self.room_asked, true)
+            {
+                tasks.push(after(pace::ROOM_AGAIN_EVERY, Message::RoomAgain));
+            }
         }
 
         // Images.
@@ -150,6 +166,13 @@ impl Gracil {
             return Task::none();
         };
         self.transition(id, JobEvent::BeginCompressing);
+        if self
+            .queue
+            .get(id)
+            .is_some_and(|job| job.kind == Kind::Video)
+        {
+            self.video_started = Some(Instant::now());
+        }
         let control = JobControl::default();
         self.running.insert(id, control.clone());
         work::compress_file(engine.clone(), path, prepared, control)
