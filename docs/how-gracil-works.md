@@ -551,9 +551,10 @@ Gracil is done with it, the cloud drive may free up that room again, as **Free u
 Each image is read from the drive only once, and a few are read ahead while others compress, so
 the waiting overlaps with the work, but never so many that they crowd your computer's memory.
 
-A folder brings in only your own files: hidden and system files, the Recycle Bin, Windows'
+A folder brings in only your own files: hidden files and folders, the Recycle Bin, Windows'
 `System Volume Information` and the extra files a Mac leaves on USB drives (names starting with
-`._`, and `.Trashes`) are left out. A hidden file you add by itself is still taken.
+`._`, and `.Trashes`) are left out. Folders you gave their own icon or look, which Windows marks
+as system or read-only, are still looked through. A hidden file you add by itself is still taken.
 
 If Gracil is already running, the files join its list. If Gracil wasn't running, it starts for
 that, and when it worked without opening the big window, it closes by itself once the work is

@@ -9,6 +9,10 @@ so a line that isn't valid text can't stop the reading and leave the tool blocke
 never waits for a tool to end while holding what pausing and stopping need. A sample or attempt
 stopped for silence across a sleep is tried once more, like one that failed.
 
+*Update (2026-10-14), item 5:* only hidden entries are left out (system ones among them), not
+those marked system or read-only alone: Windows marks a folder so when it is given its own icon
+or look, as Pictures and Videos are, and such a folder is the person's.
+
 **Context.** A robustness review looked at what real computers and real folders do to Gracil
 that tests with tidy files don't: files that change while they compress, tools that stop
 answering, cloud drives, read-only files, hidden system folders, very long names, old USB drives,

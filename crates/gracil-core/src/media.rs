@@ -134,9 +134,11 @@ fn walk(dir: &Path, wanted: &dyn Fn(&Path) -> bool, found: &mut dyn FnMut(Vec<Pa
 const SYSTEM_FOLDERS: [&str; 3] = ["$RECYCLE.BIN", "System Volume Information", ".Trashes"];
 
 /// Whether an entry inside a folder being looked through belongs to the system rather than the
-/// person (ADR 0064): hidden or system files and folders, the folders in [`SYSTEM_FOLDERS`], and
-/// the `._` files a Mac leaves beside every file it copies. A file dropped or chosen by itself is
-/// never looked at this way.
+/// person (ADR 0064): hidden files and folders (system ones among them), the folders in
+/// [`SYSTEM_FOLDERS`], and the `._` files a Mac leaves beside every file it copies. A folder marked
+/// system or read-only alone is the person's: Windows marks folders so when they are given their
+/// own icon or look, as Pictures and Videos are. A file dropped or chosen by itself is never looked
+/// at this way.
 fn not_the_persons(entry: &std::fs::DirEntry) -> bool {
     let name = entry.file_name();
     let name = name.to_string_lossy();
@@ -151,10 +153,9 @@ fn not_the_persons(entry: &std::fs::DirEntry) -> bool {
     {
         use std::os::windows::fs::MetadataExt;
         const HIDDEN: u32 = 0x2;
-        const SYSTEM: u32 = 0x4;
         // Comes with the folder's listing too.
         if let Ok(metadata) = entry.metadata()
-            && metadata.file_attributes() & (HIDDEN | SYSTEM) != 0
+            && metadata.file_attributes() & HIDDEN != 0
         {
             return true;
         }
@@ -275,19 +276,25 @@ mod tests {
             std::fs::create_dir_all(&folder).unwrap();
             std::fs::write(folder.join("inside.mp4"), b"x").unwrap();
         }
-        for name in ["._Clip.mp4", "Clip.mp4", "hidden.mp4", "system.jpg"] {
+        for name in ["._Clip.mp4", "Clip.mp4", "hidden.mp4", "hidden system.jpg"] {
             std::fs::write(root.join(name), b"x").unwrap();
         }
-        let hidden_folder = root.join("Hidden folder");
-        std::fs::create_dir_all(&hidden_folder).unwrap();
-        std::fs::write(hidden_folder.join("inside.mp4"), b"x").unwrap();
-        for (flag, path) in [
-            ("+h", root.join("hidden.mp4")),
-            ("+s", root.join("system.jpg")),
-            ("+h", hidden_folder.clone()),
+        for folder in ["Hidden folder", "Customized", "Read-only"] {
+            let folder = root.join(folder);
+            std::fs::create_dir_all(&folder).unwrap();
+            std::fs::write(folder.join("inside.mp4"), b"x").unwrap();
+        }
+        // A folder given its own icon or look is marked system or read-only, and stays the
+        // person's.
+        for (flags, path) in [
+            (&["+h"][..], root.join("hidden.mp4")),
+            (&["+h", "+s"], root.join("hidden system.jpg")),
+            (&["+h"], root.join("Hidden folder")),
+            (&["+s"], root.join("Customized")),
+            (&["+r"], root.join("Read-only")),
         ] {
             let status = std::process::Command::new("attrib")
-                .arg(flag)
+                .args(flags)
                 .arg(&path)
                 .status()
                 .unwrap();
@@ -306,13 +313,27 @@ mod tests {
             .collect();
         // Given by itself, a hidden file is still taken.
         let given = gather([root.join("hidden.mp4")], None);
-        let _ = std::process::Command::new("attrib")
-            .args(["-s", "-h"])
-            .arg(root.join("system.jpg"))
-            .status();
+        for path in [
+            root.join("hidden system.jpg"),
+            root.join("Customized"),
+            root.join("Read-only"),
+        ] {
+            let _ = std::process::Command::new("attrib")
+                .args(["-s", "-h", "-r"])
+                .arg(path)
+                .status();
+        }
         std::fs::remove_dir_all(&root).unwrap();
 
-        assert_eq!(names, ["Clip.mp4", r"Trip\inside.mp4"]);
+        assert_eq!(
+            names,
+            [
+                "Clip.mp4",
+                r"Customized\inside.mp4",
+                r"Read-only\inside.mp4",
+                r"Trip\inside.mp4"
+            ]
+        );
         assert_eq!(given.len(), 1);
     }
 }
