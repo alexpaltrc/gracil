@@ -563,7 +563,8 @@ impl Job<'_> {
     }
 
     /// A JPEG: distance 1.0 when that is clearly smaller; otherwise the loosest distance from 1.5
-    /// to 3.0 that still scores 80 and is clearly smaller, measuring at most three (item 4).
+    /// to 3.0 that still scores 80 and is clearly smaller, measuring at most three (item 4). A
+    /// result is measured only when it, or one it leads to, is small enough to keep (ADR 0068).
     fn make_jpeg(
         &mut self,
         input: &Path,
@@ -579,53 +580,20 @@ impl Job<'_> {
             return Ok(first);
         }
         info!(size = first.len(), "already compressed; compressing again");
-        self.checkpoint()?;
-        let reference = reference()?;
-        report(0.4);
-
-        let mut measured = 0;
-        let mut try_distance =
-            |job: &mut Self, distance: f32| -> Result<(Vec<u8>, Option<f64>), ImageError> {
-                let bytes = job.jpegli(input, distance, carried)?;
-                job.checkpoint()?;
-                let pixels = decode_with_image(&bytes, false)?.reference.pixels;
-                let score = reference.score(&pixels);
-                measured += 1;
-                report(0.4 + 0.18 * f64::from(measured));
-                info!(distance, size = bytes.len(), ?score, "measured");
-                Ok((bytes, score))
-            };
-        let passes = |score: Option<f64>| score.is_some_and(|s| s >= AGAIN_SCORE);
-        let limit = self.limit;
-        let small = |bytes: &[u8]| bytes.len() as u64 <= limit;
-
+        let mut again = Again {
+            job: self,
+            input,
+            carried,
+            encoded: Default::default(),
+            reference: None,
+            make_reference: Some(reference),
+            report,
+            measured: 0,
+        };
         let start = AGAIN_DISTANCES.iter().position(|&d| d == 2.0).unwrap_or(0);
-        let (bytes, score) = try_distance(self, AGAIN_DISTANCES[start])?;
-        let mut best = None;
-        if passes(score) {
-            if small(&bytes) {
-                best = Some(bytes);
-            }
-            for &distance in &AGAIN_DISTANCES[start + 1..] {
-                let (bytes, score) = try_distance(self, distance)?;
-                if !passes(score) {
-                    break;
-                }
-                if small(&bytes) {
-                    best = Some(bytes);
-                }
-            }
-        } else if small(&bytes) {
-            // Tighter distances only grow; one is worth trying only while this one was small.
-            for &distance in AGAIN_DISTANCES[..start].iter().rev() {
-                let (bytes, score) = try_distance(self, distance)?;
-                if passes(score) && small(&bytes) {
-                    best = Some(bytes);
-                    break;
-                }
-            }
-        }
-        best.ok_or(ImageError::AsSmallAsItGets)
+        let best = choose_again(&mut again, start, AGAIN_DISTANCES.len())?;
+        best.and_then(|n| again.encoded[n].take())
+            .ok_or(ImageError::AsSmallAsItGets)
     }
 
     /// A PNG: the smallest of the lossless version and the palettes scoring at least 90; when
@@ -787,6 +755,129 @@ impl Job<'_> {
             }
         }
         Ok(passing.into_iter().min_by_key(|&n| palettes[n].png.len()))
+    }
+}
+
+/// What choosing a distance for compressing again needs: results encoded, and measured.
+trait Tries {
+    /// Encodes each of the distances `ns` (indices into the list) not encoded yet.
+    fn encode(&mut self, ns: &[usize]) -> Result<(), ImageError>;
+    /// Whether distance `n`, already encoded, is small enough to keep.
+    fn fits(&self, n: usize) -> bool;
+    /// Whether distance `n`, already encoded, scores enough. Each is measured at most once.
+    fn passes(&mut self, n: usize) -> Result<bool, ImageError>;
+}
+
+/// The loosest of `count` distances, tightest first, that scores enough and is small enough,
+/// starting at `start` and moving one step looser or tighter (ADR 0034, item 4). It chooses what
+/// measuring every distance it reaches would, but measures a result only when it, or a looser one
+/// it would lead to, is small enough to keep, and measures nothing when nothing is (ADR 0068).
+fn choose_again(
+    tries: &mut impl Tries,
+    start: usize,
+    count: usize,
+) -> Result<Option<usize>, ImageError> {
+    let looser: Vec<usize> = (start + 1..count).collect();
+    tries.encode(&[start])?;
+    if !tries.fits(start) {
+        // Measured only to know whether a looser distance may be kept: when none is small
+        // enough either, none can be kept.
+        tries.encode(&looser)?;
+        if !looser.iter().any(|&n| tries.fits(n)) {
+            info!("no distance is small enough");
+            return Ok(None);
+        }
+    }
+    let mut best = None;
+    if tries.passes(start)? {
+        if tries.fits(start) {
+            best = Some(start);
+        }
+        for (at, &n) in looser.iter().enumerate() {
+            tries.encode(&[n])?;
+            if !tries.fits(n) {
+                // Its score matters only to go on to a looser one small enough to keep.
+                let later = &looser[at + 1..];
+                tries.encode(later)?;
+                if !later.iter().any(|&l| tries.fits(l)) {
+                    break;
+                }
+            }
+            if !tries.passes(n)? {
+                break;
+            }
+            if tries.fits(n) {
+                best = Some(n);
+            }
+        }
+    } else if tries.fits(start) {
+        // Tighter distances only grow: once one is too big, so are the tighter ones.
+        for n in (0..start).rev() {
+            tries.encode(&[n])?;
+            if !tries.fits(n) {
+                break;
+            }
+            if tries.passes(n)? {
+                best = Some(n);
+                break;
+            }
+        }
+    }
+    Ok(best)
+}
+
+/// Compressing a JPEG again: the distances of [`AGAIN_DISTANCES`] encoded by jpegli and measured
+/// against the original, decoded only once something is to be measured.
+struct Again<'j, 'a, F> {
+    job: &'j mut Job<'a>,
+    input: &'j Path,
+    carried: &'j Carried,
+    encoded: [Option<Vec<u8>>; AGAIN_DISTANCES.len()],
+    reference: Option<Reference>,
+    make_reference: Option<F>,
+    report: &'j mut dyn FnMut(f64),
+    measured: u32,
+}
+
+impl<F: FnOnce() -> Result<Reference, ImageError>> Tries for Again<'_, '_, F> {
+    fn encode(&mut self, ns: &[usize]) -> Result<(), ImageError> {
+        for &n in ns {
+            if self.encoded[n].is_none() {
+                let distance = AGAIN_DISTANCES[n];
+                let bytes = self.job.jpegli(self.input, distance, self.carried)?;
+                info!(distance, size = bytes.len(), "encoded");
+                self.encoded[n] = Some(bytes);
+            }
+        }
+        Ok(())
+    }
+
+    fn fits(&self, n: usize) -> bool {
+        self.encoded[n]
+            .as_ref()
+            .is_some_and(|bytes| bytes.len() as u64 <= self.job.limit)
+    }
+
+    fn passes(&mut self, n: usize) -> Result<bool, ImageError> {
+        self.job.checkpoint()?;
+        if let Some(make) = self.make_reference.take() {
+            self.reference = Some(make()?);
+            (self.report)(0.4);
+        }
+        let (Some(reference), Some(bytes)) = (&self.reference, &self.encoded[n]) else {
+            return Err(ImageError::Failed("measured before it was encoded".into()));
+        };
+        let pixels = decode_with_image(bytes, false)?.reference.pixels;
+        let score = reference.score(&pixels);
+        self.measured += 1;
+        (self.report)(0.4 + 0.18 * f64::from(self.measured));
+        info!(
+            distance = AGAIN_DISTANCES[n],
+            size = bytes.len(),
+            ?score,
+            "measured"
+        );
+        Ok(score.is_some_and(|s| s >= AGAIN_SCORE))
     }
 }
 
