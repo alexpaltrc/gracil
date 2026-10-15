@@ -95,6 +95,11 @@ pub struct Gracil {
     running: HashMap<JobId, JobControl>,
     /// Files got ready and waiting their turn to compress (ADR 0040).
     prepared: HashMap<JobId, work::Prepared>,
+    /// When the last video started compressing: the memory free beside it is read only once it
+    /// has taken what it needs (ADR 0067).
+    video_started: Option<Instant>,
+    /// The memory free is to be read again soon, for a video waiting to get ready (ADR 0067).
+    room_asked: bool,
     /// Pause holds every file being worked on, and nothing new starts until Resume.
     pub paused: bool,
     /// Whether the computer runs warm, and whether Gracil is resting a moment (ADR 0045).
@@ -204,6 +209,9 @@ pub enum Message {
     ChooseFiles,
     FilesChosen(Vec<PathBuf>),
     Job(JobId, Report),
+    /// Time to read the memory free again, for a video waiting to get ready beside the one
+    /// compressing (ADR 0067).
+    RoomAgain,
     Cancel,
     Pause,
     Resume,
@@ -334,6 +342,8 @@ impl Gracil {
             shift: None,
             running: HashMap::new(),
             prepared: HashMap::new(),
+            video_started: None,
+            room_asked: false,
             paused: false,
             breath: Breath::default(),
             held: false,
@@ -668,6 +678,10 @@ impl Gracil {
             // no window makes it only once the pointer comes to the icon or files come (ADR 0066).
             Message::MakeMini if self.tray.is_some() && !self.resting_in_tray() => self.make_mini(),
             Message::MakeMini => Task::none(),
+            Message::RoomAgain => {
+                self.room_asked = false;
+                self.schedule()
+            }
             Message::Outside(Outside::Tray(TrayEvent::Pointed)) => self.make_mini(),
             Message::MiniReady(handle) => self.on_mini_ready(handle),
             Message::MiniShown(handle) => {
