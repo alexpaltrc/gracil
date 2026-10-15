@@ -30,6 +30,7 @@ use iced::window::settings::platform::CornerPreference;
 use iced::{Event, Size, Subscription, Task, Theme, event, keyboard, system, window};
 use tracing::{info, warn};
 
+use crate::estimate::{self, Estimate, TimeLeft};
 use crate::focus::{self, Scope};
 use crate::logging;
 use crate::motion;
@@ -57,7 +58,7 @@ use leaving::Kept;
 use list::choose_files;
 use look::{windows_accent, windows_contrast};
 pub use summary::Finished;
-use summary::{Outcomes, Summary, Tally};
+use summary::{Outcomes, Summary, Tally, Weights};
 use windows::{dismiss, give_icon};
 
 pub struct Gracil {
@@ -157,6 +158,10 @@ pub struct Gracil {
     summary: Summary,
     /// What each file adds to the counts, so a change counts only the files it touched.
     tally: Tally,
+    /// How much each file on the list weighs, for the time left (ADR 0069).
+    weights: Weights,
+    /// The time left in this round of work, followed as it goes on (ADR 0069).
+    estimate: Estimate,
     /// Where this round of work started, kept until everything in it is done.
     round_from: Option<JobId>,
     /// The files left unfinished the last time Gracil closed, offered until they are taken up or
@@ -314,6 +319,8 @@ impl Gracil {
             queue: Queue::default(),
             outcomes: Outcomes::default(),
             tally: Tally::default(),
+            weights: Weights::default(),
+            estimate: Estimate::default(),
             engine: EngineState::Starting,
             hovering: None,
             drawer_open: false,
@@ -459,6 +466,8 @@ impl Gracil {
             let running = &self.running;
             self.downloading.retain(|id| running.contains_key(id));
         }
+        // Progress moves the time left too, so it follows every message.
+        self.follow_time_left(Instant::now());
         self.keep_unfinished();
         // The work finished while Exit was being asked about: nothing is left to stop, so the
         // question goes away.

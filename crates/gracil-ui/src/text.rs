@@ -6,6 +6,7 @@
 use gracil_windows::TrayState;
 
 use crate::app::Finished;
+use crate::estimate::TimeLeft;
 use crate::numbers::Numbers;
 use crate::work::{Failure, Sizes};
 
@@ -135,6 +136,10 @@ pub struct Text {
     saved_as: fn(&str) -> String,
     replaced_by: fn(&str) -> String,
     tray_tip: fn(TrayState) -> String,
+    /// The time left by itself, for the tray's tip and the window's title, and after the count
+    /// of files left, each with the time written in the user's number format (ADR 0069).
+    time_left: fn(TimeLeft, &str) -> String,
+    about: fn(TimeLeft, &str) -> String,
     /// What Exit stops: how many files are being worked on, how many wait, and how many results
     /// wait for a choice, each also written; and whether folders are still being looked through.
     exit_explanation: fn([usize; 3], [&str; 3], bool) -> String,
@@ -224,6 +229,26 @@ impl Text {
 
     pub fn files_left(&self, count: usize) -> String {
         (self.files_left)(count, &number(count))
+    }
+
+    /// The count of files left with about how long they take (ADR 0069): `12 files left, about
+    /// 20 min`.
+    pub fn files_left_about(&self, count: usize, time: TimeLeft) -> String {
+        format!(
+            "{}, {}",
+            self.files_left(count),
+            (self.about)(time, &time_number(time))
+        )
+    }
+
+    /// The tray's tip and the window's title while compressing, with about how long is left when
+    /// that is known (ADR 0069): `Gracil · compressing 42% · about 20 min left`.
+    pub fn tray_compressing(&self, done: f32, time: Option<TimeLeft>) -> String {
+        let tip = self.tray_tip(TrayState::Processing(done));
+        match time {
+            Some(time) => format!("{tip} · {}", (self.time_left)(time, &time_number(time))),
+            None => tip,
+        }
     }
 
     /// Files left unfinished the last time Gracil closed.
@@ -460,6 +485,14 @@ static ENGLISH: Text = Text {
         TrayState::Paused => "Gracil · paused".to_owned(),
         TrayState::Error => "Gracil · click to see what happened".to_owned(),
     },
+    time_left: |time, written| match time {
+        TimeLeft::Minutes(_) => format!("about {written} min left"),
+        TimeLeft::Hours(_) => format!("about {written} h left"),
+    },
+    about: |time, written| match time {
+        TimeLeft::Minutes(_) => format!("about {written} min"),
+        TimeLeft::Hours(_) => format!("about {written} h"),
+    },
     exit_explanation: |[stopping, waiting, unchosen],
                        [stopping_written, written, unchosen_written],
                        looking| {
@@ -633,6 +666,16 @@ static SPANISH: Text = Text {
         TrayState::Paused => "Gracil · en pausa".to_owned(),
         TrayState::Error => "Gracil · haz clic para ver qué pasó".to_owned(),
     },
+    time_left: |time, written| match time {
+        TimeLeft::Minutes(_) => format!("quedan unos {written} min"),
+        TimeLeft::Hours(1) => "queda cerca de 1 h".to_owned(),
+        TimeLeft::Hours(_) => format!("quedan unas {written} h"),
+    },
+    about: |time, written| match time {
+        TimeLeft::Minutes(_) => format!("unos {written} min"),
+        TimeLeft::Hours(1) => "cerca de 1 h".to_owned(),
+        TimeLeft::Hours(_) => format!("unas {written} h"),
+    },
     exit_explanation: |[stopping, waiting, unchosen],
                        [stopping_written, written, unchosen_written],
                        looking| {
@@ -701,6 +744,15 @@ static SPANISH: Text = Text {
 /// A count in the user's number format: `15,031`.
 fn number(count: usize) -> String {
     Numbers::system().whole(count as u64)
+}
+
+/// The minutes or hours of a time left, in the user's number format.
+fn time_number(time: TimeLeft) -> String {
+    match time {
+        TimeLeft::Minutes(count) | TimeLeft::Hours(count) => {
+            Numbers::system().whole(u64::from(count))
+        }
+    }
 }
 
 /// A share from 0 to 1 rounded to a whole percentage, for how much smaller a file became.
@@ -806,6 +858,57 @@ mod tests {
         assert_eq!(
             en.tray_tip(TrayState::Processing(0.429)),
             "Gracil · compressing 42%"
+        );
+    }
+
+    #[test]
+    fn the_time_left_reads_naturally() {
+        let (en, es) = (Text::get(Language::English), Text::get(Language::Spanish));
+        let twenty = Some(TimeLeft::Minutes(20));
+        assert_eq!(
+            en.tray_compressing(0.429, twenty),
+            "Gracil · compressing 42% · about 20 min left"
+        );
+        assert_eq!(
+            en.tray_compressing(0.429, Some(TimeLeft::Hours(1))),
+            "Gracil · compressing 42% · about 1 h left"
+        );
+        assert_eq!(
+            en.tray_compressing(0.429, Some(TimeLeft::Hours(2))),
+            "Gracil · compressing 42% · about 2 h left"
+        );
+        assert_eq!(en.tray_compressing(0.429, None), "Gracil · compressing 42%");
+        assert_eq!(
+            es.tray_compressing(0.5, twenty),
+            "Gracil · comprimiendo 50% · quedan unos 20 min"
+        );
+        assert_eq!(
+            es.tray_compressing(0.5, Some(TimeLeft::Hours(1))),
+            "Gracil · comprimiendo 50% · queda cerca de 1 h"
+        );
+        assert_eq!(
+            es.tray_compressing(0.5, Some(TimeLeft::Hours(2))),
+            "Gracil · comprimiendo 50% · quedan unas 2 h"
+        );
+        assert_eq!(
+            en.files_left_about(12, TimeLeft::Minutes(20)),
+            "12 files left, about 20 min"
+        );
+        assert_eq!(
+            en.files_left_about(1, TimeLeft::Hours(1)),
+            "1 file left, about 1 h"
+        );
+        assert_eq!(
+            es.files_left_about(12, TimeLeft::Minutes(5)),
+            "Quedan 12 archivos, unos 5 min"
+        );
+        assert_eq!(
+            es.files_left_about(1, TimeLeft::Hours(1)),
+            "Queda 1 archivo, cerca de 1 h"
+        );
+        assert_eq!(
+            es.files_left_about(1_500, TimeLeft::Hours(3)),
+            "Quedan 1,500 archivos, unas 3 h"
         );
     }
 

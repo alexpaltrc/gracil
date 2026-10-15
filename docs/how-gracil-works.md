@@ -110,7 +110,8 @@ pictures) below.
   3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says how many are left, for
   example **12 files left · View files**. The count goes down as each file
   finishes; once none are left, the line says only what else there is, such as **2 more to
-  decide · View files**. Only what is still on the list counts:
+  decide · View files**. With a longer list, it also says about how long is left, for example
+  **12 files left, about 20 min · View files** (see "How long is left" below). Only what is still on the list counts:
   taking files off it, or **Clear**, takes them out of the total. Point at a file's name, in the
   list or above the ring, to see where it is: its whole path.
   The list unfolds gently from under that line and folds away when closed, quickly even with
@@ -142,6 +143,26 @@ pictures) below.
 - You can always compress a video again, even one already on the list: if the list is done with
   it (it was replaced, saved, couldn't be compressed or was stopped), it starts again as new.
   Adding a video that is still waiting, being compressed or waiting for your choice does nothing.
+
+## How long is left
+
+While a list is being compressed, Gracil says about how long it has left: after the count of files
+left (**12 files left, about 20 min**), and when you point at its marble next to the clock or look
+at its name in the taskbar (**Gracil · compressing 42% · about 20 min left**). It isn't in the
+small window next to the clock, which has no room for it.
+
+- It is a rough guide, on purpose: about 5, 10, 20, 30 or 45 minutes, then whole hours, such as
+  **about 2 h left**. In Spanish, **quedan unos 20 min** or **quedan unas 2 h**.
+- It comes down as the work goes on, and only goes up when clearly more is left, for example after
+  you add a lot more files, so it never creeps up a minute at a time.
+- It shows once at least three files are done and Gracil has watched the work for about half a
+  minute, so it knows its pace. It isn't shown while you have paused, while Gracil rests because
+  the computer is warm or has just woken up, while it waits for a laptop to be plugged in, while
+  folders are still being looked through (more files may come), or once only a couple of minutes
+  are left.
+- Gracil goes by how much there is to compress, not by how many files: a large video counts for
+  much more than a photo. It watches its own pace with videos and with images separately, since it
+  works on both side by side, and goes by whichever will take longer.
 
 ## Replace, or keep a copy
 
@@ -621,7 +642,8 @@ tells you how things are going:
   marble turns back to normal.
 
 Pointing at the marble says the same in words, and so does Gracil's name in the taskbar and in
-Alt+Tab, which is also what screen readers read, for example **Gracil · compressing 42%**. Before
+Alt+Tab, which is also what screen readers read, for example **Gracil · compressing 42%**, or with
+a longer list **Gracil · compressing 42% · about 20 min left** (see "How long is left"). Before
 the work starts moving it says **Gracil · getting ready**, or **Gracil · downloading** for a file
 kept only online; while results wait for you and nothing else goes on, **Gracil · 2 files waiting
 for you**; while a low battery holds the work, **Gracil · low battery, waiting**; once the list is

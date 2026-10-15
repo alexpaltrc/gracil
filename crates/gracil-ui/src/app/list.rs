@@ -130,25 +130,30 @@ impl Gracil {
         if stops != self.stops {
             // Started before Stop: what it finds is kept to carry on with later, not compressed.
             match found {
-                work::Found::Files(paths) => self
-                    .offered
-                    .extend(paths.into_iter().map(|path| Unfinished { path, choice })),
+                work::Found::Files(files) => self.offered.extend(
+                    files
+                        .into_iter()
+                        .map(|(path, _)| Unfinished { path, choice }),
+                ),
                 work::Found::Done => self.abandoned = self.abandoned.saturating_sub(1),
             }
             return Task::none();
         }
-        let paths = match found {
-            work::Found::Files(paths) => paths,
+        let files = match found {
+            work::Found::Files(files) => files,
             work::Found::Done => {
                 self.gathering = self.gathering.saturating_sub(1);
                 return Task::none();
             }
         };
+        let (paths, bytes): (Vec<PathBuf>, Vec<u64>) = files.into_iter().unzip();
+        let added = self.add(paths.clone());
+        self.weigh(&paths, &bytes);
         let Some(choice) = choice else {
-            return self.add(paths);
+            return added;
         };
         // File Explorer's choice goes with each file, found again once it is on the list.
-        let mut tasks = vec![self.add(paths.clone())];
+        let mut tasks = vec![added];
         let ids: Vec<JobId> = paths
             .iter()
             .filter_map(|path| self.queue.find(path).map(|job| job.id))

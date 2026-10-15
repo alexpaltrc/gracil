@@ -69,28 +69,36 @@ pub fn looks_like_media(path: &Path) -> bool {
 /// followed, so a folder can never lead back to itself.
 pub fn gather(paths: impl IntoIterator<Item = PathBuf>, only: Option<Kind>) -> Vec<PathBuf> {
     let mut found = Vec::new();
-    gather_each(paths, only, &mut |batch| found.extend(batch));
+    gather_each(paths, only, &mut |batch| {
+        found.extend(batch.into_iter().map(|(path, _)| path));
+    });
     found
 }
 
 /// [`gather`], handing over what it finds folder by folder as soon as each folder is read, so
 /// work can start before a large or slow folder (a network or cloud drive) is looked through
-/// (ADR 0037). Only names are read: no file is opened, so nothing has to be downloaded.
+/// (ADR 0037). Only names are read: no file is opened, so nothing has to be downloaded. Each file
+/// comes with its size in bytes, as the folder's listing gives it (0 when it can't be told), which
+/// weighs how long it will take (ADR 0069).
 pub fn gather_each(
     paths: impl IntoIterator<Item = PathBuf>,
     only: Option<Kind>,
-    found: &mut dyn FnMut(Vec<PathBuf>),
+    found: &mut dyn FnMut(Vec<(PathBuf, u64)>),
 ) {
     let wanted = |path: &Path| only.is_none_or(|kind| kind_of(path) == kind);
     let mut loose = Vec::new();
     for path in paths {
-        if path.is_dir() {
+        let Ok(metadata) = std::fs::metadata(&path) else {
+            continue;
+        };
+        if metadata.is_dir() {
             if !loose.is_empty() {
                 found(std::mem::take(&mut loose));
             }
             walk(&path, &|path| looks_like_media(path) && wanted(path), found);
-        } else if path.is_file() && (only.is_none() || looks_like_media(&path) && wanted(&path)) {
-            loose.push(path);
+        } else if metadata.is_file() && (only.is_none() || looks_like_media(&path) && wanted(&path))
+        {
+            loose.push((path, metadata.len()));
         }
     }
     if !loose.is_empty() {
@@ -98,7 +106,7 @@ pub fn gather_each(
     }
 }
 
-fn walk(dir: &Path, wanted: &dyn Fn(&Path) -> bool, found: &mut dyn FnMut(Vec<PathBuf>)) {
+fn walk(dir: &Path, wanted: &dyn Fn(&Path) -> bool, found: &mut dyn FnMut(Vec<(PathBuf, u64)>)) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
@@ -118,7 +126,9 @@ fn walk(dir: &Path, wanted: &dyn Fn(&Path) -> bool, found: &mut dyn FnMut(Vec<Pa
         if kind.is_dir() {
             folders.push(path);
         } else if kind.is_file() && wanted(&path) {
-            files.push(path);
+            // On Windows its size comes with the listing too.
+            let bytes = entry.metadata().map_or(0, |metadata| metadata.len());
+            files.push((path, bytes));
         }
     }
     if !files.is_empty() {
@@ -240,7 +250,11 @@ mod tests {
         let all = names(gather([root.clone()], None));
         let mut batches = Vec::new();
         gather_each([root.clone()], None, &mut |batch| {
-            batches.push(names(batch))
+            assert!(
+                batch.iter().all(|&(_, bytes)| bytes == 1),
+                "with their sizes"
+            );
+            batches.push(names(batch.into_iter().map(|(path, _)| path).collect()))
         });
         assert_eq!(
             batches,

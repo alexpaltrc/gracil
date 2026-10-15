@@ -360,8 +360,9 @@ fn wait_for_sweep_if_missing(paths: &[PathBuf]) {
 /// What looking through File Explorer's files and folders turns up (ADR 0037).
 #[derive(Debug, Clone)]
 pub enum Found {
-    /// The files of one folder, or the files sent by themselves.
-    Files(Vec<PathBuf>),
+    /// The files of one folder, or the files sent by themselves, each with its size in bytes
+    /// (ADR 0069).
+    Files(Vec<(PathBuf, u64)>),
     /// Everything has been looked through.
     Done,
 }

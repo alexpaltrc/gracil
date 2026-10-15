@@ -149,6 +149,10 @@ with it.
   file off the list with **×** or **Clear**. Right after **Clear**, **Undo** puts the whole list
   back, finished results included. A video can always be compressed again, even right
   after replacing it, without clearing the list first.
+- With a longer list, Gracil says about how long is left, for example **12 files left, about
+  20 min**, and when you point at its marble next to the clock, **Gracil · compressing 42% · about
+  20 min left**. It is a calm, rounded guide that comes down as the work goes on and doesn't creep
+  up, and it steps aside while you pause, while Gracil rests and near the end.
 - Everything works from the keyboard too: **Tab** moves a ring from one button to the next,
   including pause and stop on the ring, and **Enter** or **Space** presses it. The button with the
   ring lights up and shows its reminder, and buttons you can't use yet are skipped. On the

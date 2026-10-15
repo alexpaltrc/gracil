@@ -905,10 +905,13 @@ fn name(job: &Job, max_chars: usize, text_size: f32) -> Element<'static, Message
 }
 
 fn footer(state: &Gracil) -> Element<'_, Message> {
-    // How many are left, once there are any: with none left, the rest says it (ADR 0066).
+    // How many are left, once there are any: with none left, the rest says it (ADR 0066). With
+    // about how long they take, once that is known well enough (ADR 0069).
     let mut parts = Vec::new();
-    if state.left() > 0 {
-        parts.push(state.text.files_left(state.left()));
+    match (state.left(), state.time_left()) {
+        (0, _) => {}
+        (left, Some(time)) => parts.push(state.text.files_left_about(left, time)),
+        (left, None) => parts.push(state.text.files_left(left)),
     }
     // "More" to decide: besides the result already shown large, as in the mini-window.
     let shown_waiting = state.focused().is_some_and(|job| state.is_waiting(job.id));
