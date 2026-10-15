@@ -14,6 +14,7 @@ mod heif;
 mod jpeg;
 mod png;
 mod score;
+mod ssimulacra2;
 
 use std::ffi::OsString;
 use std::fs;
