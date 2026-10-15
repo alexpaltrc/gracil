@@ -36,7 +36,6 @@ impl Reference {
 
     /// Works out the original's side of the measure now, unless it already was, so a
     /// measurement later only has the other picture's side to work out (ADR 0068).
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn prepare(&self) {
         for n in 0..self.backgrounds() {
             self.side(n);

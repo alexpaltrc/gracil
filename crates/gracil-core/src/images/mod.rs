@@ -531,9 +531,20 @@ impl Job<'_> {
         distance: f32,
         carried: &Carried,
     ) -> Result<Vec<u8>, ImageError> {
+        let output = self.scratch.file(&format!("d{distance}.jpg"))?;
+        self.jpegli_into(input, distance, carried, &output)
+    }
+
+    /// [`Job::jpegli`] through `output`, a file of the scratch space.
+    fn jpegli_into(
+        &self,
+        input: &Path,
+        distance: f32,
+        carried: &Carried,
+        output: &Path,
+    ) -> Result<Vec<u8>, ImageError> {
         self.checkpoint()?;
         let program = self.engine.jpegli.as_ref().ok_or(ImageError::NoEncoder)?;
-        let output = self.scratch.file(&format!("d{distance}.jpg"))?;
         let args = vec![
             input.as_os_str().to_owned(),
             output.as_os_str().to_owned(),
@@ -553,8 +564,8 @@ impl Job<'_> {
                 return Err(ImageError::Failed("jpegli stopped answering".into()));
             }
         }
-        let encoded = fs::read(&output)?;
-        let _ = fs::remove_file(&output);
+        let encoded = fs::read(output)?;
+        let _ = fs::remove_file(output);
         if carried.is_empty() {
             return Ok(encoded);
         }
@@ -571,7 +582,7 @@ impl Job<'_> {
         input: &Path,
         carried: &Carried,
         expected: (u32, u32),
-        reference: impl FnOnce() -> Result<Reference, ImageError>,
+        reference: impl FnOnce() -> Result<Reference, ImageError> + Send,
         report: &mut dyn FnMut(f64),
     ) -> Result<Vec<u8>, ImageError> {
         let first = self.jpegli(input, FIRST_DISTANCE, carried)?;
@@ -581,6 +592,11 @@ impl Job<'_> {
             return Ok(first);
         }
         info!(size = first.len(), "already compressed; compressing again");
+        // The original is got ready for measuring while jpegli encodes, when well over the memory
+        // a measurement takes is free (ADR 0068).
+        let pixels = u64::from(expected.0) * u64::from(expected.1);
+        let alongside = share::free_memory()
+            .is_none_or(|free| free / 2 > pixels * SCORE_BYTES_PER_PIXEL as u64);
         let mut again = Again {
             job: self,
             input,
@@ -588,6 +604,7 @@ impl Job<'_> {
             encoded: Default::default(),
             reference: None,
             make_reference: Some(reference),
+            alongside,
             report,
             measured: 0,
         };
@@ -987,27 +1004,81 @@ fn choose_again(
 }
 
 /// Compressing a JPEG again: the distances of [`AGAIN_DISTANCES`] encoded by jpegli and measured
-/// against the original, decoded only once something is to be measured.
+/// against the original. The original is decoded and got ready for measuring while the first
+/// distance encodes, with `alongside`, or else only once something is to be measured.
 struct Again<'j, 'a, F> {
     job: &'j mut Job<'a>,
     input: &'j Path,
     carried: &'j Carried,
     encoded: [Option<Vec<u8>>; AGAIN_DISTANCES.len()],
-    reference: Option<Reference>,
+    /// The original, once decoded; what went wrong decoding it is told only if it is needed.
+    reference: Option<Result<Reference, ImageError>>,
     make_reference: Option<F>,
+    alongside: bool,
     report: &'j mut dyn FnMut(f64),
     measured: u32,
 }
 
-impl<F: FnOnce() -> Result<Reference, ImageError>> Tries for Again<'_, '_, F> {
+impl<F: FnOnce() -> Result<Reference, ImageError> + Send> Tries for Again<'_, '_, F> {
+    /// Encodes the distances `ns` not encoded yet side by side, each a jpegli of its own (ADR
+    /// 0068).
     fn encode(&mut self, ns: &[usize]) -> Result<(), ImageError> {
-        for &n in ns {
-            if self.encoded[n].is_none() {
-                let distance = AGAIN_DISTANCES[n];
-                let bytes = self.job.jpegli(self.input, distance, self.carried)?;
-                info!(distance, size = bytes.len(), "encoded");
-                self.encoded[n] = Some(bytes);
-            }
+        let todo: Vec<usize> = ns
+            .iter()
+            .copied()
+            .filter(|&n| self.encoded[n].is_none())
+            .collect();
+        let Some((&first, others)) = todo.split_first() else {
+            return Ok(());
+        };
+        let mut outputs = Vec::new();
+        for &n in &todo {
+            outputs.push(
+                self.job
+                    .scratch
+                    .file(&format!("d{}.jpg", AGAIN_DISTANCES[n]))?,
+            );
+        }
+        let make = if self.alongside {
+            self.make_reference.take()
+        } else {
+            None
+        };
+        let (job, input, carried) = (&*self.job, self.input, self.carried);
+        let failed = || ImageError::Failed("a thread compressing the image stopped".into());
+        let (results, reference) = thread::scope(|scope| {
+            let reference = make.map(|make| {
+                scope.spawn(move || {
+                    share::worker_started();
+                    let reference = make()?;
+                    reference.prepare();
+                    Ok(reference)
+                })
+            });
+            let handles: Vec<_> = others
+                .iter()
+                .zip(&outputs[1..])
+                .map(|(&n, output)| {
+                    scope.spawn(move || job.jpegli_into(input, AGAIN_DISTANCES[n], carried, output))
+                })
+                .collect();
+            let mut results =
+                vec![job.jpegli_into(input, AGAIN_DISTANCES[first], carried, &outputs[0])];
+            results.extend(
+                handles
+                    .into_iter()
+                    .map(|h| h.join().unwrap_or_else(|_| Err(failed()))),
+            );
+            let reference = reference.map(|h| h.join().unwrap_or_else(|_| Err(failed())));
+            (results, reference)
+        });
+        if reference.is_some() {
+            self.reference = reference;
+        }
+        for (&n, result) in todo.iter().zip(results) {
+            let bytes = result?;
+            info!(distance = AGAIN_DISTANCES[n], size = bytes.len(), "encoded");
+            self.encoded[n] = Some(bytes);
         }
         Ok(())
     }
@@ -1021,10 +1092,21 @@ impl<F: FnOnce() -> Result<Reference, ImageError>> Tries for Again<'_, '_, F> {
     fn passes(&mut self, n: usize) -> Result<bool, ImageError> {
         self.job.checkpoint()?;
         if let Some(make) = self.make_reference.take() {
-            self.reference = Some(make()?);
+            self.reference = Some(make());
+        }
+        if self.measured == 0 {
             (self.report)(0.4);
         }
-        let (Some(reference), Some(bytes)) = (&self.reference, &self.encoded[n]) else {
+        let reference = match &mut self.reference {
+            Some(Ok(reference)) => &*reference,
+            slot => {
+                return Err(match slot.take() {
+                    Some(Err(error)) => error,
+                    _ => ImageError::Failed("the original was not decoded".into()),
+                });
+            }
+        };
+        let Some(bytes) = &self.encoded[n] else {
             return Err(ImageError::Failed("measured before it was encoded".into()));
         };
         let pixels = decode_with_image(bytes, false)?.reference.pixels;
