@@ -719,6 +719,8 @@ impl<'r> Palettes<'r> {
             });
             for (t, made) in made {
                 let (colors, dithered) = self.tries[t];
+                let size = made.as_ref().map_or(0, |p| p.png.len());
+                info!(colors, dithered, size, "palette made");
                 self.made[t] = Some(match made {
                     // Only a palette smaller than the lossless version can be chosen.
                     Ok(palette) if palette.png.len() < self.lossless => Some(palette),

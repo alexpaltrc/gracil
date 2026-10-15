@@ -4,7 +4,14 @@
 //! Every chunk that describes the picture rather than its pixels (color profile, EXIF, text,
 //! physical size, dates) is carried over. Lossless optimization keeps every chunk there is.
 
-use exoquant::{Color, convert_to_indexed, ditherer, optimizer};
+use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
+
+use exoquant::optimizer::{self, Optimizer};
+use exoquant::{
+    Color, ColorMap, ColorSpace, Histogram, Remapper, SimpleColorSpace, ditherer, generate_palette,
+    sort_palette,
+};
 use oxipng::{BitDepth, ColorType, Options, RawImage, StripChunks};
 
 const SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
@@ -120,23 +127,19 @@ pub fn palette(
         .iter()
         .map(|&[r, g, b, a]| Color::new(r, g, b, a))
         .collect();
-    let (palette, indices) = if dithered {
-        convert_to_indexed(
-            &input,
-            width as usize,
-            colors,
-            &optimizer::KMeans,
-            &ditherer::FloydSteinberg::new(),
-        )
+    // exoquant's `convert_to_indexed`, step by step.
+    let colorspace = SimpleColorSpace::default();
+    let histogram: Histogram = input.iter().copied().collect();
+    let palette = generate_palette(&histogram, &colorspace, &optimizer::KMeans, colors);
+    let palette = optimizer::KMeans.optimize_palette(&colorspace, &palette, &histogram, 8);
+    drop(histogram);
+    let indices = if dithered {
+        let ditherer = ditherer::FloydSteinberg::new();
+        Remapper::new(&palette, &colorspace, &ditherer).remap(&input, width as usize)
     } else {
-        convert_to_indexed(
-            &input,
-            width as usize,
-            colors,
-            &optimizer::KMeans,
-            &ditherer::None,
-        )
+        nearest(&input, &palette, &colorspace)
     };
+    let (palette, indices) = sort_palette(&palette, &indices);
     let shown = indices
         .iter()
         .map(|&i| {
@@ -161,6 +164,45 @@ pub fn palette(
         .create_optimized_png(&quick_options())
         .map_err(|e| e.to_string())?;
     Ok(Palette { png, pixels: shown })
+}
+
+/// What exoquant's `ditherer::None` gives, each pixel the index of its nearest palette color, but
+/// looked up once for each distinct color rather than for every pixel: the same result, much
+/// sooner for pictures of few colors (ADR 0068).
+fn nearest(image: &[Color], palette: &[Color], colorspace: &SimpleColorSpace) -> Vec<u8> {
+    let map = ColorMap::new(palette, colorspace);
+    let mut known: HashMap<u32, u8, BuildHasherDefault<Quick>> = HashMap::default();
+    image
+        .iter()
+        .map(|&c| {
+            let key = u32::from_le_bytes([c.r, c.g, c.b, c.a]);
+            *known
+                .entry(key)
+                .or_insert_with(|| map.find_nearest(colorspace.to_float(c)) as u8)
+        })
+        .collect()
+}
+
+/// A quick hash for [`nearest`]'s colors, which come from the picture, not from anyone choosing
+/// them to collide.
+#[derive(Default)]
+struct Quick(u64);
+
+impl Hasher for Quick {
+    fn finish(&self) -> u64 {
+        // The table picks a place by the low bits: the high ones, best mixed, are folded in.
+        self.0 ^ (self.0 >> 29)
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.write_u32(u32::from(byte));
+        }
+    }
+
+    fn write_u32(&mut self, word: u32) {
+        self.0 = (self.0.rotate_left(5) ^ u64::from(word)).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
 }
 
 /// What a new PNG carries besides its pixels.
@@ -232,6 +274,30 @@ mod tests {
         ]);
         let kept: Vec<[u8; 4]> = descriptive_chunks(&data).into_iter().map(|c| c.0).collect();
         assert_eq!(kept, [*b"iCCP", *b"eXIf", *b"tEXt"]);
+    }
+
+    #[test]
+    fn nearest_colors_are_exoquants_own() {
+        // Many colors, some repeated, some transparent.
+        let image: Vec<Color> = (0..64 * 64u32)
+            .map(|i| {
+                let v = i.wrapping_mul(2_654_435_761) >> 8;
+                Color::new(
+                    v as u8,
+                    (v >> 8) as u8,
+                    (i % 7 * 30) as u8,
+                    (v >> 16) as u8 | 0x3f,
+                )
+            })
+            .chain((0..500).map(|i| Color::new(i as u8, 10, 200, 255)))
+            .collect();
+        let colorspace = SimpleColorSpace::default();
+        let histogram: Histogram = image.iter().copied().collect();
+        for colors in [256, 32] {
+            let palette = generate_palette(&histogram, &colorspace, &optimizer::KMeans, colors);
+            let expected = Remapper::new(&palette, &colorspace, &ditherer::None).remap(&image, 64);
+            assert_eq!(nearest(&image, &palette, &colorspace), expected);
+        }
     }
 
     #[test]
