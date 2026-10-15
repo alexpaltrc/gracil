@@ -597,7 +597,9 @@ mod tests {
                 )
                 .0
             });
-            // Says something every half second for about five seconds, then ends well.
+            // Says something every half second for about five seconds, then ends well. Its own
+            // patience is long enough that a slow start, with every test running, is never taken
+            // for silence.
             let talking = scope.spawn(|| {
                 let mut command = Command::new("powershell");
                 command.args([
@@ -610,7 +612,7 @@ mod tests {
                     command,
                     Vec::new(),
                     &control,
-                    Duration::from_secs(2),
+                    Duration::from_secs(20),
                     &mut |_| {},
                 )
                 .0

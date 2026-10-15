@@ -21,6 +21,12 @@ pub fn init() {
     let Some(dir) = gracil_core::toolchain::default_private_dir() else {
         return;
     };
+    // The day's limit is for the day, not for each run: what earlier runs wrote today counts.
+    let day = today();
+    let written = std::fs::metadata(dir.join("logs").join(file_name(day))).map_or(0, |m| m.len());
+    *TODAY
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = (day, written, false);
     let Ok(appender) = RollingFileAppender::builder()
         .rotation(Rotation::DAILY)
         .filename_prefix("gracil")
@@ -134,13 +140,38 @@ enum Allowed {
 
 /// Counts `bytes` against today's limit.
 fn within_limit(bytes: u64, important: bool) -> Allowed {
-    let day = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |since| since.as_secs() / (24 * 60 * 60));
+    let day = today();
     let mut today = TODAY
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     count(&mut today, day, bytes, important)
+}
+
+/// Today, counted in days from 1970 in universal time, as the log's own days are.
+fn today() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs() / (24 * 60 * 60))
+}
+
+/// The name of the log of `day` (counted as in [`today`]), as the log writer names it:
+/// `gracil.2026-10-14.log`.
+fn file_name(day: u64) -> String {
+    // Days to a calendar date, by Howard Hinnant's method for the proleptic Gregorian calendar.
+    let days = day + 719_468;
+    let era = days / 146_097;
+    let of_era = days % 146_097;
+    let year_of_era = (of_era - of_era / 1460 + of_era / 36_524 - of_era / 146_096) / 365;
+    let of_year = of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let shifted_month = (5 * of_year + 2) / 153;
+    let day_of_month = of_year - (153 * shifted_month + 2) / 5 + 1;
+    let month = if shifted_month < 10 {
+        shifted_month + 3
+    } else {
+        shifted_month - 9
+    };
+    let year = year_of_era + era * 400 + u64::from(month <= 2);
+    format!("gracil.{year:04}-{month:02}-{day_of_month:02}.log")
 }
 
 fn count(today: &mut (u64, u64, bool), day: u64, bytes: u64, important: bool) -> Allowed {
@@ -255,6 +286,15 @@ mod tests {
         // A new day starts afresh.
         assert_eq!(count(&mut today, 8, 100, false), Allowed::Whole);
         assert_eq!(today, (8, 100, false));
+    }
+
+    #[test]
+    fn the_log_of_a_day_is_named_as_the_writer_names_it() {
+        assert_eq!(file_name(0), "gracil.1970-01-01.log");
+        assert_eq!(file_name(11_016), "gracil.2000-02-29.log");
+        assert_eq!(file_name(20_740), "gracil.2026-10-14.log");
+        assert_eq!(file_name(20_818), "gracil.2026-12-31.log");
+        assert_eq!(file_name(20_819), "gracil.2027-01-01.log");
     }
 
     #[test]
