@@ -33,7 +33,10 @@ ssimulacra2 = "0.5.1"
 gracil-core = { path = "crates/gracil-core" }
 gracil-windows = { path = "crates/gracil-windows" }
 embed-resource = "3.0.11"
-iced = { version = "0.14.0", default-features = false, features = ["wgpu", "tiny-skia", "thread-pool", "canvas", "advanced"] }
+iced = { version = "0.14.0", default-features = false, features = ["wgpu-bare", "tiny-skia", "thread-pool", "canvas", "advanced"] }
+# Only for its features: the window draws with Direct3D 12 alone, so Vulkan, OpenGL and the rest
+# of WGPU's ways to draw are left out of Gracil (ADR 0066). Kept in step with Iced's own WGPU.
+wgpu = { version = "=27.0.1", default-features = false, features = ["dx12", "wgsl", "std", "parking_lot"] }
 log = "0.4.34"
 rfd = { version = "0.17.2", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
