@@ -491,7 +491,8 @@ Gracil never writes over your video while it works.
 - If FFmpeg stops answering (a damaged file, a network drive that stalled), Gracil waits five
   minutes (ten for a check of a video larger than 4K), then stops it and tries the next way of
   compressing. Time paused, resting or asleep doesn't count.
-- Results are put in place one at a time, in the order you chose them. Finished files you let go
+- Results on the same drive are put in place one at a time, in the order you chose them; a slow
+  network drive never holds up saving onto another drive. Finished files you let go
   (with **×**, **Clear**, or when **Undo** goes away) are deleted in the background, so the window
   never waits on a slow drive.
 - Very long names still work: when a name is near Windows' limit, Gracil shortens the end of the
@@ -545,9 +546,11 @@ folder by folder, and compressing starts with the first ones found while Gracil 
 it finds the first, the window says **Looking through the folder…**, and after that the line with
 **View files** says **looking for more**. Looking only reads the names of the files. On a cloud
 drive, each file is still downloaded when its turn comes to be compressed, and the smaller version
-is uploaded when it is saved, so that part goes as fast as your connection. A file that was kept
-only online needs room on your drive for its download as well as for its smaller version, and once
-Gracil is done with it, the cloud drive may free up that room again, as **Free up space** does.
+is uploaded when it is saved, so that part goes as fast as your connection. A large video's
+download is never mistaken for a stuck file, and pausing or **Stop** acts on it within moments. A
+file that was kept only online needs room on your drive for its download as well as for its
+smaller version, and once Gracil is done with it (saved, let go or removed from the list, even
+before it compressed), the cloud drive may free up that room again, as **Free up space** does.
 Each image is read from the drive only once, and a few are read ahead while others compress, so
 the waiting overlaps with the work, but never so many that they crowd your computer's memory.
 

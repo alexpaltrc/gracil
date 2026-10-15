@@ -13,6 +13,17 @@ stopped for silence across a sleep is tried once more, like one that failed.
 those marked system or read-only alone: Windows marks a folder so when it is given its own icon
 or look, as Pictures and Videos are, and such a folder is the person's.
 
+*Update (2026-10-14), item 3:* one placer for each drive, made when first needed, each putting its
+results in place one after another, so a network share that stalls holds up only its own. The
+drive is told from the path's name alone (`C:`, `\\server\share`), asking nothing of it. A placer
+that stops unexpectedly still answers that the result couldn't be put in place, so a file is
+never left being saved and leaving can always finish.
+
+*Update (2026-10-14), item 7:* a video kept only online is read through, a piece at a time, before
+FFprobe opens it, so a long download is never taken for a stuck tool; pause and rest wait between
+pieces and Stop stops. A file let go after it got ready but before it compressed (Clear, removing
+it, Stop) is given back to the cloud drive too.
+
 **Context.** A robustness review looked at what real computers and real folders do to Gracil
 that tests with tidy files don't: files that change while they compress, tools that stop
 answering, cloud drives, read-only files, hidden system folders, very long names, old USB drives,
