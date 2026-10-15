@@ -244,11 +244,11 @@ straining.
   while you use it than a laptop does, as long as it isn't warm or saving energy.
 - Large images need more memory, so Gracil starts fewer of them at once and always leaves at least
   half of the free memory for your programs.
-- Gracil and all its tools together may never take more than about two thirds of the computer's
-  memory: Windows refuses them more, so the computer never slows to a crawl. On a computer with
-  8 GB of memory or less, or little of it free, the next video waits for the current one to finish
-  before getting ready. An image so large it would need more
-  than half of all the memory is left as it is, with a small "!".
+- Gracil's tools together may never take more than about two thirds of the computer's memory:
+  Windows refuses them more, so the computer never slows to a crawl, and Gracil itself keeps
+  working when they reach that limit. On a computer with 8 GB of memory or less, or little of it
+  free, the next video waits for the current one to finish before getting ready. An image so
+  large it would need more than half of all the memory is left as it is, with a small "!".
 - Gracil only compresses a file when its drive has room for the result and 2 GB to spare, so the
   drive never fills up. When several files go to the same drive, each one counts the room the
   others will take. Otherwise the file is left as it is, and a small "!" says the drive is

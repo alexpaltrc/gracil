@@ -58,7 +58,8 @@ ledger in the data folder's `temporary\`, held open exclusively while the proces
 startup, before the engine starts, `gracil_core::leftovers::sweep` settles the ledgers no running
 process holds: temporary files are deleted, a parked original goes back if its place is empty,
 and anything on an absent drive or in use waits for the next start (ADR 0017). Gracil puts itself
-in a kill-on-close job object at startup, so FFmpeg never outlives it (ADR 0018).
+in a kill-on-close job object at startup, so FFmpeg never outlives it (ADR 0018); each tool also
+joins a job nested inside it that holds the tools alone to their memory limit (ADR 0063).
 
 **Finding FFmpeg.** At startup, in the background: the `ffmpeg` folder beside `gracil.exe`, or,
 while developing, an FFmpeg on `PATH`; either needs `ffprobe.exe` beside it and the `libx265`

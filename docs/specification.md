@@ -1147,8 +1147,8 @@ handed to FFmpeg as a video and tried, never rejected up front (§2).
   presentation or call) and its warmth can be read; a laptop never gets more than half of the
   processor and its tools always run in efficiency mode; on battery below 30 % nothing new starts
   and below 15 % everything waits, saying **Low battery · waiting**, until it is plugged in; the
-  computer is read only while there is work; only the card doing the work is watched; Gracil and
-  its tools together hold at most about 65 % of memory; above 4K the quality is measured at 4K;
+  computer is read only while there is work; only the card doing the work is watched; Gracil's
+  tools together hold at most about 65 % of memory; above 4K the quality is measured at 4K;
   work rests while the computer sleeps and a step sleep cut short is tried again; room on a drive
   counts the other files compressing onto it; and the window is drawn by the processor when the
   graphics card can't. *Built 2026-10-14 (ADR 0063).*

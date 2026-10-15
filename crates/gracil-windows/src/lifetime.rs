@@ -5,10 +5,12 @@
 //! Windows closes the job when Gracil's process ends, however it ends, so an FFmpeg it started can
 //! never keep running, or keep a temporary file in use, after Gracil is gone.
 //!
-//! The same job holds Gracil and everything it starts to some of the processor's threads, and
-//! keeps all of them together from taking most of the computer's memory. The tools in it can also
-//! be put in Windows' efficiency mode (EcoQoS), as Task Manager does, and their memory is the
-//! first Windows gives back when others need it (ADR 0063).
+//! The same job holds Gracil and everything it starts to some of the processor's threads. The
+//! tools alone also go in a second job nested inside it, which keeps all of them together from
+//! taking most of the computer's memory: Gracil itself stays out of that limit, so tools using a
+//! lot can never make one of Gracil's own allocations fail and end it (ADR 0063). The tools can
+//! also be put in Windows' efficiency mode (EcoQoS), as Task Manager does, and their memory is the
+//! first Windows gives back when others need it.
 
 use std::io;
 use std::mem;
@@ -28,12 +30,13 @@ use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentProcessId, GetProcessAffinityMask, MEMORY_PRIORITY_INFORMATION,
     MEMORY_PRIORITY_LOW, OpenProcess, PROCESS_POWER_THROTTLING_CURRENT_VERSION,
     PROCESS_POWER_THROTTLING_EXECUTION_SPEED, PROCESS_POWER_THROTTLING_STATE,
-    PROCESS_SET_INFORMATION, ProcessMemoryPriority, ProcessPowerThrottling, SetProcessInformation,
+    PROCESS_SET_INFORMATION, PROCESS_SET_QUOTA, PROCESS_TERMINATE, ProcessMemoryPriority,
+    ProcessPowerThrottling, SetProcessInformation,
 };
 
-/// The share of the computer's memory Gracil and every tool it runs may hold together, in
-/// hundredths (ADR 0063). Past it, a process is refused more memory, and its file fails quietly,
-/// instead of pushing the whole computer into the swap file.
+/// The share of the computer's memory every tool Gracil runs may hold together, in hundredths
+/// (ADR 0063). Past it, a tool is refused more memory, and its file fails quietly, instead of
+/// pushing the whole computer into the swap file.
 const MEMORY_PERCENT: u64 = 65;
 
 /// Whether the tools should run in efficiency mode, for those started from now on.
@@ -42,33 +45,29 @@ static EFFICIENT: AtomicBool = AtomicBool::new(false);
 /// Gracil's job, once made.
 struct Job {
     handle: usize,
+    /// The job the tools go in, nested inside this one, holding them to the memory limit; none if
+    /// it couldn't be made or the computer's memory isn't known.
+    tools: Option<usize>,
     /// The processor threads Gracil was allowed when it started.
     threads: usize,
-    /// The most memory the whole job may hold, if the computer's memory is known.
-    memory: Option<usize>,
 }
 
 static JOB: OnceLock<Job> = OnceLock::new();
 
 /// Makes every process Gracil starts from now on end when Gracil ends. Call it once, early.
 pub fn end_children_with_this_process() -> io::Result<()> {
-    // SAFETY: no security attributes and no name; the result is checked before use.
-    #[allow(unsafe_code)]
-    let handle = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
-    if handle.is_null() {
-        return Err(io::Error::last_os_error());
-    }
+    let handle = new_job()?;
     let (mut process, mut system) = (0, 0);
     // SAFETY: the pseudo-handle stands for this process; both answers go in local integers.
     #[allow(unsafe_code)]
     let read = unsafe { GetProcessAffinityMask(GetCurrentProcess(), &mut process, &mut system) };
     let job = Job {
-        handle: handle as usize,
+        handle,
+        tools: tools_job(),
         threads: if read != 0 { process } else { 0 },
-        memory: crate::total_memory()
-            .and_then(|total| usize::try_from(total / 100 * MEMORY_PERCENT).ok()),
     };
     limit(&job, None)?;
+    let handle = handle as *mut core::ffi::c_void;
 
     // SAFETY: both handles are valid; the current-process pseudo handle needs no closing. The job
     // handle is deliberately never closed: Windows closes it when this process ends, and that is
@@ -115,16 +114,65 @@ pub fn use_efficiency_mode(on: bool) -> io::Result<()> {
     // SAFETY: takes no arguments.
     #[allow(unsafe_code)]
     let own = unsafe { GetCurrentProcessId() };
-    for id in processes_in(job)?.into_iter().filter(|&id| id != own) {
+    for id in processes_in(job.handle)?
+        .into_iter()
+        .filter(|&id| id != own)
+    {
         quiet(id, on);
     }
     Ok(())
 }
 
-/// Quiets a tool Gracil has just started, by its process id: efficiency mode as last asked of
-/// [`use_efficiency_mode`], and memory Windows gives back first when others need it.
+/// Quiets a tool Gracil has just started, by its process id: it joins the tools' job and its
+/// memory limit, gets efficiency mode as last asked of [`use_efficiency_mode`], and its memory is
+/// what Windows gives back first when others need it.
 pub fn quiet_tool(id: u32) {
+    if let Some(tools) = JOB.get().and_then(|job| job.tools) {
+        join(tools, id);
+    }
     quiet(id, EFFICIENT.load(Ordering::Relaxed));
+}
+
+/// Makes a job, not yet limited.
+fn new_job() -> io::Result<usize> {
+    // SAFETY: no security attributes and no name; the result is checked before use.
+    #[allow(unsafe_code)]
+    let handle = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
+    if handle.is_null() {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(handle as usize)
+}
+
+/// Makes the job the tools go in, limited to their share of the computer's memory. Its first tool
+/// is already in Gracil's job, which nests this one inside it, so it keeps Gracil's processor
+/// limit and ends with Gracil too. Its handle, like Gracil's job's, is never closed.
+fn tools_job() -> Option<usize> {
+    let memory = crate::total_memory()
+        .and_then(|total| usize::try_from(total / 100 * MEMORY_PERCENT).ok())?;
+    let handle = new_job().ok()?;
+    // SAFETY: the structure is plain data, for which all zeroes is a valid value.
+    #[allow(unsafe_code)]
+    let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { mem::zeroed() };
+    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_JOB_MEMORY;
+    limits.JobMemoryLimit = memory;
+    set_limits(handle, &limits).ok()?;
+    Some(handle)
+}
+
+/// Puts one process in the tools' job. A process that has just ended is skipped.
+fn join(tools: usize, id: u32) {
+    // SAFETY: asks only for the rights joining a job needs; the handle is checked before use and
+    // closed right after, and the job handle is open for the life of the process.
+    #[allow(unsafe_code)]
+    unsafe {
+        let process = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, id);
+        if process.is_null() {
+            return;
+        }
+        AssignProcessToJobObject(tools as *mut core::ffi::c_void, process);
+        CloseHandle(process);
+    }
 }
 
 /// Sets one process's efficiency mode, and lowers its memory priority. A process that has just
@@ -173,7 +221,7 @@ fn quiet(id: u32, efficient: bool) {
 }
 
 /// The processes in the job right now, Gracil's own included.
-fn processes_in(job: &Job) -> io::Result<Vec<u32>> {
+fn processes_in(job: usize) -> io::Result<Vec<u32>> {
     // Room for far more processes than Gracil ever runs at once. `usize` keeps the list aligned;
     // its two counts fill the first one.
     const ROOM: usize = 256;
@@ -184,7 +232,7 @@ fn processes_in(job: &Job) -> io::Result<Vec<u32>> {
     #[allow(unsafe_code)]
     let read = unsafe {
         QueryInformationJobObject(
-            job.handle as *mut core::ffi::c_void,
+            job as *mut core::ffi::c_void,
             JobObjectBasicProcessIdList,
             list.as_mut_ptr().cast(),
             size,
@@ -226,22 +274,22 @@ fn limit(job: &Job, threads: Option<usize>) -> io::Result<()> {
     #[allow(unsafe_code)]
     let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { mem::zeroed() };
     limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    if let Some(memory) = job.memory {
-        limits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_JOB_MEMORY;
-        limits.JobMemoryLimit = memory;
-    }
     if let Some(threads) = threads.filter(|&threads| threads != 0) {
         limits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_AFFINITY;
         limits.BasicLimitInformation.Affinity = threads;
     }
+    set_limits(job.handle, &limits)
+}
+
+fn set_limits(job: usize, limits: &JOBOBJECT_EXTENDED_LIMIT_INFORMATION) -> io::Result<()> {
     // SAFETY: the job handle is open for the life of the process, and the pointer and size
     // describe `limits`, which outlives the call.
     #[allow(unsafe_code)]
     let set = unsafe {
         SetInformationJobObject(
-            job.handle as *mut core::ffi::c_void,
+            job as *mut core::ffi::c_void,
             JobObjectExtendedLimitInformation,
-            (&raw const limits).cast(),
+            ptr::from_ref(limits).cast(),
             mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
         )
     };
@@ -288,23 +336,39 @@ mod tests {
     #[test]
     fn tools_can_be_put_in_efficiency_mode() {
         end_children_with_this_process().unwrap();
-        let mut child = Command::new("ping")
-            .args(["-n", "5", "127.0.0.1"])
-            .stdout(Stdio::null())
-            .spawn()
-            .unwrap();
-        assert!(
-            processes_in(JOB.get().unwrap())
+        let job = JOB.get().unwrap();
+        let ping = || {
+            Command::new("ping")
+                .args(["-n", "5", "127.0.0.1"])
+                .stdout(Stdio::null())
+                .spawn()
                 .unwrap()
-                .contains(&child.id())
-        );
+        };
+        let mut children = [ping(), ping()];
         use_efficiency_mode(true).unwrap();
-        quiet_tool(child.id());
+        for child in &children {
+            quiet_tool(child.id());
+        }
         use_efficiency_mode(false).unwrap();
+        // Both tools went in the tools' job, nested inside Gracil's, which still lists them; this
+        // process stays out of the tools' memory limit.
+        let tools = processes_in(job.tools.unwrap()).unwrap();
+        let all = processes_in(job.handle).unwrap();
+        // SAFETY: takes no arguments.
+        #[allow(unsafe_code)]
+        let own = unsafe { GetCurrentProcessId() };
+        assert!(!tools.contains(&own));
+        assert!(all.contains(&own));
+        for child in &children {
+            assert!(tools.contains(&child.id()));
+            assert!(all.contains(&child.id()));
+        }
         // One that has ended is skipped.
         quiet_tool(u32::MAX - 3);
-        child.kill().unwrap();
-        child.wait().unwrap();
+        for child in &mut children {
+            child.kill().unwrap();
+            child.wait().unwrap();
+        }
     }
 
     const AS_PARENT: &str = "GRACIL_TEST_JOB_PARENT";

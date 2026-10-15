@@ -2,6 +2,12 @@
 
 **Status:** Accepted, built (2026-10-14).
 
+*Update (2026-10-14), item 7:* the memory limit holds the tools alone, not Gracil with them. With
+Gracil inside it, tools using a lot made one of Gracil's own allocations fail, which ends a Rust
+program at once. The tools now go, as each starts, into a second job nested inside Gracil's, and
+that job is held to about 65 % of the memory for all of them together; Gracil's job keeps the
+processor limit and ending the tools with Gracil.
+
 **Context.** ADRs 0040, 0043, 0045, 0046, 0049 and 0051 keep Gracil cool, quiet and out of the
 way. The product owner asked for a review of what could still strain someone's computer, above all
 a simple laptop, and approved twelve changes. The gaps found:
