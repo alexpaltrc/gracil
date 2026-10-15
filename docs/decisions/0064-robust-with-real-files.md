@@ -2,6 +2,13 @@
 
 **Status:** Accepted, built (2026-10-14).
 
+*Update (2026-10-14), item 2:* a tool's silence never counts for thirty seconds after the
+computer wakes, nor across any long gap between two looks (a sleep Gracil heard of late). A tool
+that ended well just as it was taken for stuck counts as finished. Its output is read as bytes,
+so a line that isn't valid text can't stop the reading and leave the tool blocked, and Gracil
+never waits for a tool to end while holding what pausing and stopping need. A sample or attempt
+stopped for silence across a sleep is tried once more, like one that failed.
+
 **Context.** A robustness review looked at what real computers and real folders do to Gracil
 that tests with tidy files don't: files that change while they compress, tools that stop
 answering, cloud drives, read-only files, hidden system folders, very long names, old USB drives,
