@@ -19,6 +19,7 @@ mod ssimulacra2;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, Cursor, Read};
+use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread;
@@ -842,6 +843,8 @@ impl<'s, S: PaletteSource> Palettes<'s, S> {
         let pixels = self.source.pixels().max(1);
         let side_by_side = PALETTE_MEMORY / (pixels * SCORE_BYTES_PER_PIXEL) >= 2;
         let mut passing = Vec::new();
+        // The kinds whose last palette made was passed over.
+        let mut passed_over = [false; 2];
         loop {
             // A kind none of whose palettes left may be small enough adds nothing.
             for order in &mut kinds {
@@ -851,30 +854,42 @@ impl<'s, S: PaletteSource> Palettes<'s, S> {
             }
             // The next palette of each kind that can be chosen, made if it wasn't yet.
             let next: Vec<usize> = kinds.iter_mut().filter_map(|k| k.peek().copied()).collect();
-            // Two at a time: when only one is needed, the one after it of the same kind is made
-            // beside it, never more than the eight there are.
+            let unmade = |order: &Peekable<std::vec::IntoIter<usize>>| {
+                order
+                    .clone()
+                    .filter(|&t| self.made[t].is_none())
+                    .collect::<Vec<_>>()
+            };
             let mut wanted: Vec<usize> = next
                 .iter()
                 .copied()
                 .filter(|&t| self.made[t].is_none())
                 .collect();
+            for (order, &passed) in kinds.iter().zip(&passed_over) {
+                // After one passed over, the ones with fewer colors usually are too: the rest of
+                // its kind is made at once, as far as can be side by side.
+                if passed {
+                    for t in unmade(order) {
+                        if !wanted.contains(&t) {
+                            wanted.push(t);
+                        }
+                    }
+                }
+            }
             if let [only] = wanted[..] {
-                let after = kinds
-                    .iter()
-                    .filter_map(|order| {
-                        let mut order = order.clone();
-                        order.next_if_eq(&only)?;
-                        order.find(|&t| self.made[t].is_none())
-                    })
-                    .next();
+                // Two at a time: the one after it of the same kind is made beside it.
+                let after = kinds.iter().find_map(|order| {
+                    let rest = unmade(order);
+                    (rest.first() == Some(&only)).then(|| rest.get(1).copied())?
+                });
                 wanted.extend(after);
             }
+            wanted.truncate(self.at_once.max(next.len()));
             self.make(checkpoint, &wanted, report)?;
             let mut skipped = false;
-            for order in &mut kinds {
-                if order.next_if(|&t| self.palette(t).is_none()).is_some() {
-                    skipped = true;
-                }
+            for (order, passed) in kinds.iter_mut().zip(&mut passed_over) {
+                *passed = order.next_if(|&t| self.palette(t).is_none()).is_some();
+                skipped |= *passed;
             }
             if skipped {
                 continue;
