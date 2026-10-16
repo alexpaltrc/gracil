@@ -129,3 +129,10 @@ kept as before, and every safeguard of ADRs 0040, 0049, 0051, 0063 and 0065 stil
 - Not tried in the app itself: everything was measured with `examples/compress.rs`. Not tried on a
   processor without AVX2 and fused multiply-add, where the first build runs (the tests run it on
   every computer).
+
+*Update (2026-10-15):* item 8 is done. NASM 3.02 (the official portable zip from nasm.us, placed in
+`%LOCALAPPDATA%\bin\NASM`) builds jpegli's libjpeg-turbo with SIMD. On 6 synthetic images (4:2:0,
+4:2:2, 4:4:4, grey, odd sizes, PNG) at distances 1 to 3, all 30 outputs were byte-identical to the
+build without SIMD; reading and encoding took about 5% less time, less than the 15–20% expected.
+A fresh build also needed zlib's folders on the compiler's search path: the CMake in recent Visual
+Studio hands libpng a placeholder for zlib, so `scripts/build-jpegli.ps1` now adds them.

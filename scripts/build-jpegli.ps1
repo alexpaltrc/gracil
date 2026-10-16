@@ -65,7 +65,11 @@ $options = @(
     '-DJPEGLI_ENABLE_SJPEG=OFF', '-DJPEGLI_ENABLE_FUZZERS=OFF', '-DJPEGLI_ENABLE_DEVTOOLS=OFF',
     "-DJPEG_INCLUDE_DIR=`"$turbo\out\include`"", "-DJPEG_LIBRARY=`"$turbo\out\lib\jpeg-static.lib`""
 ) -join ' '
-cmd /c "call `"$vcvars`" >nul && cd /d `"$source`" && cmake -G Ninja -B build -S . $options && cmake --build build --target cjpegli"
+# libpng generates its configuration with zlib's headers, but the CMake shipped with recent
+# Visual Studio hands it a placeholder folder instead, so a fresh build can't find zlib.h. Both of
+# zlib's folders are added to the compiler's search path for the build.
+$zlib = "$source\third_party\zlib;$source\build\third_party\zlib"
+cmd /v:on /c "call `"$vcvars`" >nul && set `"INCLUDE=!INCLUDE!;$zlib`" && cd /d `"$source`" && cmake -G Ninja -B build -S . $options && cmake --build build --target cjpegli"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # cjpegli opens files with the C library's narrow functions, which follow the process code page.
