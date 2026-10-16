@@ -13,6 +13,11 @@ at 1080p on the reference computer the graphics card's encoder, not the quality 
 processor, is what limits getting ready (and the compression itself); measuring fewer levels is
 what shortens it now.
 
+*Update (2026-10-15), item 3, by [ADR 0070](0070-hints-kept-between-starts.md):* the hints are no
+longer kept in memory only: they are written to `hints.txt` in the data folder and read back at
+the next start, with what they depend on (Gracil's version, FFmpeg, the encoder and its settings),
+so hints for anything else are ignored. They still only decide what is measured first.
+
 **Context.** On that computer the graphics card compresses a video in a fraction of the time the
 processor needs to measure it: getting a video ready (ADR 0028, ADR 0030) is most of the wait. The
 window also went through the whole list after every change, which with tens of thousands of files
