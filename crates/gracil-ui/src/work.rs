@@ -24,6 +24,8 @@ use iced::futures::channel::mpsc::{self, Sender};
 use iced::futures::executor::block_on;
 use tracing::{error, info, warn};
 
+use crate::hints;
+
 /// Why a file could not be compressed or placed, in the terms the user sees (worded in
 /// [`crate::text`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -288,7 +290,8 @@ impl Prepared {
     }
 }
 
-/// Finds FFmpeg and detects the hardware.
+/// Finds FFmpeg and detects the hardware, and reads back the levels the last videos needed
+/// (ADR 0070).
 pub fn start_engine() -> Task<Option<Arc<Engine>>> {
     on_thread(
         || None,
@@ -297,9 +300,10 @@ pub fn start_engine() -> Task<Option<Arc<Engine>>> {
                 Some(dir) => tidy_leftovers(dir),
                 None => swept(),
             }
-            let engine = Engine::start();
-            if engine.is_none() {
-                error!("no usable FFmpeg; Gracil's ffmpeg folder is missing or broken");
+            let mut engine = Engine::start();
+            match &mut engine {
+                Some(engine) => hints::restore(engine),
+                None => error!("no usable FFmpeg; Gracil's ffmpeg folder is missing or broken"),
             }
             let _ = block_on(sender.send(engine.map(Arc::new)));
         },

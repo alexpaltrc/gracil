@@ -1,5 +1,6 @@
 //! Gracil's own small text files, kept in its data folder (`data\` beside `gracil.exe`): the
-//! settings and the files left unfinished. Like the logs, they never leave the computer.
+//! settings, the files left unfinished and the levels the last videos needed. Like the logs, they
+//! never leave the computer.
 
 use std::fs;
 use std::io;

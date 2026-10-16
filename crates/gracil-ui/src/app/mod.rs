@@ -32,6 +32,7 @@ use tracing::{info, warn};
 
 use crate::estimate::{self, Estimate, TimeLeft};
 use crate::focus::{self, Scope};
+use crate::hints;
 use crate::logging;
 use crate::motion;
 use crate::outside::{self, Outside};

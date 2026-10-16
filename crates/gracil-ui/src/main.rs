@@ -12,6 +12,7 @@ mod done;
 mod estimate;
 mod explorer;
 mod focus;
+mod hints;
 mod logging;
 mod motion;
 mod numbers;
