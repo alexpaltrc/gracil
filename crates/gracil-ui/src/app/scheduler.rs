@@ -197,6 +197,14 @@ impl Gracil {
             // Followed in `handle`, before it gets here.
             Report::Downloading(_) => Task::none(),
             Report::Prepared(prepared) => {
+                // A video that got ready may have taught a new level: kept now, not on a timer.
+                if self
+                    .queue
+                    .get(id)
+                    .is_some_and(|job| job.kind == Kind::Video)
+                {
+                    crate::hints::keep_soon();
+                }
                 self.running.remove(&id);
                 self.transition(id, JobEvent::Ready);
                 self.prepared.insert(id, prepared);

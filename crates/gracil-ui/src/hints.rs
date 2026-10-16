@@ -3,14 +3,14 @@
 //! `hints.txt` in Gracil's data folder, with what they depend on (Gracil's version, FFmpeg, the
 //! graphics card encoder and its settings); hints written for anything else are not read. Only
 //! numbers by kind of video are kept, nothing about any file. Written away from the window's
-//! thread, every few minutes when something changed and on leaving.
+//! thread, only when they change: once a video has got ready, and on leaving. Nothing wakes up
+//! to check them while Gracil rests.
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::thread;
-use std::time::Duration;
 
 use gracil_core::compress::Engine;
 use gracil_core::search::{self, Hints};
@@ -19,8 +19,6 @@ use tracing::warn;
 use crate::data;
 
 const FILE: &str = "hints.txt";
-/// How often new hints are written down while Gracil runs.
-const KEEP_EVERY: Duration = Duration::from_secs(3 * 60);
 
 /// The engine's hints, with what they depend on, once [`restore`] has read them.
 struct Kept {
@@ -33,7 +31,7 @@ static KEPT: OnceLock<Kept> = OnceLock::new();
 static WRITTEN: Mutex<u64> = Mutex::new(0);
 
 /// Gives `engine` the hints kept last time, when they were kept for the same Gracil, FFmpeg and
-/// encoder, and from then on keeps its hints every few minutes. Without a data folder, nothing is
+/// encoder. Without a data folder, nothing is
 /// read or kept. Called once the engine has started, away from the window's thread.
 pub fn restore(engine: &mut Engine) {
     let Some(path) = file() else {
@@ -55,20 +53,9 @@ pub fn restore(engine: &mut Engine) {
     *written = hints.choices();
     drop(written);
     engine.hints = hints;
-    let keeping = thread::Builder::new()
-        .name("gracil-hints".into())
-        .spawn(|| {
-            loop {
-                thread::sleep(KEEP_EVERY);
-                keep();
-            }
-        });
-    if let Err(error) = keeping {
-        warn!(%error, "the levels of the last videos will be kept only on leaving");
-    }
 }
 
-/// Writes the hints down now if they changed since last time, for when Gracil is about to end.
+/// Writes the hints down now if they changed since last time.
 pub fn keep() {
     let Some(kept) = KEPT.get() else {
         return;
@@ -88,9 +75,13 @@ pub fn keep() {
     }
 }
 
-/// Like [`keep`], on a thread of its own, so the caller never waits for the drive.
+/// Like [`keep`], on a thread of its own, so the caller never waits for the drive: once a video
+/// has got ready, and when Gracil is about to end. Nothing is started when nothing changed.
 pub fn keep_soon() {
-    if KEPT.get().is_some() {
+    let changed = KEPT.get().is_some_and(|kept| {
+        kept.hints.choices() != *WRITTEN.lock().unwrap_or_else(PoisonError::into_inner)
+    });
+    if changed {
         thread::spawn(keep);
     }
 }

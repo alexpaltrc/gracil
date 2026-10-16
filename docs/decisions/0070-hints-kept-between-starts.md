@@ -22,8 +22,9 @@ numbers by kind of video, nothing about any file, so keeping them costs no priva
    tabs.
 3. **When**: read once, when the engine starts, into the engine's hints. Written whole or not at
    all (a file beside it, then renamed, like the settings and the unfinished list), away from the
-   window's thread: every three minutes if a level was chosen since, when Exit or Windows'
-   shutdown stops the work, and on leaving. Without a data folder (a drive Gracil can't write to)
+   window's thread, only when a level was chosen since: once a video has got ready, when Exit or
+   Windows' shutdown stops the work, and on leaving. No timer: nothing wakes up to check them
+   while Gracil rests. Without a data folder (a drive Gracil can't write to)
    nothing is read or written, quietly; a write that fails is noted in the log and tried again
    only once something new is chosen.
 4. **Only where it still applies.** The first line names what the hints depend on: Gracil's
@@ -50,4 +51,5 @@ writes to USB drives for no gain).
   typically measuring two levels instead of four or five (ADR 0065's measures).
 - One more small file in the data folder, a few kilobytes at most.
 - Not tried by running Gracil yet: the format, the identity check, damaged files and the cap are
-  covered by tests; the writing every few minutes and on leaving is not.
+  covered by tests. Writing once a video has got ready and reading it back at the next start were
+  seen working; writing on leaving was not.
