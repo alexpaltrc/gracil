@@ -72,11 +72,27 @@ impl Found {
 }
 
 /// The levels the last videos were found to need, by encoder, size and source codec, each the
-/// first level tried for the next video of the same kind (ADR 0065). Kept in memory for as long
-/// as Gracil runs, never written down. A hint only decides what is measured first: the level
-/// chosen is always one measured to reach the target.
+/// first level tried for the next video of the same kind (ADR 0065). They can be written down
+/// for the next start and read back (ADR 0070): only these numbers, nothing about any file. A
+/// hint only decides what is measured first: the level chosen is always one measured to reach
+/// the target.
 #[derive(Debug, Clone, Default)]
-pub struct Hints(Arc<Mutex<HashMap<HintKey, u8>>>);
+pub struct Hints(Arc<Mutex<Remembered>>);
+
+/// At most this many kinds of video are remembered; past it, the one chosen longest ago is let
+/// go.
+const MOST_HINTS: usize = 64;
+
+/// The first line of hints written down, before what they depend on (see [`hints_identity`]).
+const HINTS_HEADING: &str = "gracil hints 1";
+
+#[derive(Debug, Default)]
+struct Remembered {
+    /// Each kind's level, with the number of the choice that left it.
+    levels: HashMap<HintKey, (u8, u64)>,
+    /// Levels chosen so far, those read back included.
+    choices: u64,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct HintKey {
@@ -90,17 +106,130 @@ struct HintKey {
 
 impl Hints {
     fn get(&self, key: &HintKey) -> Option<u8> {
-        self.lock().get(key).copied()
+        self.lock().levels.get(key).map(|&(level, _)| level)
     }
 
     fn remember(&self, key: HintKey, level: u8) {
-        self.lock().insert(key, level);
+        let mut remembered = self.lock();
+        remembered.choices += 1;
+        let choice = remembered.choices;
+        remembered.levels.insert(key, (level, choice));
+        if remembered.levels.len() > MOST_HINTS {
+            let oldest = remembered
+                .levels
+                .iter()
+                .min_by_key(|(_, (_, choice))| *choice)
+                .map(|(key, _)| key.clone());
+            if let Some(oldest) = oldest {
+                remembered.levels.remove(&oldest);
+            }
+        }
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<HintKey, u8>> {
+    /// How many levels have been chosen, those read back included: while it stays the same,
+    /// there is nothing new to write down.
+    pub fn choices(&self) -> u64 {
+        self.lock().choices
+    }
+
+    /// The hints as plain text, oldest first, after a first line naming `identity`: one kind a
+    /// line, as the encoder, the size step, the source codec, `same` or `again`, and the level,
+    /// separated by tabs.
+    pub fn write_down(&self, identity: &str) -> String {
+        let remembered = self.lock();
+        let mut kinds: Vec<_> = remembered
+            .levels
+            .iter()
+            .filter(|(key, _)| writable_codec(&key.codec))
+            .collect();
+        kinds.sort_by_key(|(_, (_, choice))| *choice);
+        let mut text = format!("{HINTS_HEADING}\t{identity}\n");
+        for (key, (level, _)) in kinds {
+            let search = if key.again { "again" } else { "same" };
+            text.push_str(&format!(
+                "{}\t{}\t{}\t{search}\t{level}\n",
+                key.encoder.name(),
+                key.size,
+                key.codec
+            ));
+        }
+        text
+    }
+
+    /// The hints written down in `text`, if they were written for `identity`; none otherwise.
+    /// Lines that can't be read are skipped, so a damaged or half-written file loses only what
+    /// is damaged.
+    pub fn read_back(text: &str, identity: &str) -> Self {
+        let hints = Self::default();
+        let mut lines = text.lines();
+        if lines.next() != Some(format!("{HINTS_HEADING}\t{identity}").as_str()) {
+            return hints;
+        }
+        for line in lines {
+            if let Some((key, level)) = read_hint(line) {
+                hints.remember(key, level);
+            }
+        }
+        hints
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Remembered> {
         // A plain map of numbers: a panic elsewhere leaves nothing half done in it.
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
+}
+
+/// One line of [`Hints::write_down`], if it is one.
+fn read_hint(line: &str) -> Option<(HintKey, u8)> {
+    let mut fields = line.split('\t');
+    let name = fields.next()?;
+    let encoder = VideoEncoder::ON_THE_CARD
+        .into_iter()
+        .chain([VideoEncoder::X265])
+        .find(|encoder| encoder.name() == name)?;
+    let size = fields.next()?.parse().ok().filter(|&size| size <= 5)?;
+    let codec = fields.next()?.to_owned();
+    let again = match fields.next()? {
+        "same" => false,
+        "again" => true,
+        _ => return None,
+    };
+    let level = fields.next()?.parse().ok()?;
+    (fields.next().is_none() && writable_codec(&codec)).then_some((
+        HintKey {
+            encoder,
+            size,
+            codec,
+            again,
+        },
+        level,
+    ))
+}
+
+/// Whether `codec`, a name FFprobe reported, fits on a line of hints as it is.
+fn writable_codec(codec: &str) -> bool {
+    codec.len() <= 32 && !codec.chars().any(char::is_control)
+}
+
+/// What hints depend on, written down with them so that hints from another Gracil, another
+/// FFmpeg, or another graphics card encoder or its settings are never read back (ADR 0070):
+/// Gracil's version, the size of `ffmpeg.exe` and when it last changed, the encoder and the
+/// settings it takes. `None` when FFmpeg can't be looked at; then nothing is kept.
+pub fn hints_identity(toolchain: &Toolchain, capabilities: &Capabilities) -> Option<String> {
+    let ffmpeg = fs::metadata(toolchain.ffmpeg_path()).ok()?;
+    let changed = ffmpeg
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    Some(format!(
+        "gracil {} ffmpeg {} {changed} {} {:?}",
+        env!("CARGO_PKG_VERSION"),
+        ffmpeg.len(),
+        capabilities.encoder.name(),
+        capabilities.hardware
+    ))
 }
 
 /// Which of a few common sizes a picture of `size` is closest to, by its short side: up to 480,
@@ -1845,6 +1974,118 @@ mod tests {
         }
         assert_eq!(size_step(None), 0);
         assert_eq!(size_step(Some((7680, 4320))), 5);
+    }
+
+    fn hint_key(encoder: VideoEncoder, size: u8, codec: &str, again: bool) -> HintKey {
+        HintKey {
+            encoder,
+            size,
+            codec: codec.to_owned(),
+            again,
+        }
+    }
+
+    #[test]
+    fn hints_written_down_come_back_in_order() {
+        let hints = Hints::default();
+        hints.remember(hint_key(VideoEncoder::Nvenc, 2, "h264", false), 33);
+        hints.remember(hint_key(VideoEncoder::Nvenc, 2, "h264", true), 36);
+        hints.remember(hint_key(VideoEncoder::X265, 4, "hevc", false), 24);
+        hints.remember(hint_key(VideoEncoder::Qsv, 0, "", false), 27);
+        let text = hints.write_down("this computer");
+        assert_eq!(
+            text,
+            "gracil hints 1\tthis computer\n\
+             hevc_nvenc\t2\th264\tsame\t33\n\
+             hevc_nvenc\t2\th264\tagain\t36\n\
+             libx265\t4\thevc\tsame\t24\n\
+             hevc_qsv\t0\t\tsame\t27\n"
+        );
+        let back = Hints::read_back(&text, "this computer");
+        assert_eq!(back.choices(), 4);
+        assert_eq!(back.write_down("this computer"), text);
+        assert_eq!(
+            back.get(&hint_key(VideoEncoder::Nvenc, 2, "h264", true)),
+            Some(36)
+        );
+    }
+
+    #[test]
+    fn damaged_hints_are_skipped() {
+        let text = "gracil hints 1\tthis computer\n\
+                    garbage\n\
+                    hevc_nvenc\t2\th264\tsame\n\
+                    hevc_nvenc\t9\th264\tsame\t33\n\
+                    hevc_nvenc\t2\th264\tsideways\t33\n\
+                    hevc_nvenc\t2\th264\tsame\t333\n\
+                    hevc_nvenc\t2\th264\tsame\t33\textra\n\
+                    hevc_vaapi\t2\th264\tsame\t33\n\
+                    \n\
+                    hevc_amf\t3\tvp9\tsame\t30\n\
+                    hevc_amf\t1\tav";
+        let hints = Hints::read_back(text, "this computer");
+        assert_eq!(hints.choices(), 1);
+        assert_eq!(
+            hints.get(&hint_key(VideoEncoder::Amf, 3, "vp9", false)),
+            Some(30)
+        );
+        assert_eq!(Hints::read_back("", "this computer").choices(), 0);
+        assert_eq!(Hints::read_back("\u{0}\u{1}", "this computer").choices(), 0);
+    }
+
+    #[test]
+    fn hints_for_another_computer_are_not_read() {
+        let hints = Hints::default();
+        hints.remember(hint_key(VideoEncoder::Nvenc, 2, "h264", false), 33);
+        let text = hints.write_down("gracil 1.0.0 ffmpeg 1 2 hevc_nvenc Full");
+        for other in [
+            "gracil 1.0.0 ffmpeg 1 3 hevc_nvenc Full",
+            "gracil 1.0.0 ffmpeg 1 2 hevc_nvenc Basic",
+            "gracil 1.0.1 ffmpeg 1 2 hevc_nvenc Full",
+            "",
+        ] {
+            assert_eq!(Hints::read_back(&text, other).choices(), 0, "{other}");
+        }
+        assert_eq!(
+            Hints::read_back(&text, "gracil 1.0.0 ffmpeg 1 2 hevc_nvenc Full").choices(),
+            1
+        );
+    }
+
+    #[test]
+    fn only_the_latest_kinds_are_kept() {
+        let hints = Hints::default();
+        for codec in 0..MOST_HINTS + 10 {
+            hints.remember(
+                hint_key(VideoEncoder::X265, 2, &format!("c{codec}"), false),
+                28,
+            );
+        }
+        // Choosing an old kind again makes it the newest.
+        hints.remember(hint_key(VideoEncoder::X265, 2, "c10", false), 29);
+        hints.remember(hint_key(VideoEncoder::X265, 2, "new", false), 30);
+        let back = Hints::read_back(&hints.write_down("here"), "here");
+        assert_eq!(back.lock().levels.len(), MOST_HINTS);
+        assert_eq!(
+            back.get(&hint_key(VideoEncoder::X265, 2, "c9", false)),
+            None
+        );
+        assert_eq!(
+            back.get(&hint_key(VideoEncoder::X265, 2, "c11", false)),
+            None
+        );
+        assert_eq!(
+            back.get(&hint_key(VideoEncoder::X265, 2, "c12", false)),
+            Some(28)
+        );
+        assert_eq!(
+            back.get(&hint_key(VideoEncoder::X265, 2, "c10", false)),
+            Some(29)
+        );
+        assert_eq!(
+            back.get(&hint_key(VideoEncoder::X265, 2, "new", false)),
+            Some(30)
+        );
     }
 
     #[test]

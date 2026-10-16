@@ -55,6 +55,7 @@ impl Gracil {
         // Stopping marks the files being worked on as stopped; they are still to be done.
         let list = self.unfinished();
         unfinished::save_now(&list);
+        hints::keep_soon();
         self.leaving_with = Some(list);
         // Nothing is waited for but a result being put in place (ADR 0044): work stuck reading a
         // slow drive ends with Gracil, and what it leaves behind is removed at the next start.
@@ -104,6 +105,7 @@ impl Gracil {
         // removed at the next start.
         let (done, tidied) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
+            hints::keep();
             // Results already let go are deleted first, then the rest, here and now.
             work::finish_discarding(TIDY_BEFORE_LEAVING);
             for temp in &unchosen {

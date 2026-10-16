@@ -181,6 +181,10 @@ and nothing is saved (`toolchain::default_private_dir`, ADR 0054):
 - Logs: `logs\`, one plain-text file per day, the last seven kept.
 - Unfinished files: `unfinished.txt`; leftovers' ledgers: `temporary\`. A `shell\` folder left
   by the former menu DLL is removed on start (ADR 0058).
+- Quality-search hints: `hints.txt` (`hints.rs`), the level last chosen for each encoder, size
+  step, source codec and search, under a first line naming Gracil's version, `ffmpeg.exe`'s size
+  and time of change, the encoder and its settings; read once at engine start, written every
+  three minutes when changed and on leaving (ADR 0070).
 - No job history is persisted.
 
 See [`../decisions/`](../decisions/) for the reasoning behind the main choices.

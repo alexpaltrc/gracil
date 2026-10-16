@@ -73,6 +73,8 @@ with it.
   still.
 - Videos get ready faster again, often in half the time, with exactly the same result. Videos that
   are already compressed as far as they go are recognized much sooner, often in a few seconds.
+- Gracil remembers how the last videos of each kind went even after it closes, so the first
+  videos after it opens again get ready quicker too. It keeps nothing about your files.
 - On a desktop computer, a few more photos compress at once while you use it. Laptops are
   unchanged.
 - Images are ready sooner, often in half the time or less, above all photos that were already

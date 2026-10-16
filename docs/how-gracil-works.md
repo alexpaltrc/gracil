@@ -16,11 +16,13 @@ anywhere.
 Gracil is also open source: its code is public on GitHub for anyone to read. There is nothing to
 install. Gracil comes as a zip; unpack it wherever you like, even on a USB drive, and open
 `gracil.exe`. Everything it needs comes inside, and it keeps its settings and its diary in a `data`
-folder next to itself, and nowhere else, so they go wherever the folder goes. If Gracil is on a
-drive it can't write to, it still compresses, it just doesn't remember your settings. To remove
-Gracil, delete its folder (see [Questions and answers](faq.md)). If you open Gracil straight from
-inside its zip, without unpacking it, it says so right away, under where to drop files, and asks
-you to extract it to a folder first, and it leaves Windows as it is until you open it from there.
+folder next to itself, and nowhere else, so they go wherever the folder goes. It also keeps there
+how the last videos of each kind went, so they get ready quicker after it starts again; nothing in
+it is about your files. If Gracil is on a drive it can't write to, it still compresses, it just
+doesn't remember your settings. To remove Gracil, delete its folder (see [Questions and
+answers](faq.md)). If you open Gracil straight from inside its zip, without unpacking it, it says
+so right away, under where to drop files, and asks you to extract it to a folder first, and it
+leaves Windows as it is until you open it from there.
 
 ## English and Spanish
 
@@ -341,11 +343,13 @@ see a difference. So instead of squeezing every video the same amount, Gracil me
   time, without using more of the processor than one at a time would. While you use the
   computer, on a laptop, with little memory free or for videos larger than 1440p, it tries them
   one at a time.
-- While it runs, Gracil remembers how much compression the last video of the same kind needed
-  (the same size and recorded the same way) and tries that first, so a list of similar videos,
-  such as those from one phone, gets ready quicker. For the first video of its kind, it starts
-  from a guess made from how much detail the video's own file holds. It is never written down,
-  and it never changes how much a video is compressed: that is always measured.
+- Gracil remembers how much compression the last video of the same kind needed (the same size
+  and recorded the same way) and tries that first, so a list of similar videos, such as those
+  from one phone, gets ready quicker. It keeps this in its `data` folder, so it still knows the
+  next time it starts: only those amounts for each kind of video, nothing about your files. When
+  Gracil is updated, or compresses with a different kind of graphics card, it starts afresh. For
+  the first video of its kind, it starts from a guess made from how much detail the video's own
+  file holds. It never changes how much a video is compressed: that is always measured.
 - Each try also tells Gracil how quickly the picture changes from one strength to the next, so
   it needs fewer tries to find the right one.
 - Very short videos, and videos the measurement can't handle, use a safe standard amount
