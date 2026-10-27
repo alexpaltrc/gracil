@@ -25,11 +25,7 @@ Gracil can be worked on from Claude Code in the cloud, with the computer off, al
 
 ## Back at the computer
 
-```powershell
-git pull
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/portable.ps1 -Copy
-```
-
-The first gets what was merged from the cloud; the second builds it and updates the Gracil in
-daily use in `Documents\Gracil` ([Packaging](packaging.md)). Changes to the window or to Windows
+Double-click **Actualizar Gracil** on the desktop. It runs `scripts/update.ps1`, which gets what
+was merged from the cloud, builds it and updates the Gracil in daily use in `Documents\Gracil`
+([ADR 0073](../decisions/0073-always-up-to-date.md), [Packaging](packaging.md)). Changes to the window or to Windows
 integration are tried there before they count as done.

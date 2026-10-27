@@ -50,15 +50,18 @@ $simd = if ($nasm) {
     Write-Host 'NASM not found: building libjpeg-turbo without SIMD'
     @('-DWITH_SIMD=OFF')
 }
+# CMake 4, shipped with recent Visual Studio, refuses projects written for CMake before 3.5, as
+# libjpeg-turbo and some of jpegli's libraries are; this lets it build them as before.
+$policy = '-DCMAKE_POLICY_VERSION_MINIMUM=3.5'
 $turboOptions = (@(
-    '-DCMAKE_BUILD_TYPE=Release', '-DENABLE_SHARED=OFF', '-DENABLE_STATIC=ON',
+    '-DCMAKE_BUILD_TYPE=Release', $policy, '-DENABLE_SHARED=OFF', '-DENABLE_STATIC=ON',
     '-DWITH_TURBOJPEG=OFF', '-DWITH_CRT_DLL=OFF', "-DCMAKE_INSTALL_PREFIX=`"$turbo\out`""
 ) + $simd) -join ' '
 cmd /c "call `"$vcvars`" >nul && cd /d `"$source`" && cmake -G Ninja -B `"$turbo`" -S third_party\libjpeg-turbo $turboOptions && cmake --build `"$turbo`" --target install"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $options = @(
-    '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_SHARED_LIBS=OFF', '-DJPEGLI_STATIC=ON',
+    '-DCMAKE_BUILD_TYPE=Release', $policy, '-DBUILD_SHARED_LIBS=OFF', '-DJPEGLI_STATIC=ON',
     '-DBUILD_TESTING=OFF', '-DJPEGLI_BUNDLE_LIBPNG=ON', '-DJPEGLI_ENABLE_JPEGLI_LIBJPEG=OFF',
     '-DJPEGLI_ENABLE_OPENEXR=OFF', '-DJPEGLI_ENABLE_TCMALLOC=OFF', '-DJPEGLI_ENABLE_BENCHMARK=OFF',
     '-DJPEGLI_ENABLE_DOXYGEN=OFF', '-DJPEGLI_ENABLE_MANPAGES=OFF', '-DJPEGLI_ENABLE_JNI=OFF',

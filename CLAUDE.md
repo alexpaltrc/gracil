@@ -8,7 +8,9 @@
   (Linux) run `scripts/check.sh` instead, work on a branch, open a pull request and say in it
   that changes to `gracil-ui` or `gracil-windows` are not yet tried on Windows
   (`docs/development/cloud.md`, ADR 0072).
-- The Gracil in daily use lives in `Documents\Gracil`, never inside the project (ADR 0071).
+- The Gracil in daily use lives in `Documents\Gracil`, never inside the project (ADR 0071). After
+  every change made on this computer, run `scripts/update.ps1 -NoPull -NoPause` without being
+  asked, and say in one line that Gracil is up to date, or why not (ADR 0073).
 - `gracil-core` must never depend on Iced, WGPU or any windowing crate.
 - `unsafe` is denied workspace-wide; only Windows-integration crates may opt in, with documented
   safety comments.

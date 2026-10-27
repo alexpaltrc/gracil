@@ -59,9 +59,12 @@ Copy-Item -LiteralPath (Join-Path $root 'target\release\gracil.exe') -Destinatio
 Copy-Item -LiteralPath (Join-Path $FFmpeg 'ffmpeg.exe'), (Join-Path $FFmpeg 'ffprobe.exe') -Destination $tools
 $utf8 = New-Object System.Text.UTF8Encoding $false
 
-# FFmpeg's license, and where its source is (GPL section 6).
-$ffmpegLicense = Join-Path (Split-Path $FFmpeg -Parent) 'LICENSE.txt'
-if (Test-Path -LiteralPath $ffmpegLicense) {
+# FFmpeg's license, and where its source is (GPL section 6). The license is beside the bin folder
+# of FFmpeg's own zip, or in the licenses folder when FFmpeg is taken from a Gracil folder.
+$ffmpegLicense = @('LICENSE.txt', 'licenses\ffmpeg-license.txt') |
+    ForEach-Object { Join-Path (Split-Path $FFmpeg -Parent) $_ } |
+    Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if ($ffmpegLicense) {
     Copy-Item -LiteralPath $ffmpegLicense -Destination (Join-Path $licenses 'ffmpeg-license.txt')
 }
 $source = @"

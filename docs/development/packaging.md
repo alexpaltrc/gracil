@@ -31,14 +31,16 @@ Nothing is signed, so Windows' SmartScreen may warn the first time the zip's Gra
 
 The Gracil used every day, also while developing, lives in `Documents\Gracil`, outside this
 project, so the project holds no Gracil to open by mistake ([ADR 0071](../decisions/0071-daily-gracil-outside-the-project.md)).
-Start it from its `gracil.exe` there (pinned to Start or the taskbar). To update it with the
-current code:
+Start it from its `gracil.exe` there (pinned to Start or the taskbar). It is always kept up to
+date ([ADR 0073](../decisions/0073-always-up-to-date.md)): after every change made on this
+computer, and with the **Actualizar Gracil** shortcut on the desktop, which first gets what was
+merged on GitHub. Both run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/portable.ps1 -Copy
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update.ps1   # -NoPull: only this folder
 ```
 
-This closes the Gracil running from that folder, with its helpers, and copies the new files over,
+which builds with `scripts/portable.ps1 -Copy`. That closes the Gracil running from that folder, with its helpers, and copies the new files over,
 keeping its `data` folder, so settings and unfinished lists stay. Then start `gracil.exe` again.
 `-CopyTo <folder>` puts it somewhere else. A development build run from `target` keeps its own
 `data` folder there and never touches the daily one's. On every start, a whole Gracil folder (with
