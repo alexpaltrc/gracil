@@ -20,6 +20,9 @@ Requirements: Windows 11 x64, Rust stable (MSVC), Git. Details in
 .\scripts\check.ps1
 ```
 
+It can also be worked on from Claude Code in the cloud, on Linux, with `scripts/check.sh`:
+[docs/development/cloud.md](docs/development/cloud.md).
+
 ## Project layout
 
 | Path | Contents |
@@ -32,9 +35,11 @@ Requirements: Windows 11 x64, Rust stable (MSVC), Git. Details in
 | `docs/specification.md` | Product and engineering specification |
 | `docs/architecture/` | How Gracil is put together |
 | `docs/decisions/` | Why important decisions were made |
-| `docs/development/` | Setup, versioning, release process |
+| `docs/development/` | Setup, cloud development, versioning, release process |
 | `scripts/` | Development scripts |
-| `.github/workflows/` | The same checks, run on GitHub for every change |
+| `.github/workflows/` | The same checks, run on GitHub for every change, on Windows and Linux |
+| `.claude/` | Settings for Claude Code, which prepare its cloud sessions |
+| `rust-toolchain.toml` | The Rust version and tools every machine uses |
 
 How the crates fit together: [docs/architecture/overview.md](docs/architecture/overview.md).
 Building the zip: [docs/development/packaging.md](docs/development/packaging.md).

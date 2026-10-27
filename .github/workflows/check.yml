@@ -1,6 +1,7 @@
 # Every push and pull request must pass the same checks as a local commit: scripts/check.ps1
 # (formatting, Clippy with warnings as errors, and tests). The tests that need FFmpeg skip
-# themselves here, since the runner has none.
+# themselves here, since the runner has none. scripts/check.sh runs too, on Linux, so the checks
+# a cloud session runs stay true (ADR 0072).
 name: check
 
 on:
@@ -23,3 +24,15 @@ jobs:
       - name: Check
         shell: pwsh
         run: ./scripts/check.ps1
+
+  check-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - name: Check
+        run: ./scripts/check.sh

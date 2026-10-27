@@ -19,7 +19,10 @@
 cargo test -p gracil-core
 ```
 
-Every commit must pass `scripts/check.ps1`.
+Every commit must pass `scripts/check.ps1`. On Linux, such as in a cloud session,
+`scripts/check.sh` runs what can run there ([Developing from the cloud](cloud.md)).
+
+`rust-toolchain.toml` names the toolchain, so `rustup` installs the right one by itself.
 
 ## Running the app
 

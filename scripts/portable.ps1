@@ -3,7 +3,7 @@
 #   scripts/portable.ps1                       release build + folder in target\portable\Gracil
 #                                               + target\portable\Gracil-<version>-x64.zip
 #   scripts/portable.ps1 -FFmpeg <folder>      take ffmpeg.exe and ffprobe.exe from <folder>
-#   scripts/portable.ps1 -Copy                 ...and copy it to daily\ in this folder, the
+#   scripts/portable.ps1 -Copy                 ...and copy it to Documents\Gracil, the
 #                                               Gracil in daily use, closing it first
 #   scripts/portable.ps1 -CopyTo <folder>      ...or to another folder
 #
@@ -113,7 +113,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "Gracil $version ready in $layout and $zip"
 
 if ($Copy -and -not $CopyTo) {
-    $CopyTo = Join-Path $root 'daily'
+    # Outside the project, so the code holds no Gracil to open by mistake (ADR 0071).
+    $CopyTo = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Gracil'
 }
 if ($CopyTo) {
     # The running Gracil and its helpers hold their files; they are closed before copying.

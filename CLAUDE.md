@@ -4,7 +4,11 @@
   sections before changing behavior; section 81 lists what must never change silently.
 - Architecture: `docs/architecture/overview.md`. Decisions: `docs/decisions/` (add an ADR rather
   than silently reversing one).
-- Run `scripts/check.ps1` before every commit; Clippy warnings are errors.
+- Run `scripts/check.ps1` before every commit; Clippy warnings are errors. In a cloud session
+  (Linux) run `scripts/check.sh` instead, work on a branch, open a pull request and say in it
+  that changes to `gracil-ui` or `gracil-windows` are not yet tried on Windows
+  (`docs/development/cloud.md`, ADR 0072).
+- The Gracil in daily use lives in `Documents\Gracil`, never inside the project (ADR 0071).
 - `gracil-core` must never depend on Iced, WGPU or any windowing crate.
 - `unsafe` is denied workspace-wide; only Windows-integration crates may opt in, with documented
   safety comments.

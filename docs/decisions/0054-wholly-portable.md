@@ -45,7 +45,8 @@ now ([license](../../README.md#license)), so the licenses of its Rust libraries 
    harmless: File Explorer finds no DLL and shows nothing.
 5. **The Gracil in daily use** lives in `Documents\Gracil`; `scripts/portable.ps1 -Copy`
    copies there. This replaces item 4 of ADR 0053. *Update (2026-10-14):* it now lives in
-   `daily\` inside the project folder (ignored by git), as the product owner asked.
+   `daily\` inside the project folder (ignored by git), as the product owner asked. *Update
+   (2026-10-27):* back in `Documents\Gracil`, outside the project ([ADR 0071](0071-daily-gracil-outside-the-project.md)).
 6. **Licenses.** Gracil is GPL-3.0-or-later; `LICENSE` holds the text and every crate declares
    it. `scripts/licenses.ps1` gathers the license files of every Rust library built into
    `gracil.exe` and `gracil_shell.dll` (normal dependencies for Windows x64, from `cargo

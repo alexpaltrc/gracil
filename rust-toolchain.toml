@@ -1,0 +1,6 @@
+# The same Rust on every machine, also in Claude Code's cloud sessions (ADR 0072). The Windows
+# target lets a Linux machine run Clippy on the Windows-only crates.
+[toolchain]
+channel = "stable"
+components = ["clippy", "rustfmt"]
+targets = ["x86_64-pc-windows-msvc"]
