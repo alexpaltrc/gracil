@@ -18,7 +18,8 @@ plain Rust and builds anywhere.
    the toolchain above, and downloads the crates.
 3. **What the cloud checks.** `scripts/check.sh` runs on Linux: formatting of everything, Clippy
    (warnings are errors) and tests of `gracil-core`, and Clippy of `gracil-windows` for Windows,
-   without building it. `gracil-ui` can't be checked there.
+   without building it. `gracil-ui` can't be checked there. Tests of what only Windows does
+   (its paths and name limits, PowerShell, sharing files) are marked to run on Windows only.
 4. **Windows has the last word.** GitHub Actions runs `scripts/check.ps1` on Windows for every
    push and pull request, and `scripts/check.sh` on Linux, so the cloud's script stays true. Work
    from the cloud goes to a branch and a pull request; it reaches `main` only once both pass.

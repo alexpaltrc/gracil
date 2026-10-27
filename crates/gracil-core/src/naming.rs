@@ -90,12 +90,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows paths and name limits")]
     fn adds_prefix_in_same_folder() {
         let out = save_as_new_candidate(Path::new(r"C:\Videos\Vacation.mp4"), 1);
         assert_eq!(out, Path::new(r"C:\Videos\Gracil-Vacation.mp4"));
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows paths and name limits")]
     fn keeps_unicode_and_unusual_characters_exactly() {
         let cases = [
             (
@@ -121,6 +123,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows paths and name limits")]
     fn decomposed_unicode_is_not_normalized() {
         // "e" followed by a combining acute accent must stay two code points.
         let source = PathBuf::from("C:\\V\\Jose\u{301}.mp4");
@@ -129,6 +132,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows paths and name limits")]
     fn a_copy_of_a_long_name_still_fits() {
         let stem = "é".repeat(250);
         let source = PathBuf::from(format!(r"C:\V\{stem}.mp4"));
@@ -143,6 +147,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows paths and name limits")]
     fn shortening_never_cuts_a_character_in_two() {
         // Each 🎂 takes two UTF-16 units; 255 is odd, so the last one can't fit.
         let name = OsString::from("🎂".repeat(200));
@@ -151,6 +156,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows paths and name limits")]
     fn numbered_candidates_go_before_extension() {
         let out = save_as_new_candidate(Path::new(r"C:\V\Vacation.mp4"), 3);
         assert_eq!(name_of(&out), "Gracil-Vacation (3).mp4");

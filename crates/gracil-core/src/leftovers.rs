@@ -327,6 +327,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows file sharing and drives")]
     fn a_running_gracil_is_left_alone() {
         let dir = fresh_dir("running");
         let temp = dir.join("Clip.mp4.gracil-2a.part");
@@ -436,6 +437,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows file sharing and drives")]
     fn files_on_a_drive_that_is_away_wait_for_later() {
         let dir = fresh_dir("away");
         let away = PathBuf::from(

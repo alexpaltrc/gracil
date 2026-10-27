@@ -391,6 +391,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows paths")]
     fn finds_a_job_by_path_whatever_its_case() {
         let queue = queue(&["Clip.MOV", "b.mp4"]);
         let found = queue.find(&PathBuf::from(r"c:\v\clip.mov")).unwrap();
@@ -409,6 +410,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows paths")]
     fn adding_is_additive_and_ignores_duplicates() {
         let mut queue = queue(&["a.mp4", "b.mp4"]);
         assert_eq!(queue.add(paths(&["c.mp4", "A.MP4", "c.mp4"])), 1);
@@ -417,6 +419,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows paths")]
     fn each_kind_goes_oldest_first_side_by_side() {
         let mut queue = queue(&["a.mp4", "b.jpg", "c.mp4", "d.png"]);
         let video = queue.start_preparing(Kind::Video).unwrap().id;
@@ -488,6 +491,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows paths")]
     fn restored_jobs_go_back_where_they_were() {
         let mut queue = queue(&["a.mp4", "b.mp4", "c.mp4"]);
         let taken: Vec<Job> = queue.jobs()[..2].to_vec();

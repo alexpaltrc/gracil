@@ -328,6 +328,7 @@ mod tests {
     use crate::testing::fresh_dir;
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "Windows name limits")]
     fn a_temporary_file_beside_a_long_name_still_fits() {
         let dir = fresh_dir("long-name");
         let source = dir.join(format!("{}.mp4", "a".repeat(246)));

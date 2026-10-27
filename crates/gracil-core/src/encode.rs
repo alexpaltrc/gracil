@@ -512,6 +512,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "uses PowerShell")]
     fn a_silent_tool_is_stopped_as_stalled() {
         let control = JobControl::default();
         let started = Instant::now();
@@ -538,6 +539,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "uses PowerShell")]
     fn several_tools_at_once_are_paused_resumed_and_stopped_together() {
         let control = JobControl::default();
         let started = Instant::now();
@@ -584,6 +586,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "uses PowerShell")]
     fn a_silent_tool_is_stopped_without_stopping_the_others() {
         let control = JobControl::default();
         let (silent, talking) = thread::scope(|scope| {
@@ -624,6 +627,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "uses PowerShell")]
     fn output_that_isnt_text_doesnt_stop_the_reading() {
         let control = JobControl::default();
         let mut command = Command::new("powershell");
@@ -648,6 +652,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(windows), ignore = "uses PowerShell")]
     fn a_paused_tool_is_never_stalled() {
         let control = JobControl::default();
         control.pause(pretend_suspend).unwrap();
