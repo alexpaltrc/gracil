@@ -223,12 +223,16 @@ fn stubborn() -> MutexGuard<'static, Vec<PathBuf>> {
 /// The original's creation date, so the video keeps its place. The modified date is set to the
 /// moment of replacing, by [`set_times`].
 fn replaced_times(metadata: &fs::Metadata) -> FileTimes {
-    let mut times = FileTimes::new();
+    let times = FileTimes::new();
     #[cfg(windows)]
     if let Ok(created) = metadata.created() {
         use std::os::windows::fs::FileTimesExt;
-        times = times.set_created(created);
+        return times.set_created(created);
     }
+    // Only Windows sets a file's creation date; elsewhere, such as the cloud's Linux checks
+    // (ADR 0072), the original's is not needed.
+    #[cfg(not(windows))]
+    let _ = metadata;
     times
 }
 
