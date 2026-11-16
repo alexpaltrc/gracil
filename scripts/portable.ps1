@@ -7,7 +7,7 @@
 #                                               Gracil in daily use, closing it first
 #   scripts/portable.ps1 -CopyTo <folder>      ...or to another folder
 #
-# FFmpeg is the pinned build in packaging\ffmpeg.psd1; without -FFmpeg, the first folder on PATH
+# FFmpeg is the pinned build in scripts\ffmpeg.psd1; without -FFmpeg, the first folder on PATH
 # holding executables with the pinned hashes is used. Exit codes are checked explicitly, as in
 # check.ps1.
 param(
@@ -18,7 +18,7 @@ param(
 
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
-$pin = Import-PowerShellDataFile (Join-Path $root 'packaging\ffmpeg.psd1')
+$pin = Import-PowerShellDataFile (Join-Path $PSScriptRoot 'ffmpeg.psd1')
 
 $cargo = Get-Content (Join-Path $root 'Cargo.toml') -Raw
 if ($cargo -notmatch '(?m)^version\s*=\s*"([^"]+)"') {
@@ -48,10 +48,12 @@ if (-not $FFmpeg -or -not (Test-Pinned $FFmpeg)) {
 cargo build --release -p gracil-ui
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# A fresh folder every time, so nothing from an older build ends up in the zip.
+# A fresh folder every time, so nothing from an older build ends up in the zip, and no zip of an
+# older version stays beside the new one.
 $portable = Join-Path $root 'target\portable'
 $layout = Join-Path $portable 'Gracil'
 if (Test-Path -LiteralPath $layout) { Remove-Item -LiteralPath $layout -Recurse -Force }
+Remove-Item -Path (Join-Path $portable 'Gracil-*.zip') -Force -ErrorAction SilentlyContinue
 $licenses = Join-Path $layout 'licenses'
 $tools = Join-Path $layout 'ffmpeg'
 New-Item -ItemType Directory -Path $layout, $licenses, $tools | Out-Null
@@ -108,7 +110,6 @@ Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $lice
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $zip = Join-Path $portable "Gracil-$version-x64.zip"
-if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 # Windows' own tar writes the zip, with the Gracil folder at its top; named in full, since Git's
 # tar may come first on the PATH and can't read Windows paths.
 & (Join-Path $env:SystemRoot 'System32\tar.exe') -a -c -f $zip -C $portable Gracil

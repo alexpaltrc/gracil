@@ -20,7 +20,7 @@ This makes a release build and lays out `target\portable\Gracil`, then zips it a
 | `ffmpeg\` | `ffmpeg.exe` and `ffprobe.exe`, the pinned build ([FFmpeg](ffmpeg.md)) |
 | `licenses\` | Gracil's own license (GPL-3.0-or-later), FFmpeg's and where its source is, the licenses of jpegli and the libraries built into it, and those of the Rust libraries built into Gracil |
 
-FFmpeg is the build pinned in `packaging/ffmpeg.psd1`. Without `-FFmpeg <folder>`, the script uses
+FFmpeg is the build pinned in `scripts/ffmpeg.psd1`. Without `-FFmpeg <folder>`, the script uses
 the first folder on `PATH` whose `ffmpeg.exe` and `ffprobe.exe` have the pinned hashes. When
 `cjpegli.exe` has not been built yet, the script first runs `scripts/build-jpegli.ps1`, which needs
 git and Visual Studio Build Tools with the C++ workload, CMake and Ninja.
@@ -75,7 +75,7 @@ The zip's name carries the version from `Cargo.toml` ([versioning](versioning.md
 
 ## Icons
 
-`scripts/icons.ps1` draws the window's two icon files in `assets/icons/ico` from the marble's
+`scripts/icons.ps1` draws the window's two icon files in `crates/gracil-ui/icons` from the marble's
 shapes, in Windows 11's neutrals: a dark tile for a light taskbar or theme, a light one for a dark
 taskbar or theme ([ADR 0031](../decisions/0031-windows-11-colors.md)). The files are committed; run
 the script again only when the artwork or the colors change. Windows keeps icons in a cache, so a

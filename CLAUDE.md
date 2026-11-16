@@ -61,7 +61,7 @@ portable zip only, with no installer and no separate Dev copy; data beside `grac
 | `crates/gracil-core` | The compression engine: pure Rust, also built and tested on Linux |
 | `crates/gracil-ui` | The app: windows, tray, mini-window (Iced + WGPU, DX12) |
 | `crates/gracil-windows` | Windows integration; the only crate allowed `unsafe` |
-| `scripts/` | `check.ps1` / `check.sh` (checks), `portable.ps1` (the zip), `update.ps1` (daily copy), `build-jpegli.ps1`, `licenses.ps1`, `icons.ps1` |
+| `scripts/` | `check.ps1` / `check.sh` (checks), `portable.ps1` (the zip, with the FFmpeg pinned in `ffmpeg.psd1`), `update.ps1` (daily copy), `build-jpegli.ps1`, `licenses.ps1`, `icons.ps1` |
 | `docs/` | Specification, architecture, decisions, development guides, user explanations |
 
 - **Check:** `scripts/check.ps1` before every commit; Clippy warnings are errors.

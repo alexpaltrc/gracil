@@ -1,5 +1,5 @@
 # Draws Gracil's icons from the marble's shapes, in Windows 11's own neutral colors (ADR 0031):
-# the icons of gracil.exe and its window in assets/icons/ico. The icon always contrasts with
+# the icons of gracil.exe and its window in crates/gracil-ui/icons. The icon always contrasts with
 # Windows: on a light taskbar or theme it is the dark version, on a dark one the light version.
 #
 #   scripts/icons.ps1
@@ -11,7 +11,7 @@
 Add-Type -AssemblyName System.Drawing
 
 $root = Split-Path $PSScriptRoot -Parent
-$icons = Join-Path $root 'assets\icons\ico'
+$icons = Join-Path $root 'crates\gracil-ui\icons'
 
 # Windows 11's app backgrounds and text, and a neutral grey marble that reads on both.
 $sphere = '#8A8A8A'

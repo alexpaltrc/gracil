@@ -81,7 +81,7 @@ Do not invent or finalize the permanent icon. The final icon will later be desig
 current Windows 11 iconography and visual guidelines.
 
 *Update (ADR 0015):* the icon has been designed: the marble ("la canica"), with the Piedra palette,
-in `assets/icons/`.
+in `crates/gracil-ui/icons/`.
 
 *Update (ADR 0031):* the Piedra palette is replaced by Windows 11's own colors and the user's
 accent color, followed live.
@@ -130,10 +130,6 @@ gracil/
 │   ├── architecture/
 │   ├── decisions/
 │   └── development/
-├── assets/
-│   └── icons/
-├── packaging/
-│   └── ffmpeg.psd1
 ├── scripts/
 ├── Cargo.toml
 ├── Cargo.lock

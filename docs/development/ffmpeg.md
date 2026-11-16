@@ -18,7 +18,7 @@ without a usable copy it shows a quiet line asking to download Gracil again.
 
 ## The bundled build
 
-`packaging/ffmpeg.psd1` pins the build that goes in the zip, by the SHA-256 of `ffmpeg.exe` and
+`scripts/ffmpeg.psd1` pins the build that goes in the zip, by the SHA-256 of `ffmpeg.exe` and
 `ffprobe.exe`: BtbN's `N-125875-g5d4d3bdc61-20260731 win64-gpl`, the build Gracil was tested with
 (it has `libvmaf`, NVENC, Quick Sync, AMF, `libx265` and SVT-AV1). `scripts/portable.ps1` refuses
 any other. To move to a new build, put its `bin` folder first on `PATH` or pass it with

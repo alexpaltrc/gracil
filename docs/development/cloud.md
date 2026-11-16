@@ -6,7 +6,7 @@ Gracil can be worked on from Claude Code in the cloud, with the computer off, al
 ## Once
 
 1. At [claude.ai/code](https://claude.ai/code), connect GitHub and give Claude access to the
-   private `gracil` repository.
+   `gracil` repository.
 2. Create a cloud environment for it. The default network access is enough: it reaches crates.io,
    the Rust toolchain and GitHub. Nothing else needs setting up, since the repository prepares
    each session by itself (below).
