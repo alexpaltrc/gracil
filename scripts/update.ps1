@@ -39,12 +39,11 @@ if (-not $NoPull) {
     }
 }
 
-# The pinned FFmpeg comes from PATH when it is there, else from the Gracil in daily use, which
-# already holds it; portable.ps1 checks it is the pinned build either way.
+# The pinned FFmpeg comes from the Gracil in daily use, which already holds it, else from PATH,
+# where another FFmpeg may come first; portable.ps1 checks it is the pinned build either way.
 $arguments = @('-Copy')
 $dailyFFmpeg = Join-Path $daily 'ffmpeg'
-if (-not (Get-Command ffmpeg.exe -ErrorAction SilentlyContinue) -and
-    (Test-Path -LiteralPath (Join-Path $dailyFFmpeg 'ffmpeg.exe'))) {
+if (Test-Path -LiteralPath (Join-Path $dailyFFmpeg 'ffmpeg.exe')) {
     $arguments += @('-FFmpeg', $dailyFFmpeg)
 }
 

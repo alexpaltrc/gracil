@@ -14,8 +14,8 @@ that computer by itself.
 1. **`scripts/update.ps1`** brings it up to date: it gets `main` from GitHub, builds it with
    `scripts/portable.ps1 -Copy`, keeping the `data` folder, and opens Gracil again if it was open.
    It says at the end, in Spanish and in plain words, whether it worked or what failed; on any
-   failure the Gracil in daily use stays as it was. It takes the pinned FFmpeg from `PATH`, or
-   else from the Gracil in daily use, which already holds it, so nothing else needs installing.
+   failure the Gracil in daily use stays as it was. It takes the pinned FFmpeg from the Gracil in
+   daily use, which already holds it, or else from `PATH`, so nothing else needs installing.
 2. **After every change made on this computer**, Claude runs `scripts/update.ps1 -NoPull
    -NoPause` without being asked, and says in a line that Gracil is up to date, or why not.
 3. **For work from the cloud**, a shortcut **Actualizar Gracil** on the desktop runs
