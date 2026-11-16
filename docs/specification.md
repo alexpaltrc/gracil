@@ -655,6 +655,9 @@ Gracil behaves as one logical instance. Further invocations (launching again, Ex
 future external actions) are forwarded to the existing instance, which owns the scheduler. Use a
 robust Windows mechanism such as a named mutex plus named pipes.
 
+*Update (ADR 0075):* a development build is a Gracil of its own, **Gracil Dev**, and runs beside the
+one in daily use.
+
 # 53. No permanent service
 
 Do not install a permanent Windows service. Do not keep a background process alive forever merely

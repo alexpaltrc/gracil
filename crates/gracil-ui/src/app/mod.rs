@@ -57,7 +57,7 @@ mod windows;
 use keys::{Key, key_for};
 use leaving::Kept;
 use list::choose_files;
-use look::{windows_accent, windows_contrast};
+use look::{chosen_mode, windows_accent, windows_contrast};
 pub use summary::Finished;
 use summary::{Outcomes, Summary, Tally, Weights};
 use windows::{dismiss, give_icon};
@@ -317,8 +317,9 @@ impl Gracil {
         }
         // Read from Windows itself: Iced only learns the theme once a window exists, so its first
         // answer would come too late and the first window would fade from light (ADR 0015).
-        let mode =
-            gracil_windows::light_apps().map(|light| if light { Mode::Light } else { Mode::Dark });
+        let mode = chosen_mode().or_else(|| {
+            gracil_windows::light_apps().map(|light| if light { Mode::Light } else { Mode::Dark })
+        });
         let accent = windows_accent();
         let contrast = windows_contrast();
         style::set_contrast(contrast);

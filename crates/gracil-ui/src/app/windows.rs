@@ -281,6 +281,13 @@ impl Gracil {
                 None => text.tray_tip(state),
             },
         };
+        // A development build says so, in its window's title and beside its tray icon, since it
+        // runs next to the Gracil in daily use (ADR 0075).
+        let tip = if cfg!(debug_assertions) {
+            tip.replacen("Gracil", "Gracil Dev", 1)
+        } else {
+            tip
+        };
         (state, tip)
     }
 }

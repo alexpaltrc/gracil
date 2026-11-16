@@ -18,7 +18,10 @@ so its essentials are here:
 - **Every interface change** is checked on the real app before it's done: alignment to the pixel,
   no slower or heavier, and as beautiful as before or more. Animations follow springs and
   choreography, respect Windows' **Animation effects** and contrast themes, and are checked frame
-  by frame.
+  by frame. The check is made in a development build (`cargo run -p gracil-ui`), **Gracil Dev**,
+  which runs beside the owner's Gracil: never close theirs to look at a change, never move their
+  pointer, and read the window's picture from the window itself, never off their screen
+  (ADR 0075).
 - **Clean repository:** every file has a reason to exist; no leftover files, empty folders or dead
   code. Material that isn't code (screenshots, brand material, backups) lives outside the repo, in
   `Documents\Vibecode Archivos\Gracil Archivos`.

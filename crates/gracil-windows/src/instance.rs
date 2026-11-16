@@ -33,8 +33,18 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWi
 
 use crate::wide;
 
+/// What this Gracil goes by among the running programs. A development build has a name of its
+/// own, so it runs beside the Gracil in daily use instead of handing it its request (ADR 0075).
+const NAME: &str = if cfg!(debug_assertions) {
+    "Gracil.Dev"
+} else {
+    "Gracil"
+};
+
 /// The mutex's name. `Local\` scopes it to the user's session.
-const MUTEX: &str = r"Local\Gracil.SingleInstance";
+fn mutex_name() -> Vec<u16> {
+    wide(&format!(r"Local\{NAME}.SingleInstance"))
+}
 
 /// The most one request may carry; far beyond any real selection of videos.
 const MAX_REQUEST: u64 = 16 * 1024 * 1024;
@@ -46,7 +56,7 @@ const PATIENCE: Duration = Duration::from_secs(10);
 /// [`serve`]; `false` means another Gracil is running and the request goes to it with
 /// [`forward`].
 pub fn claim() -> io::Result<bool> {
-    let name = wide(MUTEX);
+    let name = mutex_name();
     // SAFETY: the name is a NUL-terminated UTF-16 buffer that outlives the call; no security
     // attributes. The result is checked before use.
     #[allow(unsafe_code)]
@@ -72,7 +82,7 @@ pub fn claim() -> io::Result<bool> {
 pub fn is_running() -> bool {
     /// The right to wait on the mutex, which is all opening it needs.
     const SYNCHRONIZE: u32 = 0x0010_0000;
-    let name = wide(MUTEX);
+    let name = mutex_name();
     // SAFETY: the name is a NUL-terminated UTF-16 buffer that outlives the call; the handle is
     // checked, and closed once if it was opened.
     #[allow(unsafe_code)]
@@ -191,7 +201,7 @@ fn pipe_name() -> io::Result<String> {
     if found == 0 {
         return Err(io::Error::last_os_error());
     }
-    Ok(format!(r"\\.\pipe\Gracil.{session}"))
+    Ok(format!(r"\\.\pipe\{NAME}.{session}"))
 }
 
 /// Arguments as UTF-16 (little-endian), each followed by a NUL. Paths survive whatever characters

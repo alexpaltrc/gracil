@@ -9,6 +9,16 @@ fn ease_in_out(t: f32) -> f32 {
 }
 
 /// The colors of the contrast theme on in Windows, if one is.
+/// The theme to draw with whatever Windows says: `GRACIL_THEME=light` or `dark`, to check the
+/// other one during development, like `GRACIL_LANGUAGE`.
+pub(super) fn chosen_mode() -> Option<Mode> {
+    match std::env::var("GRACIL_THEME").as_deref() {
+        Ok("light") => Some(Mode::Light),
+        Ok("dark") => Some(Mode::Dark),
+        _ => None,
+    }
+}
+
 pub(super) fn windows_contrast() -> Option<style::Contrast> {
     let color = |[r, g, b]: [u8; 3]| iced::Color::from_rgb8(r, g, b);
     gracil_windows::contrast().map(|contrast| style::Contrast {
@@ -37,6 +47,7 @@ impl Gracil {
     /// Follows Windows between light and dark. The first answer is applied at once, so Gracil
     /// opens in the right colors; later changes fade softly (ADR 0015).
     pub(super) fn follow_theme(&mut self, mode: Mode, now: Instant) {
+        let mode = chosen_mode().unwrap_or(mode);
         if mode == Mode::None || self.mode == Some(mode) {
             return;
         }
