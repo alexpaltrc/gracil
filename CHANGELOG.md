@@ -2,6 +2,30 @@
 
 What's new in each version of Gracil.
 
+## 1.1 (in development)
+
+### Improved
+
+- The window is laid out anew around its ring, which now stays from a file's first moment to its
+  last: it fills as the file compresses, then says how much smaller the file came out, for
+  example **−35%**, and turns green with a check mark once the whole list is done.
+- **View files** is a button of its own, and an open list takes most of the window and grows
+  with it, instead of showing three files at a time. The file above it is shown small, with its
+  ring beside its name.
+- The area where files are shown, and the list, look like the rest of Windows 11, and the area
+  lights up softly in your accent color while you drag files over the window.
+- What you move has a little weight: the choice on the **Always** line gathers speed and settles,
+  a new view rises into place, and the check mark's green lands softly.
+- The small window next to the clock shows only what matters, with nothing drawn around it, and
+  the ring with its check mark once the list is done.
+- A file that changes format says so more plainly, for example `IMG_0042.MOV → .mp4`.
+
+### Fixed
+
+- With the list open, the check mark of a finished list was cut off at its top and bottom.
+- The line under the ring broke in two when it had much to say, leaving **View files** alone on
+  a second line. It is always one line now.
+
 ## 1.0 (2026-11-16)
 
 Gracil's first public version.

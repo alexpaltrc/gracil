@@ -1,11 +1,13 @@
-//! The dial: a marble that fills an invisible circle clockwise as the video compresses, with the
-//! controls in its middle (ADR 0038). The top of the middle pauses and resumes; the bottom stops,
-//! unless the dial is one that can't stop: then its whole middle pauses and resumes.
+//! The ring: one drawing that stays through everything Gracil does to a file (ADR 0076). A marble
+//! fills an invisible circle clockwise as the file compresses, with pause and stop in its middle
+//! (ADR 0038); once the file is done the full ring holds how much smaller it came out; and once
+//! the whole list is done its middle turns green and a check mark draws itself (ADR 0039).
 //!
-//! It animates itself: every value eases towards what the app says, and the dial only asks for
-//! new frames while something is still moving (spec §51).
+//! It animates itself: every value moves towards what the app says, one face gives way to the
+//! next in turn, and the ring only asks for new frames while something is still moving
+//! (spec §51).
 
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 use std::time::{Duration, Instant};
 
@@ -14,18 +16,18 @@ use iced::alignment::Vertical;
 use iced::mouse;
 use iced::theme::Palette;
 use iced::widget::Canvas;
-use iced::widget::canvas::{self, Action, Event, Frame, Geometry, LineCap, Path, Stroke};
+use iced::widget::canvas::{self, Action, Event, Frame, Geometry, LineCap, LineJoin, Path, Stroke};
 use iced::widget::text::Alignment;
 use iced::{Color, Element, Point, Rectangle, Renderer, Size, Theme, window};
 
 use crate::app::Message;
 use crate::focus::{Part, Scope, keyed_parts};
-use crate::motion::{self, approach};
+use crate::motion::{self, Spring, approach};
 use crate::style::{self, size};
 
-/// Width and height of the dial, in logical pixels. Drawn smaller, everything shrinks with it.
+/// Width and height of the ring, in logical pixels. Drawn smaller, everything shrinks with it.
 pub const SIZE: f32 = 148.0;
-/// The dial in the mini-window.
+/// The ring beside the words: in the mini-window, and in the window while the list is open.
 pub const SMALL: f32 = 76.0;
 
 const PIPE_WIDTH: f32 = 13.0;
@@ -40,24 +42,55 @@ const BREATH: f32 = 1.6;
 /// How faint the marble's middle gets at the bottom of a breath.
 const BREATH_DEPTH: f32 = 0.45;
 
-/// What the ring stands for. When it changes, the ring shows the new one as it is, without
-/// sweeping from the old one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// How quickly the ring closes once the work is done, in seconds (see [`motion::approach`]).
+const CLOSING: f32 = 0.11;
+/// How full a ring that is done is when it closes at once.
+const ALMOST_CLOSED: f32 = 0.98;
+/// How long the check mark takes to draw itself, in seconds.
+const CHECK_DRAWN_IN: f32 = 0.32;
+/// How faint one face must be before the next comes in, so they never show through each other,
+/// and how quickly a face leaves, in seconds (see [`motion::approach`]): quicker than it comes.
+const NEARLY_GONE: f32 = 0.03;
+const LEAVING: f32 = 0.035;
+/// How much wider the ring swells for a moment as the check mark lands.
+const SWELL: f32 = 0.28;
+/// The amount saved, in the middle of a full-size ring.
+const SAVED_SIZE: f32 = 27.0;
+
+/// The check mark, as three points in a box one unit wide around the middle of the ring.
+const CHECK: [(f32, f32); 3] = [(-0.36, 0.02), (-0.1, 0.28), (0.38, -0.24)];
+
+/// What the ring stands for. A ring at work that turns to another file or list shows it as it
+/// is, without sweeping from the old one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Shows {
     /// One file.
     File(JobId),
     /// The whole list (ADR 0034, item 13), by the first file of its round of work.
     List(JobId),
+    /// The whole list, done.
+    Finished,
 }
 
-pub struct Dial {
-    pub shows: Shows,
-    /// How much is done, when known.
-    pub fraction: Option<f64>,
+/// What is in the ring's middle.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Face {
+    /// Work in progress: pause and stop.
+    Working(Controls),
+    /// A file is done: how much smaller it came out, in a few characters (`−35%`).
+    Saved(String),
+    /// The whole list is done: green and a check mark when it went well. When files failed and
+    /// none came out smaller, or files were left unfinished, the ring stays quiet without them,
+    /// so it never looks like a success it wasn't.
+    Done { went_well: bool },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Controls {
     pub paused: bool,
     /// Pause is offered for every file being worked on, except while a result is put in place.
     pub can_pause: bool,
-    /// Whether the bottom of the middle stops. The mini-window's dial only pauses (spec §55).
+    /// Whether the bottom of the middle stops. The mini-window's ring only pauses (spec §55).
     pub can_stop: bool,
     /// The word that takes the stop square's place under the pointer, so it says what it does.
     pub stop_word: &'static str,
@@ -67,6 +100,13 @@ pub struct Dial {
     /// Gracil rests while the computer cools down, wakes up or runs low on battery: the marble
     /// doesn't breathe, since nothing is happening (ADR 0066).
     pub resting: bool,
+}
+
+pub struct Dial {
+    pub shows: Shows,
+    /// How much is done, when known. A ring that isn't at work is full.
+    pub fraction: Option<f64>,
+    pub face: Face,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,49 +129,74 @@ pub struct State {
     /// How much the marble breathes, from 0 (steady) to 1, and where in its breath it is.
     breathing: f32,
     breath: f32,
-    /// Nothing is moving: the dial is drawn once into `still`, and drawn from it again while the
+    /// How much of the marble and the buttons shows, from 0 to 1.
+    controls: f32,
+    /// How much of the amount saved shows, and the amount itself, kept while it fades away.
+    saved: f32,
+    saved_words: String,
+    /// The green middle, which lands a little past its size and settles.
+    disc: Spring,
+    /// How much of the check mark is drawn.
+    check: f32,
+    /// How far the ring has gone quiet: a list that didn't go well.
+    quiet: f32,
+    /// The ring swelling for a moment as the check mark lands.
+    swell: Spring,
+    /// Nothing is moving: the ring is drawn once into `still`, and drawn from it again while the
     /// window draws for other reasons, until something changes (ADR 0066).
     settled: bool,
     still: canvas::Cache,
     /// What `still` was drawn for.
-    still_for: Cell<Option<Still>>,
+    still_for: RefCell<Option<Still>>,
 }
 
-/// Everything a settled dial's picture depends on.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// Everything a settled ring's picture depends on.
+#[derive(Debug, Clone, PartialEq)]
 struct Still {
     size: Size,
     palette: Palette,
+    face: Face,
     values: [f32; 4],
-    can_stop: bool,
-    can_pause: bool,
+}
+
+/// Where everything in the ring is heading.
+struct Targets {
+    fill: f32,
+    play: f32,
+    hover_top: f32,
+    hover_bottom: f32,
+    breathing: f32,
+    controls: f32,
+    saved: f32,
+    disc: f32,
+    quiet: f32,
 }
 
 impl Dial {
-    fn target_fill(&self) -> f32 {
-        self.fraction.unwrap_or(0.0).clamp(0.0, 1.0) as f32
-    }
-
-    fn target_play(&self) -> f32 {
-        if self.paused { 1.0 } else { 0.0 }
+    fn controls(&self) -> Option<&Controls> {
+        match &self.face {
+            Face::Working(controls) => Some(controls),
+            _ => None,
+        }
     }
 
     fn enabled(&self, part: Button) -> bool {
-        match part {
-            Button::PauseResume => self.paused || self.can_pause,
-            Button::Stop => self.can_stop,
-        }
+        self.controls().is_some_and(|controls| match part {
+            Button::PauseResume => controls.paused || controls.can_pause,
+            Button::Stop => controls.can_stop,
+        })
     }
 
     /// The enabled button under the cursor, if any.
     fn part_at(&self, bounds: Rectangle, cursor: mouse::Cursor) -> Option<Button> {
+        let controls = self.controls()?;
         let position = cursor.position_in(bounds)?;
         let center = Point::new(bounds.width / 2.0, bounds.height / 2.0);
         let radius = middle_radius(bounds.size());
         if position.distance(center) > radius {
             return None;
         }
-        let part = if self.can_stop && position.y > center.y + DIVIDER * radius {
+        let part = if controls.can_stop && position.y > center.y + DIVIDER * radius {
             Button::Stop
         } else {
             Button::PauseResume
@@ -142,25 +207,154 @@ impl Dial {
     fn message(&self, part: Button) -> Message {
         match part {
             Button::Stop => Message::Cancel,
-            Button::PauseResume if self.paused => Message::Resume,
+            Button::PauseResume if self.controls().is_some_and(|controls| controls.paused) => {
+                Message::Resume
+            }
             Button::PauseResume => Message::Pause,
         }
     }
 
-    fn targets(&self, hovered: Option<Button>) -> [f32; 5] {
-        [
-            self.target_fill(),
-            self.target_play(),
-            f32::from(hovered == Some(Button::PauseResume)),
-            f32::from(hovered == Some(Button::Stop)),
-            f32::from(self.getting_ready && !self.paused && !self.resting && !motion::still()),
-        ]
+    fn targets(&self, hovered: Option<Button>) -> Targets {
+        let working = self.controls();
+        Targets {
+            fill: match working {
+                Some(_) => self.fraction.unwrap_or(0.0).clamp(0.0, 1.0) as f32,
+                None => 1.0,
+            },
+            play: f32::from(working.is_some_and(|controls| controls.paused)),
+            hover_top: f32::from(hovered == Some(Button::PauseResume)),
+            hover_bottom: f32::from(hovered == Some(Button::Stop)),
+            breathing: f32::from(working.is_some_and(|controls| {
+                controls.getting_ready && !controls.paused && !controls.resting && !motion::still()
+            })),
+            controls: f32::from(working.is_some()),
+            saved: f32::from(matches!(self.face, Face::Saved(_))),
+            disc: f32::from(self.face == Face::Done { went_well: true }),
+            quiet: f32::from(self.face == Face::Done { went_well: false }),
+        }
     }
 }
 
-/// How often the dial draws while only what follows the work moves (the ring filling, the
+impl State {
+    /// A ring seen for the first time is shown as it is: nothing plays for what happened while
+    /// it was out of sight.
+    fn arrive(&mut self, dial: &Dial, targets: &Targets) {
+        self.fill = targets.fill;
+        self.play = targets.play;
+        self.controls = targets.controls;
+        self.saved = targets.saved;
+        self.disc = Spring::at(targets.disc);
+        self.check = targets.disc;
+        self.quiet = targets.quiet;
+        if let Face::Saved(words) = &dial.face {
+            self.saved_words.clone_from(words);
+        }
+    }
+
+    /// Moves everything towards `targets` for `elapsed` seconds.
+    fn advance(&mut self, dial: &Dial, targets: &Targets, elapsed: f32) {
+        let working = dial.controls().is_some();
+        let fill_ease = if working { motion::STEADY } else { CLOSING };
+        self.fill = approach(self.fill, targets.fill, elapsed, fill_ease);
+        // A ring that is done closes cleanly, rather than creeping over its last hair's breadth.
+        if !working && self.fill >= ALMOST_CLOSED {
+            self.fill = 1.0;
+        }
+        self.play = approach(self.play, targets.play, elapsed, motion::QUICK);
+        self.hover_top = approach(self.hover_top, targets.hover_top, elapsed, motion::QUICK);
+        self.hover_bottom = approach(
+            self.hover_bottom,
+            targets.hover_bottom,
+            elapsed,
+            motion::QUICK,
+        );
+        self.breathing = approach(self.breathing, targets.breathing, elapsed, motion::STEADY);
+        self.breath = if self.breathing > 0.0 {
+            (self.breath + elapsed / BREATH).fract()
+        } else {
+            0.0
+        };
+        self.quiet = approach(self.quiet, targets.quiet, elapsed, motion::STEADY);
+
+        // One face leaves before the next comes in.
+        let pace = |target: f32| {
+            if target == 0.0 {
+                LEAVING
+            } else {
+                motion::QUICK
+            }
+        };
+        let others_gone = |others: &[f32]| others.iter().all(|&other| other <= NEARLY_GONE);
+        let controls = if others_gone(&[self.saved, self.disc.value]) {
+            targets.controls
+        } else {
+            0.0
+        };
+        self.controls = approach(self.controls, controls, elapsed, pace(controls));
+        let saved = if others_gone(&[self.controls, self.disc.value]) {
+            targets.saved
+        } else {
+            0.0
+        };
+        self.saved = approach(self.saved, saved, elapsed, pace(saved));
+        if let Face::Saved(words) = &dial.face
+            && (self.saved <= NEARLY_GONE || targets.saved == 1.0)
+        {
+            self.saved_words.clone_from(words);
+        }
+
+        // The green lands once the ring has closed, the check mark draws itself as it does, and
+        // the ring swells for a moment under it.
+        let closed = self.fill == 1.0;
+        if targets.disc == 1.0 {
+            if closed && others_gone(&[self.controls, self.saved]) {
+                let before = self.disc.value;
+                self.disc.step(1.0, elapsed, motion::LIVELY);
+                if before < 0.5 && self.disc.value >= 0.5 {
+                    self.swell.kick(9.0);
+                }
+            }
+            if self.disc.value >= 0.5 && !motion::still() {
+                self.check = (self.check + elapsed / CHECK_DRAWN_IN).min(1.0);
+            } else if motion::still() {
+                self.check = 1.0;
+            }
+        } else {
+            self.disc = Spring::at(approach(self.disc.value, 0.0, elapsed, motion::QUICK));
+            self.check = approach(self.check, 0.0, elapsed, motion::QUICK);
+        }
+        self.swell.step(0.0, elapsed, motion::LIVELY);
+    }
+
+    fn rests_at(&self, targets: &Targets) -> bool {
+        self.fill == targets.fill
+            && self.play == targets.play
+            && self.hover_top == targets.hover_top
+            && self.hover_bottom == targets.hover_bottom
+            && self.breathing == 0.0
+            && targets.breathing == 0.0
+            && self.controls == targets.controls
+            && self.saved == targets.saved
+            && self.disc.rests_at(targets.disc)
+            && self.check == targets.disc
+            && self.quiet == targets.quiet
+            && self.swell.rests_at(0.0)
+    }
+
+    /// Whether only what follows the work is moving: the ring filling, the marble breathing.
+    fn only_follows_the_work(&self, targets: &Targets) -> bool {
+        targets.controls == 1.0
+            && self.controls == 1.0
+            && self.play == targets.play
+            && self.hover_top == targets.hover_top
+            && self.hover_bottom == targets.hover_bottom
+            && self.pressed.is_none()
+    }
+}
+
+/// How often the ring draws while only what follows the work moves (the ring filling, the
 /// marble breathing): about thirty times a second, plenty for movements that slow, and half the
-/// drawing of every frame (spec §51, ADR 0066). What answers the pointer moves every frame.
+/// drawing of every frame (spec §51, ADR 0066). Everything else moves every frame.
 const STEADY_FRAME: Duration = Duration::from_millis(33);
 
 impl canvas::Program<Message> for Dial {
@@ -174,14 +368,19 @@ impl canvas::Program<Message> for Dial {
         cursor: mouse::Cursor,
     ) -> Option<Action<Message>> {
         let hovered = self.part_at(bounds, cursor);
+        let targets = self.targets(hovered);
 
-        // Another file in focus: show it as it is, without sweeping from the previous one.
-        if state.shows != Some(self.shows) {
-            state.shows = Some(self.shows);
-            state.fill = self.target_fill();
-            state.play = self.target_play();
-            state.pressed = None;
+        match state.shows {
+            None => state.arrive(self, &targets),
+            // Another file at work: shown as it is, without sweeping from the previous one.
+            Some(shows) if shows != self.shows && self.controls().is_some() => {
+                state.fill = targets.fill;
+                state.play = targets.play;
+                state.pressed = None;
+            }
+            Some(_) => {}
         }
+        state.shows = Some(self.shows);
 
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
@@ -199,39 +398,19 @@ impl canvas::Program<Message> for Dial {
             }
             Event::Window(window::Event::RedrawRequested(now)) => {
                 let elapsed = motion::elapsed(state.last_frame, *now);
-                let [fill, play, top, bottom, breathing] = self.targets(hovered);
-                state.fill = approach(state.fill, fill, elapsed, motion::STEADY);
-                state.play = approach(state.play, play, elapsed, motion::QUICK);
-                state.hover_top = approach(state.hover_top, top, elapsed, motion::QUICK);
-                state.hover_bottom = approach(state.hover_bottom, bottom, elapsed, motion::QUICK);
-                state.breathing = approach(state.breathing, breathing, elapsed, motion::STEADY);
-                state.breath = if state.breathing > 0.0 {
-                    (state.breath + elapsed / BREATH).fract()
-                } else {
-                    0.0
-                };
+                state.advance(self, &targets, elapsed);
                 state.last_frame = Some(*now);
             }
             _ => {}
         }
 
-        let targets = self.targets(hovered);
-        let current = [
-            state.fill,
-            state.play,
-            state.hover_top,
-            state.hover_bottom,
-            state.breathing,
-        ];
-        // A breath never settles, so the dial keeps drawing while it breathes.
-        state.settled = current == targets && state.breathing == 0.0 && state.pressed.is_none();
-        if current == targets && state.breathing == 0.0 {
+        let resting = state.rests_at(&targets);
+        state.settled = resting && state.pressed.is_none();
+        if resting {
             state.last_frame = None;
             return None;
         }
-        // The pause symbol and the lit halves of the middle, which answer the pointer.
-        let quick_settled = current[1..4] == targets[1..4] && state.pressed.is_none();
-        if quick_settled {
+        if state.only_follows_the_work(&targets) {
             let last = state.last_frame.unwrap_or_else(Instant::now);
             Some(Action::request_redraw_at(last + STEADY_FRAME))
         } else {
@@ -255,13 +434,13 @@ impl canvas::Program<Message> for Dial {
         let still = Still {
             size: bounds.size(),
             palette: theme.palette(),
+            face: self.face.clone(),
             values: [state.fill, state.play, state.hover_top, state.hover_bottom],
-            can_stop: self.can_stop,
-            can_pause: self.enabled(Button::PauseResume),
         };
-        if state.still_for.get() != Some(still) {
+        let mut still_for = state.still_for.borrow_mut();
+        if still_for.as_ref() != Some(&still) {
             state.still.clear();
-            state.still_for.set(Some(still));
+            *still_for = Some(still);
         }
         vec![state.still.draw(renderer, bounds.size(), |frame| {
             self.paint(state, frame, theme)
@@ -283,7 +462,7 @@ impl canvas::Program<Message> for Dial {
 }
 
 impl Dial {
-    /// Draws the dial as `state` has it into `frame`.
+    /// Draws the ring as `state` has it into `frame`.
     fn paint(&self, state: &State, frame: &mut Frame, theme: &Theme) {
         let palette = theme.palette();
         let tokens = style::tokens(theme);
@@ -296,8 +475,18 @@ impl Dial {
         // No pipe is drawn, only what the marble has filled (ADR 0038): from twelve o'clock
         // clockwise, behind the marble, in the accent, like the filled part of Windows' sliders.
         let head = -FRAC_PI_2 + TAU * state.fill;
-        if state.fill > 0.001 {
-            let trail = Path::new(|path| {
+        let trail = Stroke::default()
+            .with_width(trail_width * (1.0 + SWELL * state.swell.value))
+            .with_line_cap(LineCap::Butt)
+            .with_color(mix(
+                tokens.accent.scale_alpha(1.0 - 0.35 * state.play),
+                tokens.secondary.scale_alpha(0.5),
+                state.quiet,
+            ));
+        if state.fill >= 0.999 {
+            frame.stroke(&Path::circle(center, pipe), trail);
+        } else if state.fill > 0.001 {
+            let filled = Path::new(|path| {
                 path.arc(canvas::path::Arc {
                     center,
                     radius: pipe,
@@ -305,39 +494,104 @@ impl Dial {
                     end_angle: head.into(),
                 });
             });
-            frame.stroke(
-                &trail,
-                Stroke::default()
-                    .with_width(trail_width)
-                    .with_line_cap(LineCap::Butt)
-                    .with_color(tokens.accent.scale_alpha(1.0 - 0.35 * state.play)),
-            );
+            frame.stroke(&filled, trail);
         }
 
-        let marble_radius = pipe_width / 2.0 - 1.5 * scale;
-
         // The marble, drawn like the thumb of Windows' own sliders: a solid face with a thin edge
-        // and the accent in its middle, so it stands apart from the trail in both themes.
-        let marble = Point::new(center.x + pipe * head.cos(), center.y + pipe * head.sin());
-        frame.fill(&Path::circle(marble, marble_radius), tokens.thumb);
-        frame.stroke(
-            &Path::circle(marble, marble_radius),
-            Stroke::default()
-                .with_width(1.0)
-                .with_color(palette.text.scale_alpha(0.12)),
-        );
-        let breath = 0.5 - 0.5 * (TAU * state.breath).cos();
-        frame.fill(
-            &Path::circle(marble, marble_radius * 0.55),
-            tokens
-                .accent
-                .scale_alpha(1.0 - BREATH_DEPTH * state.breathing * breath),
-        );
+        // and the accent in its middle, so it stands apart from the trail in both themes. It
+        // leaves with the buttons: a ring that is done is whole.
+        let shown = state.controls;
+        if shown > 0.0 {
+            let marble_radius = pipe_width / 2.0 - 1.5 * scale;
+            let marble = Point::new(center.x + pipe * head.cos(), center.y + pipe * head.sin());
+            frame.fill(
+                &Path::circle(marble, marble_radius),
+                tokens.thumb.scale_alpha(shown),
+            );
+            frame.stroke(
+                &Path::circle(marble, marble_radius),
+                Stroke::default()
+                    .with_width(1.0)
+                    .with_color(palette.text.scale_alpha(0.12 * shown)),
+            );
+            let breath = 0.5 - 0.5 * (TAU * state.breath).cos();
+            frame.fill(
+                &Path::circle(marble, marble_radius * 0.55),
+                tokens
+                    .accent
+                    .scale_alpha(shown * (1.0 - BREATH_DEPTH * state.breathing * breath)),
+            );
+            self.paint_buttons(state, frame, theme, center, radius);
+        }
 
-        // The middle: two buttons that light up softly under the pointer.
+        // How much smaller the file came out, rising a little as it appears.
+        if state.saved > 0.0 {
+            frame.fill_text(canvas::Text {
+                content: state.saved_words.clone(),
+                position: Point::new(center.x, center.y + 6.0 * scale * (1.0 - state.saved)),
+                max_width: radius * 2.0,
+                color: palette.text.scale_alpha(state.saved),
+                size: (SAVED_SIZE * scale).max(size::BODY).into(),
+                font: style::STRONG,
+                align_x: Alignment::Center,
+                align_y: Vertical::Center,
+                ..canvas::Text::default()
+            });
+        }
+
+        // The middle fills with green, growing out from its centre, and the check mark draws
+        // itself from its short stroke to its long one.
+        let disc = state.disc.value;
+        if disc > 0.0 {
+            frame.fill(
+                &Path::circle(center, radius * (0.6 + 0.4 * disc)),
+                palette.success.scale_alpha(disc.min(1.0)),
+            );
+        }
+        if state.check > 0.0 {
+            let points =
+                CHECK.map(|(x, y)| Point::new(center.x + x * radius, center.y + y * radius));
+            let first = points[0].distance(points[1]);
+            let second = points[1].distance(points[2]);
+            let drawn = ease_out(state.check) * (first + second);
+            let path = Path::new(|path| {
+                path.move_to(points[0]);
+                if drawn <= first {
+                    path.line_to(towards(points[0], points[1], drawn / first));
+                } else {
+                    path.line_to(points[1]);
+                    path.line_to(towards(points[1], points[2], (drawn - first) / second));
+                }
+            });
+            frame.stroke(
+                &path,
+                Stroke::default()
+                    .with_width(radius * 0.13)
+                    .with_line_cap(LineCap::Round)
+                    .with_line_join(LineJoin::Round)
+                    .with_color(palette.background),
+            );
+        }
+    }
+
+    /// The middle while at work: two buttons that light up softly under the pointer.
+    fn paint_buttons(
+        &self,
+        state: &State,
+        frame: &mut Frame,
+        theme: &Theme,
+        center: Point,
+        radius: f32,
+    ) {
+        let Some(controls) = self.controls() else {
+            return;
+        };
+        let palette = theme.palette();
+        let tokens = style::tokens(theme);
+        let shown = state.controls;
         let divider_y = center.y + DIVIDER * radius;
         let below = (DIVIDER).asin();
-        let top = if self.can_stop {
+        let top = if controls.can_stop {
             Path::new(|path| {
                 path.arc(canvas::path::Arc {
                     center,
@@ -359,20 +613,27 @@ impl Dial {
             });
             path.close();
         });
-        frame.fill(&top, palette.text.scale_alpha(0.06 * state.hover_top));
-        frame.fill(&bottom, palette.text.scale_alpha(0.06 * state.hover_bottom));
+        // A pressed button is lit a little more, so the press is felt before it does anything.
+        let lit = |hover: f32, part: Button| {
+            let pressed = f32::from(state.pressed == Some(part));
+            palette
+                .text
+                .scale_alpha((0.06 + 0.04 * pressed) * hover * shown)
+        };
+        frame.fill(&top, lit(state.hover_top, Button::PauseResume));
+        frame.fill(&bottom, lit(state.hover_bottom, Button::Stop));
 
         let symbol = |hover: f32, enabled: bool| {
             if enabled {
-                mix(tokens.secondary, palette.text, hover)
+                mix(tokens.secondary, palette.text, hover).scale_alpha(shown)
             } else {
-                tokens.secondary.scale_alpha(0.45)
+                tokens.secondary.scale_alpha(0.45 * shown)
             }
         };
 
         // Pause turns into play by moving the corners of its two bars into the triangle.
         let size = radius * 0.46;
-        let icon = if self.can_stop {
+        let icon = if controls.can_stop {
             Point::new(center.x, center.y - radius * 0.2)
         } else {
             center
@@ -402,12 +663,18 @@ impl Dial {
             );
         }
 
-        if !self.can_stop {
+        if !controls.can_stop {
             return;
         }
 
         // Stop sits in the middle of the bottom button; under the pointer the square gives way to
-        // the word, so what it does is never a guess.
+        // the word, so what it does is never a guess. A small ring has no room for the word, and
+        // keeps the square.
+        let worded = if radius * 1.6 >= WORD_ROOM {
+            state.hover_bottom
+        } else {
+            0.0
+        };
         let stop = radius * 0.17;
         let stop_center = Point::new(center.x, (divider_y + center.y + radius) / 2.0);
         frame.fill(
@@ -416,13 +683,13 @@ impl Dial {
                 Size::new(stop, stop),
                 (stop * 0.15).into(),
             ),
-            symbol(state.hover_bottom, true).scale_alpha(1.0 - state.hover_bottom),
+            symbol(state.hover_bottom, true).scale_alpha(shown * (1.0 - worded)),
         );
         frame.fill_text(canvas::Text {
-            content: self.stop_word.to_owned(),
+            content: controls.stop_word.to_owned(),
             position: stop_center,
             max_width: radius * 1.6,
-            color: palette.text.scale_alpha(state.hover_bottom),
+            color: palette.text.scale_alpha(shown * worded),
             size: size::CAPTION.into(),
             font: style::FONT,
             align_x: Alignment::Center,
@@ -431,37 +698,42 @@ impl Dial {
         });
     }
 
-    /// The dial, its Pause and Stop each reachable with Tab and pressed with Enter or Space
+    /// The ring, its Pause and Stop each reachable with Tab and pressed with Enter or Space
     /// (ADR 0059), drawn `side` pixels wide.
     pub fn keyed(self, scope: Scope, side: f32) -> Element<'static, Message> {
-        let pause = Part {
-            place: if self.can_stop {
-                pause_place
-            } else {
-                middle_place
-            },
-            radius: if self.can_stop {
-                pause_radius
-            } else {
-                middle_radius
-            },
-            message: self
-                .enabled(Button::PauseResume)
-                .then(|| self.message(Button::PauseResume)),
-        };
-        let mut parts = vec![pause];
-        if self.can_stop {
+        let mut parts = Vec::new();
+        if let Some(controls) = self.controls() {
             parts.push(Part {
-                place: stop_place,
-                radius: stop_radius,
-                message: Some(Message::Cancel),
+                place: if controls.can_stop {
+                    pause_place
+                } else {
+                    middle_place
+                },
+                radius: if controls.can_stop {
+                    pause_radius
+                } else {
+                    middle_radius
+                },
+                message: self
+                    .enabled(Button::PauseResume)
+                    .then(|| self.message(Button::PauseResume)),
             });
+            if controls.can_stop {
+                parts.push(Part {
+                    place: stop_place,
+                    radius: stop_radius,
+                    message: Some(Message::Cancel),
+                });
+            }
         }
         keyed_parts(scope, Canvas::new(self).width(side).height(side), parts)
     }
 }
 
-/// The middle of the dial, around its centre.
+/// The least room, in logical pixels, in which the stop word reads well in place of its square.
+const WORD_ROOM: f32 = 64.0;
+
+/// The middle of the ring, around its centre.
 fn middle_place(bounds: Size) -> Rectangle {
     let radius = middle_radius(bounds);
     Rectangle::new(
@@ -499,9 +771,9 @@ fn stop_radius(bounds: Size) -> f32 {
     stop_place(bounds).height / 2.0
 }
 
-/// Where a dial drawn in `bounds` puts its ring: the ring's radius, the width of its filled part,
-/// and the radius of its middle. The finished view draws the same shapes.
-pub fn ring(bounds: Size) -> (f32, f32, f32) {
+/// Where a ring drawn in `bounds` is: its radius, the width of its filled part, and the radius of
+/// its middle.
+fn ring(bounds: Size) -> (f32, f32, f32) {
     let scale = scale(bounds);
     let pipe_width = PIPE_WIDTH * scale;
     let pipe = SIZE * scale / 2.0 - 1.0 - pipe_width / 2.0;
@@ -514,7 +786,7 @@ fn middle_radius(bounds: Size) -> f32 {
     SIZE * scale / 2.0 - 1.0 - (PIPE_WIDTH + GAP) * scale
 }
 
-/// How much smaller than [SIZE] the dial is drawn, to fit its space.
+/// How much smaller than [SIZE] the ring is drawn, to fit its space.
 fn scale(bounds: Size) -> f32 {
     SIZE.min(bounds.width).min(bounds.height) / SIZE
 }
@@ -562,6 +834,15 @@ fn mix(from: Color, to: Color, t: f32) -> Color {
     }
 }
 
+/// Fast at first, settling softly.
+fn ease_out(t: f32) -> f32 {
+    1.0 - (1.0 - t).powi(3)
+}
+
+fn towards(from: Point, to: Point, t: f32) -> Point {
+    Point::new(lerp(from.x, to.x, t), lerp(from.y, to.y, t))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -574,20 +855,24 @@ mod tests {
         assert!((share - 0.25).abs() < 0.01, "{share}");
     }
 
+    fn some_file() -> Shows {
+        let mut queue = gracil_core::queue::Queue::default();
+        queue.add([std::path::PathBuf::from("a.mp4")]);
+        Shows::File(queue.jobs()[0].id)
+    }
+
     fn dial(paused: bool, can_pause: bool) -> Dial {
         Dial {
-            shows: Shows::File({
-                let mut queue = gracil_core::queue::Queue::default();
-                queue.add([std::path::PathBuf::from("a.mp4")]);
-                queue.jobs()[0].id
-            }),
+            shows: some_file(),
             fraction: Some(0.5),
-            paused,
-            can_pause,
-            can_stop: true,
-            stop_word: "Stop all",
-            getting_ready: false,
-            resting: false,
+            face: Face::Working(Controls {
+                paused,
+                can_pause,
+                can_stop: true,
+                stop_word: "Stop all",
+                getting_ready: false,
+                resting: false,
+            }),
         }
     }
 
@@ -632,14 +917,87 @@ mod tests {
         let at = |x: f32, y: f32| mouse::Cursor::Available(Point::new(x, y));
         let middle = SIZE / 2.0;
         let radius = middle_radius(bounds.size());
-        let mini = Dial {
-            can_stop: false,
-            stop_word: "Stop all",
-            ..dial(false, true)
-        };
+        let mut mini = dial(false, true);
+        if let Face::Working(controls) = &mut mini.face {
+            controls.can_stop = false;
+        }
         assert_eq!(
             mini.part_at(bounds, at(middle, middle + radius * 0.8)),
             Some(Button::PauseResume)
         );
+    }
+
+    #[test]
+    fn a_ring_that_is_done_has_nothing_to_press() {
+        let bounds = Rectangle::new(Point::ORIGIN, Size::new(SIZE, SIZE));
+        let middle = mouse::Cursor::Available(Point::new(SIZE / 2.0, SIZE / 2.0));
+        for face in [Face::Saved("−35%".into()), Face::Done { went_well: true }] {
+            let done = Dial {
+                shows: some_file(),
+                fraction: None,
+                face,
+            };
+            assert_eq!(done.part_at(bounds, middle), None);
+            assert_eq!(done.targets(None).fill, 1.0);
+        }
+    }
+
+    /// Plays `dial` from `state` for `seconds`, frame by frame, and gives every frame's state to
+    /// `watch`.
+    fn play(dial: &Dial, state: &mut State, seconds: f32, mut watch: impl FnMut(&State)) {
+        let targets = dial.targets(None);
+        for _ in 0..(seconds * 60.0) as usize {
+            state.advance(dial, &targets, 1.0 / 60.0);
+            watch(state);
+        }
+    }
+
+    #[test]
+    fn the_faces_take_turns_and_everything_comes_to_rest() {
+        let working = dial(false, true);
+        let mut state = State::default();
+        state.arrive(&working, &working.targets(None));
+        assert_eq!((state.controls, state.fill), (1.0, 0.5));
+
+        // The file is done: the buttons leave before the amount comes in, and the ring closes.
+        let saved = Dial {
+            shows: working.shows,
+            fraction: None,
+            face: Face::Saved("−35%".into()),
+        };
+        play(&saved, &mut state, 2.0, |state| {
+            assert!(state.controls <= NEARLY_GONE || state.saved == 0.0);
+        });
+        assert!(state.rests_at(&saved.targets(None)));
+        assert_eq!((state.saved, state.fill), (1.0, 1.0));
+
+        // The list is done: the amount leaves, the green lands a little past its size and the
+        // check mark draws itself.
+        let done = Dial {
+            shows: Shows::Finished,
+            fraction: None,
+            face: Face::Done { went_well: true },
+        };
+        let mut furthest: f32 = 0.0;
+        play(&done, &mut state, 3.0, |state| {
+            assert!(state.saved <= NEARLY_GONE || state.disc.value == 0.0);
+            furthest = furthest.max(state.disc.value);
+        });
+        assert!(furthest > 1.0, "{furthest}");
+        assert!(state.rests_at(&done.targets(None)));
+        assert_eq!(state.check, 1.0);
+    }
+
+    #[test]
+    fn a_ring_first_seen_done_shows_it_without_playing() {
+        let done = Dial {
+            shows: Shows::Finished,
+            fraction: None,
+            face: Face::Done { went_well: true },
+        };
+        let mut state = State::default();
+        let targets = done.targets(None);
+        state.arrive(&done, &targets);
+        assert!(state.rests_at(&targets));
     }
 }

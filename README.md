@@ -13,7 +13,7 @@ compressed before anyone could tell the difference. Then you choose whether to k
 [**Download for Windows 11**](https://github.com/alexpaltrc/gracil/releases/latest) ·
 [How it works](docs/how-gracil-works.md) · [Questions](docs/faq.md)
 
-<img src="docs/images/gracil.png" width="880" alt="Gracil compressing a video, finished with a list, and asking whether to replace the original">
+<img src="docs/images/gracil.png" width="880" alt="Gracil's window three times: compressing six files, a video that came out 67% smaller with Replace and Save copy, and the finished list with a green check mark">
 
 </div>
 
@@ -58,10 +58,12 @@ you don't have to think about.
 <img src="docs/images/list.png" width="440" alt="A finished video waiting for a choice, above the list of files with what each one saved">
 </p>
 
-- A marble rolls around the file as it compresses, and next to the clock a ring fills as the
-  list moves along. Close the window and the work continues there.
+- One ring follows a file from start to end. A marble rolls around it as the file compresses,
+  then the ring closes and says how much smaller the file came out, and when the list is done a
+  check mark draws itself under what you saved: **2.4 GB smaller**.
+- Next to the clock, a small ring fills as the list moves along. Close the window and the work
+  continues there.
 - The time left is a calm *about 20 min*. It only goes down, never creeping up minute by minute.
-- When the list is done, a check mark draws itself and says what you saved: **2.4 GB smaller**.
 - **Clear** has an **Undo**. **Stop** keeps every unfinished file, ready to carry on, even after
   restarting the computer.
 - Videos keep their recording date, orientation, chapters, subtitles and the extra details

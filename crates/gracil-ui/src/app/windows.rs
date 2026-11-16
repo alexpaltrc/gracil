@@ -171,7 +171,7 @@ impl Gracil {
             return Task::batch([window::minimize(id, false), window::gain_focus(id)]);
         }
         let (id, open) = window::open(window::Settings {
-            size: Size::new(440.0, 440.0),
+            size: crate::view::WINDOW,
             min_size: Some(Size::new(360.0, 340.0)),
             visible: false,
             exit_on_close_request: false,

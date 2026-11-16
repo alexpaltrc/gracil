@@ -1,6 +1,6 @@
-//! Brings a new view in softly: when what the window shows changes (the work, the finished view,
-//! the question before leaving, files dragged over it), the new view fades in from the surface
-//! behind it instead of replacing the old one in a single frame.
+//! Brings a new view in softly: when what the window shows changes (the work, a result, the
+//! question before leaving, files dragged over it), the new view rises a little into place as it
+//! fades in from the surface behind it, instead of replacing the old one in a single frame.
 //!
 //! Like the dial and the list, it animates itself and only asks for frames while it moves
 //! (spec §51), and shows the new view at once while Windows' animation effects are off.
@@ -15,7 +15,10 @@ use iced::{
     window,
 };
 
-use crate::motion;
+use crate::motion::{self, Spring};
+
+/// How far a new view rises into place, in logical pixels.
+const RISE: f32 = 8.0;
 
 pub struct Appear<'a, Message> {
     content: Element<'a, Message>,
@@ -40,7 +43,7 @@ struct State {
     /// What was shown last; the first view of all is shown as it is.
     key: Option<u64>,
     /// How far in the new view is, from 0 to 1.
-    shown: f32,
+    shown: Spring,
     last_frame: Option<Instant>,
 }
 
@@ -60,7 +63,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Appear<'_, Message> {
     fn state(&self) -> tree::State {
         tree::State::new(State {
             key: None,
-            shown: 1.0,
+            shown: Spring::at(1.0),
             last_frame: None,
         })
     }
@@ -101,7 +104,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Appear<'_, Message> {
             Some(key) if key != self.key => {
                 state.key = Some(self.key);
                 if !motion::still() {
-                    state.shown = 0.0;
+                    state.shown = Spring::at(0.0);
                     state.last_frame = None;
                     shell.request_redraw();
                 }
@@ -109,15 +112,11 @@ impl<Message> Widget<Message, Theme, Renderer> for Appear<'_, Message> {
             Some(_) => {}
         }
         if let Event::Window(window::Event::RedrawRequested(now)) = event
-            && state.shown < 1.0
+            && !state.shown.rests_at(1.0)
         {
-            state.shown = motion::approach(
-                state.shown,
-                1.0,
-                motion::elapsed(state.last_frame, *now),
-                motion::QUICK,
-            );
-            if state.shown < 1.0 {
+            let elapsed = motion::elapsed(state.last_frame, *now);
+            state.shown.step(1.0, elapsed, motion::SMOOTH);
+            if !state.shown.rests_at(1.0) {
                 state.last_frame = Some(*now);
                 shell.request_redraw();
             } else {
@@ -148,30 +147,46 @@ impl<Message> Widget<Message, Theme, Renderer> for Appear<'_, Message> {
     ) {
         use iced::advanced::Renderer as _;
 
-        self.content.as_widget().draw(
-            &tree.children[0],
-            renderer,
-            theme,
-            style,
-            layout,
-            cursor,
-            viewport,
-        );
-        // Fading in: the surface behind, over the new view, thinning to nothing. In a layer of its
-        // own, so it covers the view's text and drawings too.
-        let veil = 1.0 - tree.state.downcast_ref::<State>().shown;
-        if veil > 0.0 {
-            let bounds = layout.bounds();
-            renderer.with_layer(bounds, |renderer| {
-                renderer.fill_quad(
-                    renderer::Quad {
-                        bounds,
-                        ..renderer::Quad::default()
-                    },
-                    Background::Color((self.surface)(theme).scale_alpha(veil)),
+        let shown = tree.state.downcast_ref::<State>().shown.value;
+        if shown >= 1.0 {
+            self.content.as_widget().draw(
+                &tree.children[0],
+                renderer,
+                theme,
+                style,
+                layout,
+                cursor,
+                viewport,
+            );
+            return;
+        }
+        // Coming in: a little below its place and rising into it, under the surface behind, which
+        // thins to nothing. In a layer of its own, so the surface covers the view's text and
+        // drawings too, and nothing shows beyond its place.
+        let bounds = layout.bounds();
+        let rise = Vector::new(0.0, RISE * (1.0 - shown));
+        renderer.with_layer(bounds, |renderer| {
+            renderer.with_translation(rise, |renderer| {
+                self.content.as_widget().draw(
+                    &tree.children[0],
+                    renderer,
+                    theme,
+                    style,
+                    layout,
+                    cursor,
+                    viewport,
                 );
             });
-        }
+        });
+        renderer.with_layer(bounds, |renderer| {
+            renderer.fill_quad(
+                renderer::Quad {
+                    bounds,
+                    ..renderer::Quad::default()
+                },
+                Background::Color((self.surface)(theme).scale_alpha(1.0 - shown.max(0.0))),
+            );
+        });
     }
 
     fn mouse_interaction(

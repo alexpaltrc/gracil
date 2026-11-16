@@ -7,18 +7,24 @@
 use std::sync::RwLock;
 use std::time::Duration;
 
+use iced::font::Weight;
 use iced::theme::{Mode, Palette};
-use iced::widget::{button, container, text};
+use iced::widget::{button, container, scrollable, text};
 use iced::{Background, Border, Color, Font, Theme};
 
 pub const FONT: Font = Font::with_name("Segoe UI Variable Text");
+
+/// For the few numbers that are the point of a view: the amount saved in the ring.
+pub const STRONG: Font = Font {
+    weight: Weight::Semibold,
+    ..Font::with_name("Segoe UI Variable Display")
+};
 
 /// Spacing scale, in logical pixels.
 pub mod space {
     pub const XS: f32 = 4.0;
     pub const S: f32 = 8.0;
     pub const M: f32 = 16.0;
-    pub const L: f32 = 24.0;
 }
 
 /// Type scale, in logical pixels.
@@ -136,6 +142,9 @@ pub struct Tokens {
     pub border: Color,
     /// The solid face of a control that is grabbed or moves, like a slider's thumb.
     pub thumb: Color,
+    /// The face of a card, the surface Windows 11 lays content on, and its hairline edge.
+    pub card: Color,
+    pub card_edge: Color,
 }
 
 /// Windows 11's app backgrounds (Mica's fallback colors).
@@ -147,18 +156,24 @@ struct Neutrals {
     secondary: Color,
     border: Color,
     thumb: Color,
+    card: Color,
+    card_edge: Color,
 }
 
 const LIGHT: Neutrals = Neutrals {
     secondary: Color::from_rgb8(0x5C, 0x5C, 0x5C),
     border: Color::from_rgb8(0x86, 0x86, 0x86),
     thumb: Color::WHITE,
+    card: Color::from_rgb8(0xFB, 0xFB, 0xFB),
+    card_edge: Color::from_rgb8(0xE5, 0xE5, 0xE5),
 };
 
 const DARK: Neutrals = Neutrals {
     secondary: Color::from_rgb8(0xCC, 0xCC, 0xCC),
     border: Color::from_rgb8(0x9A, 0x9A, 0x9A),
     thumb: Color::from_rgb8(0x45, 0x45, 0x45),
+    card: Color::from_rgb8(0x2B, 0x2B, 0x2B),
+    card_edge: Color::from_rgb8(0x1D, 0x1D, 0x1D),
 };
 
 /// The roles for what `theme` shows, including partway through a change between light and dark:
@@ -173,6 +188,8 @@ pub fn tokens(theme: &Theme) -> Tokens {
             on_accent,
             border: palette.text,
             thumb: palette.background,
+            card: palette.background,
+            card_edge: palette.text,
         };
     }
     let t = ((palette.background.r - LIGHT_BACKGROUND.r)
@@ -185,6 +202,8 @@ pub fn tokens(theme: &Theme) -> Tokens {
         on_accent,
         border: mix(LIGHT.border, DARK.border),
         thumb: mix(LIGHT.thumb, DARK.thumb),
+        card: mix(LIGHT.card, DARK.card),
+        card_edge: mix(LIGHT.card_edge, DARK.card_edge),
     }
 }
 
@@ -337,42 +356,81 @@ pub fn action_button(theme: &Theme, status: button::Status) -> button::Style {
     }
 }
 
-/// The drop area, which lights up while files are dragged over the window.
-pub fn drop_zone(theme: &Theme, hovered: bool) -> container::Style {
+/// How a surface looks as it lights up, from 0 (at rest) to 1: its face and its edge.
+pub type Surface = fn(&Theme, f32) -> (Color, Border);
+
+/// A card: the face and hairline edge Windows 11 gives the surfaces content lies on. It turns to
+/// the accent while files are dragged over it. In a contrast theme it is the window's own color
+/// with an edge in the text's, as Windows asks.
+pub fn card(theme: &Theme, lit: f32) -> (Color, Border) {
     let palette = theme.palette();
-    let (fill, edge) = if hovered {
-        (palette.primary.scale_alpha(0.12), palette.primary)
-    } else {
-        (Color::TRANSPARENT, tokens(theme).border)
-    };
-    container::Style {
-        background: Some(Background::Color(fill)),
-        border: Border::default().rounded(RADIUS).width(1.0).color(edge),
-        ..container::Style::default()
-    }
+    let tokens = tokens(theme);
+    (
+        mix(tokens.card, palette.primary, LIT * lit),
+        Border::default().rounded(RADIUS).width(1.0).color(mix(
+            tokens.card_edge,
+            palette.primary,
+            lit,
+        )),
+    )
 }
 
-/// What lies behind the drop area's contents: the window, tinted while files are dragged over.
-pub fn zone_surface(theme: &Theme, hovered: bool) -> Color {
+/// The mini-window, which is a card by itself: nothing but the window, until files are dragged
+/// over it. Its corners are the ones Windows 11 gives a window.
+pub fn bare(theme: &Theme, lit: f32) -> (Color, Border) {
     let palette = theme.palette();
-    if hovered {
-        mix(palette.background, palette.primary, 0.12)
-    } else {
-        palette.background
-    }
+    (
+        mix(palette.background, palette.primary, LIT * lit),
+        Border::default()
+            .rounded(WINDOW_RADIUS)
+            .width(1.0)
+            .color(palette.primary.scale_alpha(lit)),
+    )
 }
 
-/// The file drawer: a soft surface that sits below the focus without competing with it.
+/// How much of the accent a surface takes on while files are dragged over it.
+const LIT: f32 = 0.14;
+
+/// The corners Windows 11 gives a window.
+const WINDOW_RADIUS: f32 = 8.0;
+
+/// The list of files: a card of its own under the focus.
 pub fn drawer(theme: &Theme) -> container::Style {
-    // In a contrast theme, an edge in the text's color instead of a faint surface.
-    let edge = if contrasting() { 1.0 } else { 0.0 };
+    let (face, border) = card(theme, 0.0);
     container::Style {
-        background: Some(Background::Color(theme.palette().text.scale_alpha(0.04))),
-        border: Border::default()
-            .rounded(RADIUS)
-            .width(edge)
-            .color(theme.palette().text),
+        background: Some(Background::Color(face)),
+        border,
         ..container::Style::default()
+    }
+}
+
+/// How wide the list's scroll bar is, in logical pixels.
+pub const SCROLL_BAR: f32 = 4.0;
+
+/// The list's scroll bar: a thin line with no rail, as Windows 11's own are until the pointer
+/// comes, and stronger under the pointer or while dragged.
+pub fn scroll_bar(theme: &Theme, status: scrollable::Status) -> scrollable::Style {
+    let strength = match status {
+        _ if contrasting() => 1.0,
+        scrollable::Status::Hovered {
+            is_vertical_scrollbar_hovered: true,
+            ..
+        }
+        | scrollable::Status::Dragged { .. } => 0.5,
+        _ => 0.25,
+    };
+    let rail = scrollable::Rail {
+        background: None,
+        border: Border::default(),
+        scroller: scrollable::Scroller {
+            background: Background::Color(theme.palette().text.scale_alpha(strength)),
+            border: Border::default().rounded(SCROLL_BAR / 2.0),
+        },
+    };
+    scrollable::Style {
+        vertical_rail: rail,
+        horizontal_rail: rail,
+        ..scrollable::default(theme, status)
     }
 }
 

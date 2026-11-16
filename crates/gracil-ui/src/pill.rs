@@ -1,8 +1,9 @@
-//! The pill: one capsule holding three choices, with a soft stone that slides to the one picked.
-//! Its middle choice, "ask", is the quiet one: the stone there is a faint outline, and fills in
-//! with the accent as it slides towards either end.
+//! The pill: one capsule holding three choices, with a soft stone that slides to the one picked
+//! on a spring: it gathers speed, stretches a little as it goes, and settles. Its middle choice,
+//! "ask", is the quiet one: the stone there is a faint outline, and fills in with the accent as
+//! it slides towards either end.
 //!
-//! Like the dial, it animates itself and only asks for frames while the stone is moving. The
+//! Like the ring, it animates itself and only asks for frames while the stone is moving. The
 //! keyboard reaches it with Tab, and the arrow keys move the stone (ADR 0059).
 
 use std::time::Instant;
@@ -17,7 +18,10 @@ use iced::{
 };
 
 use crate::focus::{self, Ring, Scope};
-use crate::motion;
+use crate::motion::{self, Spring};
+
+/// How much wider the stone is at its fastest, as a share of its width.
+const STRETCH: f32 = 0.16;
 use crate::style::{self, size, space};
 
 pub struct Pill<'a, Message> {
@@ -66,7 +70,7 @@ pub fn pill<'a, Message: 'a>(
 
 struct State {
     /// Where the stone is, from 0 (first choice) to 2 (last); `None` until first drawn.
-    at: Option<f32>,
+    at: Option<Spring>,
     last_frame: Option<Instant>,
     /// The choice under the cursor, so it lights up.
     hovered: Option<usize>,
@@ -175,18 +179,16 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
             }
             Event::Window(window::Event::RedrawRequested(now)) => {
                 let state = tree.state.downcast_mut::<State>();
-                let at = state.at.unwrap_or(target);
-                let next = motion::approach(
-                    at,
+                let mut at = state.at.unwrap_or(Spring::at(target));
+                at.step(
                     target,
                     motion::elapsed(state.last_frame, *now),
-                    motion::QUICK,
+                    motion::SNAPPY,
                 );
-                if next == target {
-                    state.at = Some(target);
+                state.at = Some(at);
+                if at.rests_at(target) {
                     state.last_frame = None;
                 } else {
-                    state.at = Some(next);
                     state.last_frame = Some(*now);
                     shell.request_redraw();
                 }
@@ -195,7 +197,7 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
         }
         // A new choice starts the stone moving.
         let state = tree.state.downcast_ref::<State>();
-        if state.at.is_some_and(|at| at != target) && state.last_frame.is_none() {
+        if state.at.is_some_and(|at| !at.rests_at(target)) && state.last_frame.is_none() {
             shell.request_redraw();
         }
     }
@@ -247,21 +249,26 @@ impl<Message> Widget<Message, Theme, Renderer> for Pill<'_, Message> {
             );
         }
 
-        let at = tree
+        let spring = tree
             .state
             .downcast_ref::<State>()
             .at
-            .unwrap_or(self.selected as f32)
-            .clamp(0.0, 2.0);
+            .unwrap_or(Spring::at(self.selected as f32));
+        let at = spring.value.clamp(0.0, 2.0);
         if parts.len() == 3 {
             let from = at.floor() as usize;
             let to = (from + 1).min(2);
             let t = at - from as f32;
             let (a, b) = (inset(parts[from]), inset(parts[to]));
+            // Stretched while it moves, about its middle, and never past the capsule.
+            let width = a.width + (b.width - a.width) * t;
+            let stretch = width * STRETCH * spring.haste();
+            let left = (a.x + (b.x - a.x) * t - stretch / 2.0).max(inset(bounds).x);
+            let right = (left + width + stretch).min(inset(bounds).x + inset(bounds).width);
             let stone = Rectangle {
-                x: a.x + (b.x - a.x) * t,
+                x: left,
                 y: a.y,
-                width: a.width + (b.width - a.width) * t,
+                width: right - left,
                 height: a.height,
             };
             // Quiet in the middle, filled at either end. A contrast theme has no faint colors, so

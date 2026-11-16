@@ -14,7 +14,7 @@ use iced::{
     Background, Element, Event, Length, Rectangle, Renderer, Size, Theme, Vector, mouse, window,
 };
 
-use crate::motion;
+use crate::motion::{self, Spring};
 
 /// How far the contents travel as they come out, in logical pixels.
 const SLIDE: f32 = 10.0;
@@ -42,7 +42,7 @@ pub fn reveal<'a, Message>(
 #[derive(Default)]
 struct State {
     /// How far unfolded, from 0 to 1. A new one starts folded, so it unfolds when it appears.
-    shown: f32,
+    shown: Spring,
     last_frame: Option<Instant>,
     /// Whether `on_folded` was sent for the current fold.
     told: bool,
@@ -97,7 +97,12 @@ impl<Message: Clone> Widget<Message, Theme, Renderer> for Reveal<'_, Message> {
         renderer: &Renderer,
         limits: &layout::Limits,
     ) -> layout::Node {
-        let shown = tree.state.downcast_ref::<State>().shown;
+        let shown = tree
+            .state
+            .downcast_ref::<State>()
+            .shown
+            .value
+            .clamp(0.0, 1.0);
         let content = self
             .content
             .as_widget_mut()
@@ -122,17 +127,11 @@ impl<Message: Clone> Widget<Message, Theme, Renderer> for Reveal<'_, Message> {
         if let Event::Window(window::Event::RedrawRequested(now)) = event {
             let state = tree.state.downcast_mut::<State>();
             let before = state.shown;
-            let next = motion::approach(
-                state.shown,
-                target,
-                motion::elapsed(state.last_frame, *now),
-                motion::QUICK,
-            );
-            if next == target {
-                state.shown = target;
+            let elapsed = motion::elapsed(state.last_frame, *now);
+            state.shown.step(target, elapsed, motion::SMOOTH);
+            if state.shown.rests_at(target) {
                 state.last_frame = None;
             } else {
-                state.shown = next;
                 state.last_frame = Some(*now);
                 shell.request_redraw();
             }
@@ -142,11 +141,11 @@ impl<Message: Clone> Widget<Message, Theme, Renderer> for Reveal<'_, Message> {
         }
 
         let state = tree.state.downcast_mut::<State>();
-        if state.shown != target && state.last_frame.is_none() {
+        if !state.shown.rests_at(target) && state.last_frame.is_none() {
             // Opened or closed since the last frame: start moving.
             shell.request_redraw();
         }
-        if state.shown == 0.0 && !self.open {
+        if state.shown.rests_at(0.0) && !self.open {
             if !state.told {
                 state.told = true;
                 if let Some(message) = self.on_folded.clone() {
@@ -184,7 +183,12 @@ impl<Message: Clone> Widget<Message, Theme, Renderer> for Reveal<'_, Message> {
     ) {
         use iced::advanced::Renderer as _;
 
-        let shown = tree.state.downcast_ref::<State>().shown;
+        let shown = tree
+            .state
+            .downcast_ref::<State>()
+            .shown
+            .value
+            .clamp(0.0, 1.0);
         let bounds = layout.bounds();
         let Some(content) = layout.children().next() else {
             return;
@@ -262,7 +266,7 @@ impl<Message: Clone> Widget<Message, Theme, Renderer> for Reveal<'_, Message> {
         translation: Vector,
     ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
         // Tooltips and the like only once it is fully out.
-        if tree.state.downcast_ref::<State>().shown < 1.0 {
+        if !tree.state.downcast_ref::<State>().shown.rests_at(1.0) {
             return None;
         }
         let content = layout.children().next()?;

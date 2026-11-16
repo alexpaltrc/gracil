@@ -84,12 +84,14 @@ without a card: `libx265` full, then essential). See
 
 **The window.** `gracil-ui` is an Iced daemon. `app` holds the state and reacts to messages; it is a
 folder, with one file per subject (the list, the scheduler, what is shown about the list, the
-windows, the colors, the keys, leaving). `view` draws Focus + Drawer from that state alone (`dial`
-draws the progress ring and its controls, ADR 0014; `done` the finished screen), `work` runs the
-engine and each compression on their own threads and reports back as messages, `style` holds every
-design token, and `text` every word shown, in English and Spanish (ADR 0011). `motion` eases every
-animation and stills them all when Windows' **Animation effects** are off; `style` follows Windows'
-accent and contrast themes (ADR 0031, ADR 0061). `data` writes Gracil's small text files whole or
+windows, the colors, the keys, leaving). `view` draws Focus + Drawer from that state alone, laid
+out to fit the window (`dial` draws the ring through everything it shows: the work with its
+controls, how much smaller a file came out, and the finished list's check, ADR 0076; `card` the
+surface the focus lies on), `work` runs the engine and each compression on their own threads and
+reports back as messages, `style` holds every design token, and `text` every word shown, in
+English and Spanish (ADR 0011). `motion` moves everything that moves, easing or on a spring, and
+stills it all when Windows' **Animation effects** are off; `style` follows Windows' accent and
+contrast themes (ADR 0031, ADR 0061). `data` writes Gracil's small text files whole or
 not at all. Paths given on the command line or forwarded by a later launch are queued like dropped
 files. A finished result waits in its temporary file until the user chooses Replace or Save copy;
 `work::place` then calls `gracil_core::output` on its own thread, with

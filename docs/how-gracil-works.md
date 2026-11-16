@@ -55,8 +55,13 @@ nothing in Gracil moves: the ring, the list and the colors change at once instea
 the marble stays still while Gracil gets ready.
 
 When what the window shows changes, for example from the work to the finished view, or to the
-question before leaving, the new view fades in softly in a moment instead of jumping. With
-**Animation effects** off, it simply appears.
+question before leaving, the new view rises a little into place as it fades in, in a moment,
+instead of jumping. The ring doesn't start again: it turns from one thing into the next, closing
+when a file is done and filling with green when the list is. What you move, such as the choice
+on the **Always** line, moves with a little weight: it gathers speed and settles, rather than
+sliding at one pace. While files are dragged over the window, the area they can be dropped on
+lights up softly in your accent color. With **Animation effects** off, everything simply
+appears.
 
 Gracil's symbol is a marble resting on a support: the marble is your video, and the support is
 Gracil, which takes care of the technical work. It is Gracil's icon in the window, the taskbar and
@@ -85,6 +90,10 @@ pictures) below.
   filling an invisible circle with color behind it, and when it gets back to the top the file is
   done. The percentage is written just below. While Gracil gets a list ready, before the marble
   starts moving, the middle of the marble slowly fades and returns, so you know it is working.
+- The ring stays through everything that happens to a file. When the file is done, the ring
+  closes and its middle says how much smaller the file came out, for example **−35%**; when the
+  whole list is done, its middle turns green with a check mark (below). What it stands for is
+  always written above it, and how it goes, or what you can do next, below it.
 - The middle of the ring holds the controls. Its top part is **pause** (II); click it and it turns
   into **play** (▶), which resumes. Its bottom part is **stop** (■); point at it, or reach it with
   **Tab**, and the square turns into the words **Stop all**. Pause acts on every file being worked on, all together; while
@@ -106,25 +115,31 @@ pictures) below.
   **Ctrl+Z** undoes **Clear**.
 - Screen readers can't read Gracil's window yet. Its name in the taskbar, which is also what the
   marble next to the clock says, always tells how the work goes (see "Closing Gracil" below).
-- **View files**, under it, shows every video and image you added and how each one went: how much
-  smaller it became, where it went (for example **−35% · Replaced**), or why it couldn't be
-  compressed. With two or more done, a line at its top adds them all up, for example **In all:
-  3.4 GB → 2.2 GB, 35% smaller**, and the line with **View files** says how many are left, for
-  example **12 files left · View files**. The count goes down as each file
-  finishes; once none are left, the line says only what else there is, such as **2 more to
-  decide · View files**. With a longer list, it also says about how long is left, for example
-  **12 files left, about 20 min · View files** (see "How long is left" below). Only what is still on the list counts:
-  taking files off it, or **Clear**, takes them out of the total. Point at a file's name, in the
-  list or above the ring, to see where it is: its whole path.
-  The list unfolds gently from under that line and folds away when closed, quickly even with
-  tens of thousands of files: Gracil only draws the rows you can see.
-- Click a file in **View files** to show it large; it stays lit in the list while it shows. To go
-  back to the work, click it again, close **View files**, or click the quiet line under it that
-  names the file being compressed and how far along it is (‹ name · 42%). That line appears
-  whenever you are looking at another file while Gracil is working or a result waits for you.
+- The line under it says how the list goes on its left, and has **View files** and **+** (add
+  files) on its right. It says how many files are left, for example **12 files left**, and the
+  count goes down as each file finishes; once none are left, it says only what else there is,
+  such as **2 more to decide**. With a longer list, it also says about how long is left, for
+  example **12 files left, about 20 min** (see "How long is left" below), and with two or more
+  files done, how much room they freed. It is always one line: in a narrow window, what is least
+  needed is left out first.
+- **View files** shows every video and image you added and how each one went: how much smaller
+  it became, where it went (for example **−35% · Replaced**), or why it couldn't be compressed.
+  With two or more done, a line at its top adds them all up, for example **In all: 3.4 GB →
+  2.2 GB, 35% smaller**. Only what is still on the list counts: taking files off it, or
+  **Clear**, takes them out of the total. Point at a file's name, in the list or beside the
+  ring, to see where it is: its whole path. While the list is open it takes most of the window,
+  growing with it, and the file above it is shown small: its ring beside its name, with the same
+  buttons. The list unfolds gently and folds away when closed, quickly even with tens of
+  thousands of files: Gracil only draws the rows you can see. A window too short for the ring in
+  its middle shows the file small in the same way.
+- Click a file in **View files** to show it above the list; it stays lit in the list while it
+  shows. To go back to the work, click it again, close **View files**, or click the quiet line
+  under it that names the file being compressed and how far along it is (‹ name · 42%). That
+  line appears whenever you are looking at another file while Gracil is working or a result
+  waits for you.
 - When the whole list is done (nothing left waiting, being compressed or waiting for your choice),
   the window says so clearly: the ring stays full, its middle fills with green and a check mark
-  draws itself, and just below, in large letters, how much room the list saved, for example **130 MB
+  draws itself, and above it, in large letters, is how much room the list saved, for example **130 MB
   smaller**. If nothing came out smaller, or **Stop** set files aside this time, there is no check
   mark; files left unfinished from an earlier time don't take it away. When nothing came out
   smaller, the large line says **Nothing to make
@@ -168,8 +183,9 @@ small window next to the clock, which has no room for it.
 
 ## Replace, or keep a copy
 
-When a file is done, Gracil shows how much smaller it became, its size before and after (for
-example **120 MB → 78 MB**), and two buttons:
+When a file is done, Gracil shows how much smaller it became in the middle of its ring (for
+example **−35%**), its size before and after below it (for example **120 MB → 78 MB**), and two
+buttons:
 
 - **Replace** puts the smaller file in place of the original. It keeps the same name and the
   date it was created, so it still looks like the same file in your folders. Its "date modified"
@@ -194,7 +210,7 @@ deleted and your original stays exactly as it was. If you exit Gracil first, Gra
 leaving, and the file is compressed again the next time you carry on.
 
 Every compressed video is an MP4 (see "One format: MP4" below). When that gives it a new name,
-Gracil shows it under the buttons before you choose: `IMG_0042.MOV → IMG_0042.mp4`. Replacing
+Gracil shows it under the buttons before you choose: `IMG_0042.MOV → .mp4`. Replacing
 then creates `IMG_0042.mp4` and removes `IMG_0042.MOV`. If an `IMG_0042.mp4` already exists
 there, Gracil replaces nothing and a **!** explains why; you can still save a copy.
 
@@ -676,7 +692,8 @@ another is compressing, it says how many more are left to decide on and shows th
 the work is done. It also tells you how many more files are still to compress, for example **3 more
 to compress**, and, once one is placed, where it went. If a file couldn't be compressed, click the
 small "!" beside it and the big window opens on that file, with the reason written out. When the
-whole list is done, it says so as the big window does: how much room was saved, how the list went
+whole list is done, it says so as the big window does: the ring with its green check mark, how
+much room was saved, how the list went
 and, with a "!" that opens the big window on the first of them, how many files couldn't be
 compressed. You can drop more files or folders on it. It
 stays open while you do other things; close it with its **×** or by clicking the marble again, and

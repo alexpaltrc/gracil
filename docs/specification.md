@@ -425,6 +425,13 @@ then whole hours; it never goes up in small steps; hidden while paused, resting,
 battery, while folders are being looked through, before three files are done and in the last two
 minutes. Worked out from each kind's bytes and measured pace, not from the count of files.
 
+*Update (ADR 0076):* the ring stays through everything that happens to a file: it fills as the file
+compresses, then holds how much smaller the file came out, then the finished list's check. What it
+stands for is on a line above it, and how it goes or what to do next below it. The focus has two
+sizes, the ring in its middle or beside the words, and the window shows the one that fits. The line
+under the focus is always one line, with **View files** and **+** as buttons of their own on its
+right.
+
 # 32. Drawer behavior
 
 Selecting the subtle file-count control opens the file drawer, which lets the user inspect the
@@ -435,6 +442,8 @@ The drawer opens and closes at once however long the list is: every row has the 
 only the rows in sight (and a few beyond) are built; the rest of the list is empty space of the
 right height, so the scroll bar stays true.
 
+*Update (ADR 0076):* an open list takes all of the window but the small focus, and grows with it.
+
 # 32.1 Picking a file, and the way back (ADR 0036)
 
 Clicking a file in the drawer shows it in the focus, and its row stays lightly marked. Picking is
@@ -442,6 +451,9 @@ a temporary look, never a trap: clicking the same row again, closing the drawer,
 quiet "‹ name · status" line under the picked file returns the focus to the work in progress.
 That line appears only while something is being compressed or a result waits for a choice, and
 it is not the picked file.
+
+*Update (ADR 0076):* while the list is open the focus is small, and the line is under the picked
+file there too.
 
 # 32.2 Sizes (ADR 0036)
 
@@ -724,6 +736,9 @@ mini-window opens on the file that went wrong.
 room saved, how the list went, and the files that failed, whose "!" opens the main window on the
 first of them. A Gracil started with Windows makes the mini-window only when the pointer first
 comes to the tray icon or files come.
+
+*Update (ADR 0076):* the mini-window shows the small focus, the same one the main window shows
+above an open list, with nothing drawn around it; its ring carries the finished list's check too.
 
 # 56. Explorer-triggered mini-window
 

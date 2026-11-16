@@ -111,6 +111,9 @@ pub struct Gracil {
     held: bool,
     /// The main window, while it is open.
     main: Option<window::Id>,
+    /// How large the main window is inside, in logical pixels, so its view can lay itself out to
+    /// fit (ADR 0076).
+    pub main_size: Size,
     /// Whether the main window was ever shown. A Gracil started only for background work leaves
     /// on its own once that work is done (spec §53).
     window_shown: bool,
@@ -257,6 +260,8 @@ pub enum Message {
     Reveal(window::Id),
     /// A window moved to a screen with another scale, so its icon is picked again.
     Rescaled(window::Id),
+    /// A window has another size.
+    Resized(window::Id, Size),
     CloseRequested(window::Id),
     /// Exit stands, even though work stops.
     ConfirmExit,
@@ -357,6 +362,7 @@ impl Gracil {
             breath: Breath::default(),
             held: false,
             main: None,
+            main_size: crate::view::WINDOW,
             window_shown: false,
             requested: false,
             resident: false,
@@ -424,6 +430,7 @@ impl Gracil {
                     Some(Message::CloseRequested(window))
                 }
                 Event::Window(window::Event::Rescaled(_)) => Some(Message::Rescaled(window)),
+                Event::Window(window::Event::Resized(size)) => Some(Message::Resized(window, size)),
                 // Only keys no widget took.
                 Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
                     if status == event::Status::Ignored =>
@@ -463,6 +470,7 @@ impl Gracil {
                 | Message::ThemeFrame(_)
                 | Message::Frame(_)
                 | Message::DrawerScrolled(_)
+                | Message::Resized(..)
         );
         let task = self.handle(message);
         if recount {
@@ -651,6 +659,12 @@ impl Gracil {
                     warn!(frames, "a new window took too long to draw; shown anyway");
                 }
                 self.bring_into_view(id)
+            }
+            Message::Resized(window, size) => {
+                if self.main == Some(window) {
+                    self.main_size = size;
+                }
+                Task::none()
             }
             Message::Rescaled(window) => {
                 window::raw_id::<Message>(window).map(Message::WindowReady)
