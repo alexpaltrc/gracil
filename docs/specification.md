@@ -170,18 +170,14 @@ understandable. Prefer small, logically complete commits. Do not create giant co
 unrelated changes. Do not introduce an unnecessarily complicated Git workflow.
 
 `main` may contain the normal development history. Use temporary branches when they provide a real
-benefit. Released versions must be represented by Git tags (`v0.0.1`, `v0.0.2`). Do not rewrite
+benefit. Released versions must be represented by Git tags (`v1.0.0`, `v1.0.1`). Do not rewrite
 published release history.
 
 # 10. Versioning
 
-Versions begin at `0.0.1`. The active development version always carries the `-dev` suffix
-(`0.0.1-dev`). When that version is released it becomes `0.0.1` with the Git tag `v0.0.1`.
-Immediately after beginning work on the next version, change the development version to
-`0.0.2-dev`. Then `0.0.2`, `v0.0.2`, `0.0.3-dev`, and so on.
-
-*Update (ADR 0027, ADR 0050):* the first public release on GitHub is `1.0.0`, developed as
-`1.0.0-dev` and tagged `v1.0.0`; after it, `1.0.1-dev`, and so on.
+The first public release is `1.0.0` (ADR 0027, ADR 0050). The active development version always
+carries the `-dev` suffix (`1.0.1-dev`). When that version is released it becomes `1.0.1` with
+the Git tag `v1.0.1`, and the development version moves on to the next one.
 
 Keep the version synchronized wherever practical: Cargo workspace/package metadata, application
 metadata, the name of the portable zip, About information when eventually implemented, release

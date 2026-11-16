@@ -779,7 +779,7 @@ dependencies = [
 
 [[package]]
 name = "gracil-core"
-version = "1.0.0-dev"
+version = "1.0.0"
 dependencies = [
  "exoquant",
  "image",
@@ -798,7 +798,7 @@ dependencies = [
 
 [[package]]
 name = "gracil-ui"
-version = "1.0.0-dev"
+version = "1.0.0"
 dependencies = [
  "embed-resource",
  "gracil-core",
@@ -814,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "gracil-windows"
-version = "1.0.0-dev"
+version = "1.0.0"
 dependencies = [
  "gracil-core",
  "windows 0.62.2",

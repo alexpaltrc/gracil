@@ -2,10 +2,9 @@
 
 What's new in each version of Gracil.
 
-## 1.0 (in development)
+## 1.0 (2026-11-16)
 
-Gracil's first public version, still being finished. You can already compress videos and images
-with it.
+Gracil's first public version.
 
 ### New
 

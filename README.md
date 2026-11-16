@@ -1,69 +1,113 @@
+<div align="center">
+
+<img src="docs/images/icon-on-dark.png#gh-dark-mode-only" width="96" alt="">
+<img src="docs/images/icon-on-light.png#gh-light-mode-only" width="96" alt="">
+
 # Gracil
 
-Gracil is a small Windows 11 app that compresses videos and images. Drop them in, and Gracil makes
-them smaller while keeping them looking the same. It picks the best way to compress on your computer
-automatically: your graphics card when it can (NVIDIA, Intel or AMD), your processor otherwise.
+**Smaller videos and photos that look exactly the same.**
 
-Gracil is free, open source and private. It needs no account, no installer and no internet
-connection: unpack the zip anywhere, even on a USB drive, and open `gracil.exe`.
+A small, free Windows 11 app. Drop files in, and Gracil works out how far each one can be
+compressed before anyone could tell the difference. Then you choose whether to keep it.
 
-Gracil is in development towards its first public version, 1.0 (now `1.0.0-dev`).
-How it works, in plain words: [docs/how-gracil-works.md](docs/how-gracil-works.md). Questions:
-[docs/faq.md](docs/faq.md).
+[**Download for Windows 11**](https://github.com/alexpaltrc/gracil/releases/latest) ·
+[How it works](docs/how-gracil-works.md) · [Questions](docs/faq.md)
+
+<img src="docs/images/gracil.png" width="880" alt="Gracil compressing a video, finished with a list, and asking whether to replace the original">
+
+</div>
+
+## Why Gracil
+
+🎯 **Every video gets its own amount of compression.** A still interview can lose far more than
+a football match before it shows. So Gracil doesn't squeeze every file the same. It compresses a
+few short moments of each video at several strengths and measures them with VMAF, the standard
+used by streaming services. Then it picks the strongest one that still scores 95: the point where
+people watching normally see no difference. Photos are measured the same way, with SSIMULACRA2,
+and made with jpegli, Google's modern JPEG compressor.
+
+🛡️ **Your original is safe.** Gracil never writes over a file while it works. You see the result
+first, `120 MB → 78 MB`, and choose **Replace** or **Save copy**. A replaced file keeps its name
+and creation date, so it still sorts in the same place. If the result wouldn't be clearly
+smaller, there is no result to choose. If anything goes wrong, even a power cut, your original is
+put back.
+
+🌙 **It never gets in the way.** Gracil runs below your other programs and never uses more than
+half the processor while you work. Its tools run in Windows' efficiency mode. It holds the
+graphics card at 70 °C at most, by easing off a little instead of stopping. It slows down on
+battery and waits when the battery is low. You can leave it a list of thousands of files and
+keep working.
+
+⚡ **It uses your graphics card.** NVIDIA, Intel or AMD: Gracil tries a tiny compression on each
+to see what really works, and picks the fastest. Without one, it uses the processor, just as well.
+
+🪟 **It feels like part of Windows.** Windows 11's own colors, your accent color, light and dark
+mode, contrast themes, and the **Animation effects** setting. It can be used entirely from the
+keyboard, in English or Spanish, with numbers written the way your region writes them.
+
+🔒 **Private, and portable.** No account, no internet, no installer. Unpack the zip anywhere,
+even on a USB drive. Gracil keeps its settings in its own folder, and deleting the folder removes
+it.
+
+## The details
+
+Gracil is meant to have nothing to learn: one window, one list, one choice. The care is in what
+you don't have to think about.
+
+<p align="center">
+<img src="docs/images/list.png" width="440" alt="A finished video waiting for a choice, above the list of files with what each one saved">
+</p>
+
+- A marble rolls around the file as it compresses, and next to the clock a ring fills as the
+  list moves along. Close the window and the work continues there.
+- The time left is a calm *about 20 min*. It only goes down, never creeping up minute by minute.
+- When the list is done, a check mark draws itself and says what you saved: **2.4 GB smaller**.
+- **Clear** has an **Undo**. **Stop** keeps every unfinished file, ready to carry on, even after
+  restarting the computer.
+- Videos keep their recording date, orientation, chapters, subtitles and the extra details
+  iPhones record. Photos keep where and when they were taken, and which way is up.
+- iPhone photos (HEIC) become JPEGs, and every video becomes an MP4, so the result opens
+  everywhere. Videos are stored in 10-bit, which keeps skies smooth instead of banded.
+- When something goes wrong there is no message box: a small **!** next to the file says what
+  happened and what to do.
+- A list of tens of thousands of files opens as quickly as a short one, and the window only
+  redraws while something in it moves.
+
+## Compress from File Explorer
+
+Select videos, photos or whole folders, then right-click and choose **Send to → Gracil**. Gracil
+puts itself there the first time it opens. The line at the foot of its window, **Always:
+Replace · Ask · Save copy**, decides what happens when a file is done, so a folder can be
+compressed without a single click more.
 
 ## Download
 
-Get `Gracil-<version>-x64.zip` from [Releases](https://github.com/alexpaltrc/gracil/releases),
-unpack it anywhere and open `gracil.exe`. Gracil isn't signed, so the first time Windows may
-warn about it: choose **More info**, then **Run anyway**.
+Get `Gracil-1.0.0-x64.zip` from [Releases](https://github.com/alexpaltrc/gracil/releases/latest),
+unpack it anywhere and open `gracil.exe`. Gracil isn't signed, so the first time Windows may warn
+about it: choose **More info**, then **Run anyway**. It needs Windows 11, 64-bit.
 
 ## Building
 
-Requirements: Windows 11 x64, Rust stable (MSVC), Git. Details in
-[docs/development/setup.md](docs/development/setup.md).
+Gracil is written in Rust, in three crates: a compression engine that knows nothing about
+windows, the app (Iced, drawn with Direct3D 12), and everything Gracil asks of Windows itself.
 
 ```powershell
-.\scripts\check.ps1
+.\scripts\check.ps1       # formatting, Clippy and every test
+.\scripts\portable.ps1    # the zip, in target\portable
 ```
 
-It can also be worked on from Claude Code in the cloud, on Linux, with `scripts/check.sh`:
-[docs/development/cloud.md](docs/development/cloud.md).
+Setup: [docs/development/setup.md](docs/development/setup.md). How it fits together:
+[docs/architecture/overview.md](docs/architecture/overview.md). The product in full, with every
+decision and why: [docs/specification.md](docs/specification.md) and
+[docs/decisions](docs/decisions/). Contributions are welcome:
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Project layout
-
-| Path | Contents |
-|---|---|
-| `crates/gracil-core` | The compression engine. Independent from the UI. |
-| `crates/gracil-ui` | The Gracil app: windows, tray, mini-window |
-| `crates/gracil-windows` | Windows integration: tray, File Explorer, one instance, safe replace |
-| `packaging/` | The FFmpeg build that ships in the zip |
-| `docs/how-gracil-works.md` | How Gracil works, in plain language, for users |
-| `docs/specification.md` | Product and engineering specification |
-| `docs/architecture/` | How Gracil is put together |
-| `docs/decisions/` | Why important decisions were made |
-| `docs/development/` | Setup, cloud development, versioning, release process |
-| `scripts/` | Development scripts |
-| `.github/workflows/` | The same checks, run on GitHub for every change, on Windows and Linux |
-| `.claude/` | Settings for Claude Code, which prepare its cloud sessions |
-| `rust-toolchain.toml` | The Rust version and tools every machine uses |
-
-How the crates fit together: [docs/architecture/overview.md](docs/architecture/overview.md).
-Building the zip: [docs/development/packaging.md](docs/development/packaging.md).
-
-## Main dependencies
-
-- [Iced](https://iced.rs) with WGPU for the interface
-- [FFmpeg](https://ffmpeg.org) and FFprobe for the actual video work, included in the zip
-- [jpegli](https://github.com/google/jpegli) for photos
-- [windows-rs](https://github.com/microsoft/windows-rs) (`windows` and `windows-sys`) for Windows integration
-
-Gracil works fully offline. It never uploads videos, file names or any other data.
+Gracil is built on [FFmpeg](https://ffmpeg.org), [jpegli](https://github.com/google/jpegli),
+[Iced](https://iced.rs), [WGPU](https://wgpu.rs) and Microsoft's
+[windows-rs](https://github.com/microsoft/windows-rs). It never sends anything anywhere.
 
 ## License
 
-Copyright (C) 2026 Alex Palacios
-
-Gracil is free software, licensed under the [GNU General Public License, version 3 or any later
-version](LICENSE). The zip carries the licenses of everything inside it in its `licenses` folder:
-Gracil's, FFmpeg's (GPL), jpegli's and its libraries' (BSD and similar), and those of the Rust
-libraries built into `gracil.exe`.
+Copyright © 2026 Alex Palacios. Gracil is free software under the
+[GNU General Public License, version 3 or later](LICENSE). The zip includes the licenses of
+everything inside it.
