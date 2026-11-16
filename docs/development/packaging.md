@@ -40,8 +40,9 @@ merged on GitHub. Both run:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update.ps1   # -NoPull: only this folder
 ```
 
-which builds with `scripts/portable.ps1 -Copy`. That closes the Gracil running from that folder, with its helpers, and copies the new files over,
-keeping its `data` folder, so settings and unfinished lists stay. Then start `gracil.exe` again.
+which builds with `scripts/portable.ps1 -Copy`. That closes the Gracil running from that folder,
+with its helpers, and copies the new files over, keeping its `data` folder, so settings and
+unfinished lists stay; `update.ps1` then opens Gracil again if it was open.
 `-CopyTo <folder>` puts it somewhere else. A development build run from `target` keeps its own
 `data` folder there and never touches the daily one's. On every start, a whole Gracil folder (with
 FFmpeg beside the program) puts itself in File Explorer's **Send to** and its start at the next

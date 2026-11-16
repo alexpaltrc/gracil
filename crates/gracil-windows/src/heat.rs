@@ -385,7 +385,6 @@ mod tests {
     fn drivers_report_sensible_temperatures() {
         for card in [Card::Nvidia, Card::Intel, Card::Amd] {
             for heat in reported_by_drivers(card.vendor()) {
-                println!("{card:?}: {heat:?}");
                 assert!(heat.celsius < 150);
             }
         }

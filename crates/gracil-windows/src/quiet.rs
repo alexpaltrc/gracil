@@ -283,11 +283,10 @@ mod tests {
         assert!(total_memory() >= free_memory());
         assert!(own_memory().is_some_and(|own| own > 0));
         assert!(free_space(&std::env::temp_dir()).is_some_and(|free| free > 0));
-        assert!(free_space(Path::new(r"Q:\no\such\folder")).is_none() || cfg!(any()));
+        assert!(free_space(Path::new(r"Q:\no\such\folder")).is_none());
         let power = power();
         assert!(power.battery_percent.is_none_or(|percent| percent <= 100));
         assert!(!power.on_battery || power.saving_energy);
-        println!("{power:?}, busy: {}", person_busy());
     }
 
     #[test]

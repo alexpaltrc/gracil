@@ -6,7 +6,7 @@
 - Rust stable (MSVC toolchain), at least the `rust-version` in `Cargo.toml`
 - Git
 - Visual Studio Build Tools with the C++ workload, CMake and Ninja: only to build jpegli
-  (`scripts/build-jpegli.ps1`, ADR 0034), the JPEG encoder images will use
+  (`scripts/build-jpegli.ps1`, ADR 0034), the JPEG encoder Gracil uses for photos
 - Optionally NASM (on `PATH`, in `%ProgramFiles%\NASM`, or its portable zip from nasm.us unpacked
   into `%LOCALAPPDATA%\bin\NASM`): with it, the build script builds jpegli's JPEG reader with
   SIMD, which reads JPEGs a little quicker with the same output (ADR 0068). An existing
@@ -23,6 +23,9 @@ Every commit must pass `scripts/check.ps1`. On Linux, such as in a cloud session
 `scripts/check.sh` runs what can run there ([Developing from the cloud](cloud.md)).
 
 `rust-toolchain.toml` names the toolchain, so `rustup` installs the right one by itself.
+
+`cargo run --release -p gracil-core --example compress -- <file>` compresses one file with the
+engine alone, without the interface: proof that the engine stands on its own (ADR 0001).
 
 ## Running the app
 

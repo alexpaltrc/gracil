@@ -32,7 +32,7 @@ const NUM_SCALES: usize = 6;
 pub enum Speed {
     /// As built for any 64-bit processor, as the crate runs. Gracil itself always asks for the
     /// best; the tests check this gives the same bits.
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(not(test), expect(dead_code, reason = "only the tests run it"))]
     Any,
     /// Built for fused multiply-add and AVX2 where the processor has them, otherwise as `Any`.
     Fused(Arch),

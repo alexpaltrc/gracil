@@ -11,6 +11,12 @@ Gracil is in development towards its first public version, 1.0 (now `1.0.0-dev`)
 How it works, in plain words: [docs/how-gracil-works.md](docs/how-gracil-works.md). Questions:
 [docs/faq.md](docs/faq.md).
 
+## Download
+
+Get `Gracil-<version>-x64.zip` from [Releases](https://github.com/alexpaltrc/gracil/releases),
+unpack it anywhere and open `gracil.exe`. Gracil isn't signed, so the first time Windows may
+warn about it: choose **More info**, then **Run anyway**.
+
 ## Building
 
 Requirements: Windows 11 x64, Rust stable (MSVC), Git. Details in
