@@ -22,7 +22,10 @@ could tell that the zip came from the public code; and a release needed that com
    published by itself.
 3. **Run by hand, it is a trial**: the zip is kept with the run for a few days and no release is
    made. A change to how Gracil is packaged is tried this way first.
-4. **No release is kept on the owner's computer.** `scripts/portable.ps1` is still what builds
+4. **The pinned FFmpeg is the one that stays downloadable**: the month's last build of 31 July
+   2026, of the same source commit as the copy Gracil had been tested with, which was a daily
+   build no longer kept anywhere. Every test and a real video gave the same results with it.
+5. **No release is kept on the owner's computer.** `scripts/portable.ps1` is still what builds
    the Gracil in daily use there (ADR 0073), which is for trying changes at once.
 
 **Consequences.** A release takes about a quarter of an hour on GitHub rather than three minutes
