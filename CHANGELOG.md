@@ -19,6 +19,8 @@ What's new in each version of Gracil.
 - The small window next to the clock shows only what matters, with nothing drawn around it, and
   the ring with its check mark once the list is done.
 - A file that changes format says so more plainly, for example `IMG_0042.MOV → .mp4`.
+- Large PNG pictures compress in about half the time, and some in a quarter, with the same
+  result as before.
 
 ### Fixed
 

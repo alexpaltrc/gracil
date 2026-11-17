@@ -494,7 +494,9 @@ makes them smaller, and you choose **Replace** or **Save copy**.
 - **Looks the same.** The first time, a photo is made smaller without any difference you can see,
   at its own size: Gracil never makes an image smaller in width or height. A PNG is first packed
   more tightly without changing a single dot; when using fewer colors looks the same, Gracil
-  does that too.
+  does that too. How long an image takes goes by how large its picture is, not by how much its
+  file weighs: a PNG of a few hundred kilobytes can hold a very large picture, and take several
+  seconds.
 - **Compressing again** an image Gracil already made smaller loses a little, without asking, as
   it does for videos. If it still can't get clearly smaller, it shows **Already compressed** with
   a small "!".

@@ -159,68 +159,52 @@ impl PaletteSource for FakePalettes {
     }
 }
 
-/// How a palette was chosen before ADR 0068, all eight made first: the index of the one kept
-/// (`None` for the lossless version), or `Err` when none is small enough, and those measured.
-fn palette_before(
+/// What the standard chooses, said plainly, as if every palette were made and measured: each
+/// kind from the most colors down, past the ones that couldn't be made, until one scores short;
+/// the dithered kind only when the plain palette of the most colors scores within
+/// [`DITHER_HELPS`] of what is needed (ADR 0078). Gives the size of the one kept (`None` for the
+/// lossless version), or `Err` when none is small enough, and those it had to measure.
+fn palette_by_the_rule(
     fake: &FakePalettes,
     lossless: usize,
     limit: u64,
 ) -> (Result<Option<usize>, ()>, Vec<usize>) {
-    let mut palettes: Vec<(usize, usize)> = (0..8)
-        .filter_map(|t| fake.sizes[t].filter(|&s| s < lossless).map(|s| (t, s)))
-        .collect();
-    palettes.sort_by_key(|p| p.1);
-    let mut scores = vec![None; palettes.len()];
     let mut measured = Vec::new();
-    let mut smallest_passing = |threshold: f64, limit: u64, measured: &mut Vec<usize>| {
-        let kind = |dithered: bool| {
-            let mut found: Vec<usize> = (0..palettes.len())
-                .filter(|&n| (palettes[n].0 % 2 == 1) == dithered)
-                .collect();
-            found.sort_by_key(|&n| std::cmp::Reverse(png::PALETTE_SIZES[palettes[n].0 / 2]));
-            found
-        };
-        let mut kinds = [kind(false), kind(true)].map(|order| order.into_iter().peekable());
+    let mut smallest_passing = |threshold: f64, limit: u64| {
+        let most = fake_index(png::PALETTE_SIZES[0], false);
+        let far_short = fake.sizes[most].is_some() && fake.scores[most] < threshold - DITHER_HELPS;
         let mut passing = Vec::new();
-        loop {
-            let next: Vec<usize> = kinds.iter_mut().filter_map(|k| k.peek().copied()).collect();
-            if next.is_empty() {
-                break;
+        for dithered in [false, true] {
+            if dithered && far_short {
+                continue;
             }
-            for &n in &next {
-                if scores[n].is_none() {
-                    measured.push(palettes[n].0);
-                    scores[n] = Some(fake.scores[palettes[n].0]);
+            for &colors in &png::PALETTE_SIZES {
+                let t = fake_index(colors, dithered);
+                let Some(size) = fake.sizes[t] else { continue };
+                if !measured.contains(&t) {
+                    measured.push(t);
                 }
-            }
-            for order in &mut kinds {
-                let Some(&n) = order.peek() else { continue };
-                if scores[n].unwrap_or(0.0) >= threshold {
-                    if palettes[n].1 as u64 <= limit {
-                        passing.push(n);
-                    }
-                    order.next();
-                } else {
-                    order.by_ref().for_each(drop);
+                if fake.scores[t] < threshold {
+                    break;
+                }
+                if size < lossless && size as u64 <= limit {
+                    passing.push(size);
                 }
             }
         }
-        passing.into_iter().min_by_key(|&n| palettes[n].1)
+        passing.into_iter().min()
     };
-    let first = smallest_passing(FIRST_SCORE, u64::MAX, &mut measured);
-    let first_size = first.map_or(lossless, |n| palettes[n].1);
-    let chosen = if first_size as u64 <= limit {
+    let first = smallest_passing(FIRST_SCORE, u64::MAX);
+    let chosen = if first.unwrap_or(lossless) as u64 <= limit {
         Ok(first)
     } else {
-        smallest_passing(AGAIN_SCORE, limit, &mut measured)
-            .map(Some)
-            .ok_or(())
+        smallest_passing(AGAIN_SCORE, limit).map(Some).ok_or(())
     };
-    (chosen.map(|c| c.map(|n| palettes[n].0)), measured)
+    (chosen, measured)
 }
 
 #[test]
-fn palettes_are_chosen_as_before_measuring_less() {
+fn palettes_are_chosen_by_the_rule_making_and_measuring_less() {
     // A small, fixed pseudo-random sequence.
     let mut state = 0x2545_f491_4f6c_dd1d_u64;
     let mut next = move |below: u64| {
@@ -242,24 +226,87 @@ fn palettes_are_chosen_as_before_measuring_less() {
             scores,
             measured: std::sync::Mutex::default(),
         };
-        let (before, measured_before) = palette_before(&fake, lossless, limit);
+        let (by_the_rule, to_measure) = palette_by_the_rule(&fake, lossless, limit);
         let mut palettes = Palettes::new(&fake, lossless);
         let chosen = palettes.choose(&|| Ok(()), limit, &mut |_| {});
         let chosen = match chosen {
-            Ok(chosen) => Ok(chosen),
+            Ok(chosen) => Ok(chosen.map(|t| sizes[t].unwrap_or(usize::MAX))),
             Err(ImageError::AsSmallAsItGets) => Err(()),
             Err(error) => panic!("{error}"),
         };
         let what = format!("sizes {sizes:?}, scores {scores:?}");
-        assert_eq!(chosen, before, "{what}");
+        assert_eq!(chosen, by_the_rule, "{what}");
         let measured = fake.measured.into_inner().unwrap();
         assert!(
-            measured.iter().all(|t| measured_before.contains(t)),
-            "{what}: measured {measured:?}, before {measured_before:?}"
+            measured.iter().all(|t| to_measure.contains(t)),
+            "{what}: measured {measured:?}, the rule {to_measure:?}"
         );
         let mut once = measured.clone();
         once.sort_unstable();
         once.dedup();
         assert_eq!(once.len(), measured.len(), "{what}: measured twice");
     }
+}
+
+/// How many palettes of each kind `fake` was asked to make.
+fn made(palettes: &Palettes<'_, FakePalettes>) -> (usize, usize) {
+    let count = |dithered: bool| {
+        (0..palettes.tries.len())
+            .filter(|&t| palettes.tries[t].1 == dithered && palettes.made[t].is_some())
+            .count()
+    };
+    (count(false), count(true))
+}
+
+#[test]
+fn a_plain_palette_far_short_spares_the_dithered_ones() {
+    // A picture of many colors: the plain palette scores far below what is needed.
+    let fake = FakePalettes {
+        sizes: [
+            Some(300),
+            Some(900),
+            Some(250),
+            Some(800),
+            Some(200),
+            Some(700),
+            Some(150),
+            Some(600),
+        ],
+        scores: [46.0, 58.0, 40.0, 57.0, 35.0, 55.0, 30.0, 50.0],
+        measured: std::sync::Mutex::default(),
+    };
+    let mut palettes = Palettes::new(&fake, 1000);
+    assert_eq!(
+        palettes.choose(&|| Ok(()), 2000, &mut |_| {}).ok(),
+        Some(None)
+    );
+    assert_eq!(made(&palettes), (1, 0));
+    assert_eq!(fake.measured.into_inner().unwrap(), [0]);
+}
+
+#[test]
+fn a_dithered_palette_too_big_to_keep_still_says_whether_to_go_on() {
+    // The plain palette falls just short, so dithering is tried; the dithered one is bigger than
+    // the lossless version and scores short too, so the ones with fewer colors are not made.
+    let fake = FakePalettes {
+        sizes: [
+            Some(300),
+            Some(1400),
+            Some(250),
+            Some(900),
+            Some(200),
+            Some(800),
+            Some(150),
+            Some(700),
+        ],
+        scores: [85.5, 86.0, 80.0, 84.0, 75.0, 82.0, 70.0, 80.0],
+        measured: std::sync::Mutex::default(),
+    };
+    let mut palettes = Palettes::new(&fake, 1000);
+    assert_eq!(
+        palettes.choose(&|| Ok(()), 2000, &mut |_| {}).ok(),
+        Some(None)
+    );
+    assert_eq!(made(&palettes), (1, 1));
+    assert_eq!(fake.measured.into_inner().unwrap(), [0, 1]);
 }

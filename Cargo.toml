@@ -31,6 +31,14 @@ lto = "fat"
 codegen-units = 1
 strip = "symbols"
 
+# A release's speed under a development build's name, to time the real app beside the Gracil in
+# daily use (ADR 0075): `cargo run --profile timing -p gracil-ui`. Quicker to build than a release.
+[profile.timing]
+inherits = "release"
+debug-assertions = true
+lto = "thin"
+codegen-units = 16
+
 [workspace.dependencies]
 exoquant = "0.2.0"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "tiff", "bmp"] }

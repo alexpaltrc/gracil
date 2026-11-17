@@ -42,6 +42,10 @@ The interface follows the Windows display language. To check the other language,
 `GRACIL_LANGUAGE` to `en` or `es` before running (ADR 0011). In the same way, `GRACIL_THEME` set
 to `light` or `dark` shows the other theme without changing Windows'.
 
+To time the real app, `cargo run --profile timing -p gracil-ui` builds one as fast as a release
+that still runs beside the Gracil in daily use (ADR 0078). A development build is slower at
+Gracil's own work, so it is for looking, not for timing.
+
 ## Tests that touch files
 
 Tests that create, rename or delete files must only do so inside a fresh directory under the

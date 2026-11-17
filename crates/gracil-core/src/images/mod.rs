@@ -19,7 +19,6 @@ mod ssimulacra2;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, Cursor, Read};
-use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread;
@@ -47,6 +46,10 @@ pub const AGAIN_DISTANCES: [f32; 4] = [1.5, 2.0, 2.5, 3.0];
 pub const FIRST_SCORE: f64 = 90.0;
 /// SSIMULACRA2 anything needs when compressing again: no difference at normal viewing (item 4).
 pub const AGAIN_SCORE: f64 = 80.0;
+/// How much dithering can add to a palette's score, at the very most, where it matters: a plain
+/// palette that falls short by more than this is not tried dithered (ADR 0078). Measured, it adds
+/// a point or takes some away once the plain one scores 80 or more.
+const DITHER_HELPS: f64 = 5.0;
 /// About how much memory, in bytes, the palettes being made at the same time may use.
 const PALETTE_MEMORY: usize = 1 << 30;
 /// About how much memory one SSIMULACRA2 measurement uses for each pixel of the picture.
@@ -280,7 +283,7 @@ pub fn compress_prepared(
                 chunks: png::descriptive_chunks(&data),
                 icc: None,
             };
-            let lossless = png::lossless(&data).map_err(ImageError::Failed)?;
+            let lossless = || png::lossless(&data);
             let bytes = job.make_png(lossless, &decoded.reference, &extras, &mut |f| {
                 report(on_update, f);
             })?;
@@ -307,13 +310,14 @@ pub fn compress_prepared(
                     icc: decoded.icc.clone(),
                 };
                 let reference = &decoded.reference;
-                let lossless = png::from_pixels(
-                    &reference.pixels,
-                    reference.width,
-                    reference.height,
-                    &extras,
-                )
-                .map_err(ImageError::Failed)?;
+                let lossless = || {
+                    png::from_pixels(
+                        &reference.pixels,
+                        reference.width,
+                        reference.height,
+                        &extras,
+                    )
+                };
                 let bytes = job.make_png(lossless, reference, &extras, &mut |f| {
                     report(on_update, f);
                 })?;
@@ -617,16 +621,33 @@ impl Job<'_> {
 
     /// A PNG: the smallest of the lossless version and the palettes scoring at least 90; when
     /// that is not clearly smaller, the smallest palette scoring at least 80 (items 5 and 6).
+    ///
+    /// The lossless version, the slowest single step, is made by `lossless` while the first
+    /// palette is made and measured, since neither needs the other (ADR 0078).
     fn make_png(
         &mut self,
-        lossless: Vec<u8>,
+        lossless: impl FnOnce() -> Result<Vec<u8>, String> + Send,
         reference: &Reference,
         extras: &Extras,
         report: &mut dyn FnMut(f64),
     ) -> Result<Vec<u8>, ImageError> {
         report(0.2);
         let picture = Picture { reference, extras };
-        let mut palettes = Palettes::new(&picture, lossless.len());
+        // Until the lossless version's size is known, any palette may turn out smaller.
+        let mut palettes = Palettes::new(&picture, usize::MAX);
+        let (lossless, looked) = thread::scope(|scope| {
+            let lossless = scope.spawn(|| {
+                share::worker_started();
+                lossless()
+            });
+            let looked = palettes.first_look(&|| self.checkpoint(), report);
+            (lossless.join(), looked)
+        });
+        let lossless = lossless
+            .map_err(|_| ImageError::Failed("the lossless version could not be made".into()))?
+            .map_err(ImageError::Failed)?;
+        looked?;
+        palettes.lossless = lossless.len();
         let chosen = palettes.choose(&|| self.checkpoint(), self.limit, report)?;
         Ok(match chosen.and_then(|t| palettes.take(t)) {
             Some(palette) => palette.png,
@@ -672,16 +693,17 @@ impl PaletteSource for Picture<'_> {
     }
 }
 
-/// The palettes a PNG may be reduced to, each with and without dithering (ADR 0034, item 5),
-/// made only once they are needed and kept for a second pass (ADR 0068).
+/// The palettes a PNG may be reduced to, with and without dithering (ADR 0034, item 5), made only
+/// once they are needed and kept for a second pass (ADR 0068), and the dithered ones only when
+/// they could make a difference (ADR 0078).
 struct Palettes<'s, S> {
     source: &'s S,
     /// The lossless version's size: only a palette smaller than it can be chosen.
     lossless: usize,
     /// Every palette size, plain and dithered.
     tries: Vec<(usize, bool)>,
-    /// Each of `tries` once made: `None` when it failed or wasn't smaller than the lossless
-    /// version.
+    /// Each of `tries` once made: `None` when making it failed, or once it was measured and let
+    /// go because it isn't smaller than the lossless version.
     made: Vec<Option<Option<png::Palette>>>,
     scores: Vec<Option<f64>>,
     /// How many palettes may be made side by side: each needs a few copies of the picture.
@@ -726,8 +748,38 @@ impl<'s, S: PaletteSource> Palettes<'s, S> {
         match &self.made[t] {
             None => true,
             Some(None) => false,
-            Some(Some(palette)) => palette.png.len() as u64 <= limit,
+            Some(Some(palette)) => {
+                palette.png.len() < self.lossless && palette.png.len() as u64 <= limit
+            }
         }
+    }
+
+    /// Makes and measures the plain palette with the most colors, before anything else: what it
+    /// scores says whether dithering is worth trying at all (ADR 0078). Gives which one it is.
+    fn first_look(
+        &mut self,
+        checkpoint: &dyn Fn() -> Result<(), ImageError>,
+        report: &mut dyn FnMut(f64),
+    ) -> Result<Option<usize>, ImageError> {
+        let most = (0..self.tries.len())
+            .filter(|&t| !self.tries[t].1)
+            .max_by_key(|&t| self.tries[t].0);
+        if let Some(most) = most {
+            self.make(checkpoint, &[most], report)?;
+            self.measure(checkpoint, &[most])?;
+        }
+        Ok(most)
+    }
+
+    /// Whether making palette `t` failed.
+    fn failed(&self, t: usize) -> bool {
+        matches!(self.made[t], Some(None)) && self.scores[t].is_none()
+    }
+
+    /// Whether palette `t` can be chosen: only one smaller than the lossless version can.
+    fn choosable(&self, t: usize) -> bool {
+        self.palette(t)
+            .is_some_and(|palette| palette.png.len() < self.lossless)
     }
 
     fn take(&mut self, t: usize) -> Option<png::Palette> {
@@ -793,11 +845,9 @@ impl<'s, S: PaletteSource> Palettes<'s, S> {
             for (t, made) in made {
                 let (colors, dithered) = self.tries[t];
                 self.made[t] = Some(match made {
-                    // Only a palette smaller than the lossless version can be chosen.
                     Ok(palette) => {
-                        let size = palette.png.len();
-                        info!(colors, dithered, size, "palette made");
-                        (size < self.lossless).then_some(palette)
+                        info!(colors, dithered, size = palette.png.len(), "palette made");
+                        Some(palette)
                     }
                     Err(error) => {
                         warn!(%error, colors, dithered, "palette failed");
@@ -816,15 +866,76 @@ impl<'s, S: PaletteSource> Palettes<'s, S> {
         Ok(())
     }
 
+    /// Measures those of `wanted` that are made and not measured yet, side by side when memory
+    /// allows. One that can't be chosen, because it isn't smaller than the lossless version, is
+    /// let go once measured: its score still says whether the ones with fewer colors are worth
+    /// making (ADR 0078).
+    fn measure(
+        &mut self,
+        checkpoint: &dyn Fn() -> Result<(), ImageError>,
+        wanted: &[usize],
+    ) -> Result<(), ImageError> {
+        let unknown: Vec<usize> = wanted
+            .iter()
+            .copied()
+            .filter(|&t| self.scores[t].is_none() && self.palette(t).is_some())
+            .collect();
+        if unknown.is_empty() {
+            return Ok(());
+        }
+        checkpoint()?;
+        let pixels = self.source.pixels().max(1);
+        let side_by_side = PALETTE_MEMORY / (pixels * SCORE_BYTES_PER_PIXEL) >= 2;
+        let source = self.source;
+        let to_measure: Vec<&png::Palette> =
+            unknown.iter().filter_map(|&t| self.palette(t)).collect();
+        let measured: Vec<f64> = if side_by_side && to_measure.len() > 1 {
+            thread::scope(|scope| {
+                let handles: Vec<_> = to_measure
+                    .iter()
+                    .map(|&palette| {
+                        scope.spawn(move || {
+                            share::worker_started();
+                            source.score(palette)
+                        })
+                    })
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|h| h.join().unwrap_or(0.0))
+                    .collect()
+            })
+        } else {
+            to_measure
+                .iter()
+                .map(|&palette| source.score(palette))
+                .collect()
+        };
+        for (&t, score) in unknown.iter().zip(measured) {
+            let (colors, dithered) = self.tries[t];
+            info!(colors, dithered, size = self.size(t), score, "measured");
+            self.scores[t] = Some(score);
+            if !self.choosable(t) {
+                self.made[t] = Some(None);
+            }
+        }
+        Ok(())
+    }
+
     /// The smallest palette scoring at least `threshold` and weighing at most `limit` bytes.
     ///
     /// Fewer colors hardly ever look better, so each kind of palette, plain and dithered, is
     /// measured from the most colors down, and stops at the first that falls short: the ones with
-    /// fewer colors would fall short too. That usually takes two measurements instead of eight,
-    /// which matters because each one takes about a second for a large picture. A palette is made
-    /// only when it is next to be measured, the next of each kind side by side; a kind stops too
-    /// once none of its palettes left may be small enough (ADR 0068). The two kinds are measured
-    /// side by side when memory allows. Scores already known are kept.
+    /// fewer colors would fall short too, whether or not that one could be chosen. That usually
+    /// takes two measurements instead of eight, which matters because each one takes about a
+    /// second for a large picture. A palette is made only when it is next to be measured; a kind
+    /// stops too once none of its palettes left may be small enough (ADR 0068). Scores already
+    /// known are kept.
+    ///
+    /// Dithering is by far the slowest part, and adds little or nothing to the score of a palette
+    /// that falls well short. So the plain palette with the most colors is made and measured
+    /// first, by itself, and the dithered kind is tried only when that one scores within
+    /// [`DITHER_HELPS`] of `threshold` (ADR 0078).
     fn smallest_passing(
         &mut self,
         checkpoint: &dyn Fn() -> Result<(), ImageError>,
@@ -840,11 +951,12 @@ impl<'s, S: PaletteSource> Palettes<'s, S> {
             found
         };
         let mut kinds = [kind(false), kind(true)].map(|order| order.into_iter().peekable());
-        let pixels = self.source.pixels().max(1);
-        let side_by_side = PALETTE_MEMORY / (pixels * SCORE_BYTES_PER_PIXEL) >= 2;
+        if let Some(most) = self.first_look(checkpoint, report)?
+            && self.scores[most].is_some_and(|score| score < threshold - DITHER_HELPS)
+        {
+            kinds[1].by_ref().for_each(drop);
+        }
         let mut passing = Vec::new();
-        // The kinds whose last palette made was passed over.
-        let mut passed_over = [false; 2];
         loop {
             // A kind none of whose palettes left may be small enough adds nothing.
             for order in &mut kinds {
@@ -852,44 +964,29 @@ impl<'s, S: PaletteSource> Palettes<'s, S> {
                     order.by_ref().for_each(drop);
                 }
             }
-            // The next palette of each kind that can be chosen, made if it wasn't yet.
+            // The next palette of each kind, made if it wasn't yet.
             let next: Vec<usize> = kinds.iter_mut().filter_map(|k| k.peek().copied()).collect();
-            let unmade = |order: &Peekable<std::vec::IntoIter<usize>>| {
-                order
-                    .clone()
-                    .filter(|&t| self.made[t].is_none())
-                    .collect::<Vec<_>>()
-            };
             let mut wanted: Vec<usize> = next
                 .iter()
                 .copied()
                 .filter(|&t| self.made[t].is_none())
                 .collect();
-            for (order, &passed) in kinds.iter().zip(&passed_over) {
-                // After one passed over, the ones with fewer colors usually are too: the rest of
-                // its kind is made at once, as far as can be side by side.
-                if passed {
-                    for t in unmade(order) {
-                        if !wanted.contains(&t) {
-                            wanted.push(t);
-                        }
-                    }
-                }
-            }
             if let [only] = wanted[..] {
-                // Two at a time: the one after it of the same kind is made beside it.
+                // Two at a time: once a kind's first palette has passed, the one after the next
+                // is made beside it. Not beside a kind's first, which most often falls short.
                 let after = kinds.iter().find_map(|order| {
-                    let rest = unmade(order);
-                    (rest.first() == Some(&only)).then(|| rest.get(1).copied())?
+                    let mut rest = order.clone().filter(|&t| self.made[t].is_none());
+                    (rest.next() == Some(only) && self.tries[only].0 != png::PALETTE_SIZES[0])
+                        .then(|| rest.next())?
                 });
                 wanted.extend(after);
             }
             wanted.truncate(self.at_once.max(next.len()));
             self.make(checkpoint, &wanted, report)?;
+            // One that couldn't be made says nothing: on to the next of its kind.
             let mut skipped = false;
-            for (order, passed) in kinds.iter_mut().zip(&mut passed_over) {
-                *passed = order.next_if(|&t| self.palette(t).is_none()).is_some();
-                skipped |= *passed;
+            for order in &mut kinds {
+                skipped |= order.next_if(|&t| self.failed(t)).is_some();
             }
             if skipped {
                 continue;
@@ -897,46 +994,11 @@ impl<'s, S: PaletteSource> Palettes<'s, S> {
             if next.is_empty() {
                 break;
             }
-            checkpoint()?;
-            let unknown: Vec<usize> = next
-                .iter()
-                .copied()
-                .filter(|&t| self.scores[t].is_none())
-                .collect();
-            let source = self.source;
-            let to_measure: Vec<&png::Palette> =
-                unknown.iter().filter_map(|&t| self.palette(t)).collect();
-            let measured: Vec<f64> = if side_by_side && to_measure.len() > 1 {
-                thread::scope(|scope| {
-                    let handles: Vec<_> = to_measure
-                        .iter()
-                        .map(|&palette| {
-                            scope.spawn(move || {
-                                share::worker_started();
-                                source.score(palette)
-                            })
-                        })
-                        .collect();
-                    handles
-                        .into_iter()
-                        .map(|h| h.join().unwrap_or(0.0))
-                        .collect()
-                })
-            } else {
-                to_measure
-                    .iter()
-                    .map(|&palette| source.score(palette))
-                    .collect()
-            };
-            for (&t, score) in unknown.iter().zip(measured) {
-                let (colors, dithered) = self.tries[t];
-                info!(colors, dithered, size = self.size(t), score, "measured");
-                self.scores[t] = Some(score);
-            }
+            self.measure(checkpoint, &next)?;
             for order in &mut kinds {
                 let Some(&t) = order.peek() else { continue };
                 if self.scores[t].unwrap_or(0.0) >= threshold {
-                    if self.size(t) as u64 <= limit {
+                    if self.choosable(t) && self.size(t) as u64 <= limit {
                         passing.push(t);
                     }
                     order.next();

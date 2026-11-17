@@ -1007,6 +1007,9 @@ Open decisions, to settle before any work starts:
    *Decided in ADR 0034:* JPEG at jpegli distance 1.0, fixed; compressing again searches distances
    1.5–3.0 for SSIMULACRA2 80 or more; PNG lossless plus a palette at SSIMULACRA2 90 or more, and
    80 or more when compressing again; at most 80% of the original, as for video.
+   *Update (ADR 0078):* a PNG's dithered palettes are tried only when the plain one with the most
+   colors scores within 5 points of what is needed, and a palette too big to keep is still
+   measured, so the ones with fewer colors are not made for nothing. The files kept are the same.
 3. **Which images are accepted** *(partly decided 2026-10-03 by the product owner)*:
    - An image with transparency that is not a PNG (a WebP or TIFF, for example) becomes a PNG,
      so its transparency is kept; JPEG has none.
