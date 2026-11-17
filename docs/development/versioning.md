@@ -6,8 +6,11 @@ The version lives in one place: `[workspace.package] version` in the root `Cargo
 crate inherits it.
 
 - During development: `X.Y.Z-dev` (the first public version is developed as `1.0.0-dev`).
-- Release: change to `X.Y.Z`, update `CHANGELOG.md`, commit, tag `vX.Y.Z`, build the zip with
-  `scripts/portable.ps1` and attach it to the GitHub release for that tag.
+- Release: change to `X.Y.Z`, give its section of `CHANGELOG.md` its date, commit, tag `vX.Y.Z`
+  and push the tag. GitHub builds the zip from that tag and leaves a draft release with the zip
+  and the changelog's notes; the owner publishes it
+  ([ADR 0079](../decisions/0079-releases-built-on-github.md)). To try the build without
+  releasing anything, run the **release** workflow by hand.
 - Right after the release, change to the next `-dev` version (`1.0.1-dev`) in its own commit.
 
 Published tags are never moved or deleted.

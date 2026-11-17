@@ -23,7 +23,9 @@ without a usable copy it shows a quiet line asking to download Gracil again.
 (it has `libvmaf`, NVENC, Quick Sync, AMF, `libx265` and SVT-AV1). `scripts/portable.ps1` refuses
 any other. To move to a new build, put its `bin` folder first on `PATH` or pass it with
 `-FFmpeg`, run the integration tests with it, and record its name, source commit and hashes in
-`ffmpeg.psd1`.
+`ffmpeg.psd1`, with the address it is downloaded from, which GitHub uses to build a release
+(ADR 0079). The builder keeps each month's last build for about two years: pin a newer one well
+before this one goes.
 
 **Licensing.** The build is GPL version 3 or later. Gracil runs it as a separate program and does
 not link to it. The zip carries FFmpeg's license and `ffmpeg-source.txt`, which names the build

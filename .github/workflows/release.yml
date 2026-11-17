@@ -1,0 +1,60 @@
+# Builds the zip of a version on GitHub, from the tagged code alone, on a clean machine
+# (ADR 0079). A pushed tag `vX.Y.Z` ends in a draft release with the zip attached, which the
+# owner publishes; nothing is ever published by itself. Run by hand, it is a trial: the zip is
+# kept with the run and no release is made.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check the tag is the version in Cargo.toml
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          if ("v$version" -ne $env:GITHUB_REF_NAME) {
+            Write-Error "The tag $env:GITHUB_REF_NAME is not the version in Cargo.toml, $version."
+            exit 1
+          }
+      # jpegli's JPEG reader is built with SIMD when NASM is there (ADR 0068).
+      - name: Install NASM
+        run: choco install nasm --no-progress -y
+      # The one build Gracil is tested with; portable.ps1 refuses any other by its hashes.
+      - name: Fetch the pinned FFmpeg
+        shell: pwsh
+        run: |
+          $pin = Import-PowerShellDataFile scripts/ffmpeg.psd1
+          Invoke-WebRequest $pin.Download -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg
+          $bin = Join-Path (Get-ChildItem ffmpeg -Directory | Select-Object -First 1).FullName 'bin'
+          "FFMPEG=$bin" >> $env:GITHUB_ENV
+      - name: Build the zip
+        shell: pwsh
+        run: ./scripts/portable.ps1 -FFmpeg $env:FFMPEG
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gracil
+          path: target/portable/Gracil-*.zip
+          if-no-files-found: error
+      - name: Draft the release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          ./scripts/release-notes.ps1 -Version $version | Out-File notes.md -Encoding utf8NoBOM
+          $zip = (Get-ChildItem target/portable/Gracil-*.zip).FullName
+          gh release create $env:GITHUB_REF_NAME $zip --draft --title "Gracil $version" --notes-file notes.md

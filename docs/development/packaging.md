@@ -27,6 +27,10 @@ git and Visual Studio Build Tools with the C++ workload, CMake and Ninja.
 
 Nothing is signed, so Windows' SmartScreen may warn the first time the zip's Gracil is opened.
 
+The zip of a release is built by GitHub, with this same script, from the tagged code
+([ADR 0079](../decisions/0079-releases-built-on-github.md), [versioning](versioning.md)). Here
+the script builds the Gracil in daily use, below.
+
 ## Maintainer's daily copy
 
 The Gracil used every day, also while developing, lives in `Documents\Gracil`, outside this

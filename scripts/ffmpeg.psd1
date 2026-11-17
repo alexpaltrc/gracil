@@ -3,6 +3,7 @@
 @{
     Build         = 'N-125875-g5d4d3bdc61-20260731 win64-gpl'
     Builder       = 'https://github.com/BtbN/FFmpeg-Builds'
+    Download      = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-N-125875-g5d4d3bdc61-win64-gpl.zip'
     Source        = 'https://git.ffmpeg.org/gitweb/ffmpeg.git/commit/5d4d3bdc61'
     License       = 'GPL version 3 or later'
     FFmpegSha256  = '851aa8ea5366b5af33c0681cc292d662829c7088e9ac96f6e9b37030e6835ba4'

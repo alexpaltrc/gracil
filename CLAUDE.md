@@ -65,6 +65,8 @@ portable zip only, with no installer and no separate Dev copy; data beside `grac
 | `docs/` | Specification, architecture, decisions, development guides, user explanations |
 
 - **Check:** `scripts/check.ps1` before every commit; Clippy warnings are errors.
+- **Releases** are built by GitHub from a pushed tag and left as a draft; only the owner
+  publishes them, and no release is built or kept on this computer (ADR 0079).
 - **Daily copy:** the Gracil in daily use lives in `Documents\Gracil`, never inside the project
   (ADR 0071). After every change made on this computer, run
   `scripts/update.ps1 -NoPull -NoPause` without being asked, and say in one line that Gracil is up
