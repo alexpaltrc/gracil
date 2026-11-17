@@ -2,7 +2,7 @@
 
 What's new in each version of Gracil.
 
-## 1.1 (2026-11-16)
+## 1.1 (2026-11-17)
 
 ### Improved
 
