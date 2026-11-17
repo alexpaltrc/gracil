@@ -1,6 +1,6 @@
 # 0029 — Lighter, never heavier: predicted sizes and already-compressed videos
 
-**Status:** Accepted; items 4 and 5 (lighter choices, asking) are superseded by
+**Status:** Accepted, built (2026-10-03); items 4 and 5 (lighter choices, asking) are superseded by
 [0033](0033-keep-the-resolution.md): an already-compressed video is compressed again at VMAF 90,
 at its own size, without asking. Decided by the product owner (2026-10-03). Amends ADR 0028:
 removes adaptive quantization and the temporal filter from the NVENC tiers, and adds a size check

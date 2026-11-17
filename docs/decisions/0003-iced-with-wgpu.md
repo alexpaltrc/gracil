@@ -1,6 +1,6 @@
 # 0003 — Iced with the WGPU renderer
 
-**Status:** Accepted
+**Status:** Accepted, built (2026-10-02).
 
 **Context.** Gracil needs a native, small, Rust-first UI with no browser engine. Electron, WebView
 and Tauri are excluded by the product specification.

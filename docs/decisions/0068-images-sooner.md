@@ -2,8 +2,9 @@
 
 **Status:** Accepted, built (2026-10-15). Asked for by the product owner after a measured review
 of where an image's time goes, on the reference computer (Ryzen 5 5600G, 6 cores / 12 threads).
-Items 11 and 12 were considered and not done; item 8 waits for NASM on the computer that builds
-jpegli.
+Items 11 and 12 were considered and not done; item 8 was done the same day, with NASM (see the
+update at the end), and releases built on GitHub install NASM
+([ADR 0079](0079-releases-built-on-github.md)).
 
 **Context.** A photo compressed for the first time takes under a second (ADR 0034). The time goes
 elsewhere: compressing again, where each SSIMULACRA2 measurement of a 12 MP photo took about 3.6
@@ -61,7 +62,7 @@ kept as before, and every safeguard of ADRs 0040, 0049, 0051, 0063 and 0065 stil
    been compared with it yet. Before shipping a SIMD build, its results on a set of photos should
    be checked byte for byte against the current one (libjpeg-turbo's SIMD decoding is meant to
    match its plain C exactly). To get it: install NASM, delete `target\jpegli\build` and run the
-   script again.
+   script again. *Done the same day (2026-10-15), byte for byte; see the update at the end.*
 9. **The original gets ready while jpegli works.** When a JPEG is compressed again, the original
    is decoded and its side of the measure worked out while jpegli encodes distance 2.0, when twice
    a measurement's memory is free; distances encoded together, such as 2.5 and 3.0 after a 2.0

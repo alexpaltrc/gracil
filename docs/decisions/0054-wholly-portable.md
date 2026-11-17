@@ -1,7 +1,8 @@
 # 0054 — Wholly portable: everything in Gracil's folder, and nothing left once it's gone
 
-**Status:** Accepted, built (2026-10-05). Decided by the product owner. Changes
-[0024](0024-start-with-windows.md), [0034](0034-image-standard.md) and
+**Status:** Accepted, built (2026-10-05); superseded in part by ADR 0058 (2026-10-07), below, and
+item 5 changed by [ADR 0071](0071-daily-gracil-outside-the-project.md). Decided by the product
+owner. Changes [0024](0024-start-with-windows.md), [0034](0034-image-standard.md) and
 [0050](0050-portable-and-open-source.md), and corrects [0053](0053-ready-for-github.md).
 
 **Superseded in part** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07):

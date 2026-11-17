@@ -1,6 +1,7 @@
 # 0056 — The list unfolds and folds away
 
-**Status:** Accepted, built (2026-10-06). Asked for by the product owner. Follows up
+**Status:** Accepted, built (2026-10-06); its look changed by [ADR 0076](0076-the-ring-stays.md)
+(2026-11-16), where an open list takes the room. Asked for by the product owner. Follows up
 [0055](0055-natural-first-use.md), which left it for later.
 
 **Context.** **View files** appeared and disappeared from one frame to the next: the ring jumped

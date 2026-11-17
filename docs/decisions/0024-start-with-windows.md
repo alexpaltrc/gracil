@@ -1,6 +1,7 @@
 # 0024 — Gracil starts with Windows, always
 
-**Status:** Accepted. Requested by the product owner (2026-10-03), as spec §53 and §81 foresaw
+**Status:** Accepted, built (2026-10-03); changed by ADR 0050 and ADR 0054 (2026-10-05), below.
+Requested by the product owner (2026-10-03), as spec §53 and §81 foresaw
 ("unless requested later"). Changes §53 for Gracil's own process; still no Windows service.
 
 **Changed** by [ADR 0050](0050-portable-and-open-source.md) (2026-10-05): Gracil starts with

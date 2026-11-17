@@ -1,6 +1,7 @@
 # 0010 — Replacing keeps the creation date and updates the modified date
 
-**Status:** Accepted. Amends point 5 of [0009](0009-choose-after-compressing.md).
+**Status:** Accepted, built (2026-10-02). Amends point 5 of
+[0009](0009-choose-after-compressing.md).
 
 **Context.** ADR 0009 kept both the creation date and the last-modified date of a replaced video,
 so it would look untouched. The product owner prefers the modified date to say what happened: the

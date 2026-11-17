@@ -1,8 +1,9 @@
 # 0033 — Every video keeps its resolution; compressing again loses a little
 
-**Status:** Accepted. Decided by the product owner (2026-10-03). Supersedes item 5 (size) of
-[0028](0028-quality-standard.md) and the size rule of spec §21, items 4 and 5 (lighter choices,
-asking) of [0029](0029-lighter-never-heavier.md), and all of [0032](0032-resolution-pill.md).
+**Status:** Accepted, built (2026-10-03). Decided by the product owner (2026-10-03). Supersedes
+item 5 (size) of [0028](0028-quality-standard.md) and the size rule of spec §21, items 4 and 5
+(lighter choices, asking) of [0029](0029-lighter-never-heavier.md), and all of
+[0032](0032-resolution-pill.md).
 
 **Context.** Gracil's promise is that nobody has to think to compress a video: Gracil knows what to
 do. Two decisions had broken that. Already-compressed videos stopped and asked the user to pick

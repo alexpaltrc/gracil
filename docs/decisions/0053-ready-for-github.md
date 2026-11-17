@@ -1,7 +1,8 @@
 # 0053 — Ready for GitHub: nothing left from the Store, and no FFmpeg download
 
-**Status:** Accepted, built (2026-10-05). Changes [0008](0008-ffmpeg-detected-or-provisioned.md)
-and [0050](0050-portable-and-open-source.md).
+**Status:** Accepted, built (2026-10-05); item 4 replaced by item 5 of
+[ADR 0054](0054-wholly-portable.md). Changes [0008](0008-ffmpeg-detected-or-provisioned.md) and
+[0050](0050-portable-and-open-source.md).
 
 **Context.** Before the first public release on GitHub, the product owner asked for everything
 tied to the Microsoft Store, and everything else no longer needed, to be removed from the

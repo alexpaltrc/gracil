@@ -1,6 +1,6 @@
 # 0013 — Pause suspends FFmpeg's threads
 
-**Status:** Accepted.
+**Status:** Accepted, built (2026-10-03).
 
 **Context.** Spec §47 asks for a genuine Pause: the same FFmpeg keeps its work and Resume carries
 on, rather than Pause quietly meaning Cancel. FFmpeg has no pause command of its own when driven

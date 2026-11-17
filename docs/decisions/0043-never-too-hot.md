@@ -51,7 +51,8 @@ What can be read without a driver or administrator rights:
 6. No setting. The limits are fixed, well below where cards protect themselves.
 7. Not done now: Windows' efficiency mode (EcoQoS) for Gracil's helper programs, which lowers the
    processor's speed and heat further at some cost in speed. It can be added if the processor
-   still runs hot.
+   still runs hot. *Done in [ADR 0051](0051-efficiency-mode-and-any-card-temperature.md)
+   (2026-10-05).*
 
 **Consequences.** On a hot computer a long list takes longer, with pauses, instead of running hot
 for hours. With an NVIDIA card, the main source of heat during video work is watched directly.

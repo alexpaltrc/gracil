@@ -1,11 +1,11 @@
 # 0050 — Portable, free and open source, without the Store
 
-**Status:** Accepted, built (2026-10-05). Decided by the product owner. Supersedes ADR 0005
-(MSIX packaging), ADR 0023 (package build) and ADR 0026 (icon tile), all three since removed
-([0053](0053-ready-for-github.md)), the package parts of [0022](0022-explorer-command.md) and
-[0024](0024-start-with-windows.md), and the Store part of [0027](0027-version-scheme.md); replaces
-the FFmpeg lookup order of [0008](0008-ffmpeg-detected-or-provisioned.md). Changes spec §64 and
-§65.
+**Status:** Accepted, built (2026-10-05); items 4 to 6 superseded by ADR 0058 (2026-10-07), below.
+Decided by the product owner. Supersedes ADR 0005 (MSIX packaging), ADR 0023 (package build) and
+ADR 0026 (icon tile), all three since removed ([0053](0053-ready-for-github.md)), the package
+parts of [0022](0022-explorer-command.md) and [0024](0024-start-with-windows.md), and the Store
+part of [0027](0027-version-scheme.md); replaces the FFmpeg lookup order of
+[0008](0008-ffmpeg-detected-or-provisioned.md). Changes spec §64 and §65.
 
 **Superseded in part** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07):
 items 4 to 6. File Explorer ignored the per-user menu, so the zip has no `gracil_shell.dll`.

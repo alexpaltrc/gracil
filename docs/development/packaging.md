@@ -11,7 +11,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/portable.ps1
 ```
 
 This makes a release build and lays out `target\portable\Gracil`, then zips it as
-`target\portable\Gracil-<version>-x64.zip`, with the version from `Cargo.toml`:
+`target\portable\Gracil-<version>-x64.zip`, with the version from `Cargo.toml`. The folder is
+made afresh each time and older zips are removed, so only the one just made is left
+([ADR 0077](../decisions/0077-where-things-live.md)):
 
 | | |
 |---|---|
@@ -63,15 +65,17 @@ shows (ADR 0054).
 ## Where Gracil keeps its data
 
 In `data\` beside `gracil.exe`, and nowhere else: `settings.txt`, `logs\`, `unfinished.txt`,
+`hints.txt` (the quality search's levels, [ADR 0070](../decisions/0070-hints-kept-between-starts.md))
 and `temporary\`. If that folder can't be written, Gracil runs without saving anything. Images
 being compressed pass through short-lived `gracil-image-…` files in Windows' temporary folder.
 
 ## Licenses
 
-`licenses\` in the zip holds Gracil's license (`LICENSE`, GPL-3.0-or-later), FFmpeg's with where
-its source is, jpegli's and its libraries', and `rust-libraries.txt`, written by
-`scripts/licenses.ps1` from `cargo metadata` with the license files of every Rust library built
-into `gracil.exe`.
+`licenses\` in the zip holds Gracil's license (`gracil-license.txt`, the repository's `LICENSE`,
+GPL-3.0-or-later), FFmpeg's (`ffmpeg-license.txt`) with where its source is
+(`ffmpeg-source.txt`), jpegli's and its libraries' (`cjpegli-licenses.txt`), and
+`rust-libraries.txt`, written by `scripts/licenses.ps1` from `cargo metadata` with the license
+files of every Rust library built into `gracil.exe`.
 
 ## Versions
 

@@ -23,7 +23,8 @@ start `gracil.exe`; no Gracil code runs inside `explorer.exe` (ADR 0058).
 | Crate | Kind | Responsibility | Introduced |
 |---|---|---|---|
 | `gracil-core` | lib | Job state model and the list (`queue`), output naming, FFprobe inspection, capability detection, the quality search, FFmpeg argument construction, progress parsing, image compression, output validation, leftovers. No UI dependency. Its `testing` module, behind the `test-support` feature, gives every crate's tests their temporary folders. | M0 |
-| `gracil-windows` | lib | Everything that needs Windows itself (`windows-sys`): single-instance mutex, named-pipe IPC, process suspend/resume, `ReplaceFileW`, the tray, taskbar geometry, colors and accessibility settings, temperature, idleness, power and processor limits, File Explorer's Send to shortcut and main menu (the `windows` crate for their few COM calls). The only crate allowed `unsafe`. | M4/M5 |
+| `gracil-windows` | lib | Everything that needs Windows itself (`windows-sys`): single-instance mutex, named-pipe IPC, process suspend/resume, `ReplaceFileW`, the tray, taskbar geometry, colors and accessibility settings, temperature, idleness, power and processor limits, drawing with Direct3D 12 (ADR 0066), the window's icon, File
+Explorer's Send to shortcut and main menu (the `windows` crate for their few COM calls). The only crate allowed `unsafe`. | M4/M5 |
 | `gracil-ui` | bin `gracil` | Iced + WGPU application: main window (Focus + Drawer), mini-window, settings, the scheduler and its pace, wiring core ↔ Windows layer. | M2 |
 
 Crates are created when they get real content, not ahead of time.
@@ -37,7 +38,9 @@ its quality level (below) → plan the streams → spawn FFmpeg writing to a res
 sibling (`<name>.gracil-<id>.part`) → parse `-progress pipe:1` (Pause suspends FFmpeg's threads
 through `gracil_windows::set_suspended`, ADR 0013) → validate the output with FFprobe (HEVC, same
 duration) → finalize. An image goes through `gracil_core::images`: a PNG stays a PNG, the rest
-becomes a JPEG written by jpegli, scored against the original (ADR 0034). A result that is not
+becomes a JPEG written by jpegli (or a PNG when it has transparency), scored against the original
+(ADR 0034, ADR 0078); its intermediate files are short-lived `gracil-image-…` files in Windows'
+temporary folder. A result that is not
 smaller than the original is discarded (spec §40.1).
 
 **Pace.** `pace.rs` decides how much runs at once (ADR 0040): images at once from the processor's
@@ -61,9 +64,11 @@ and anything on an absent drive or in use waits for the next start (ADR 0017). G
 in a kill-on-close job object at startup, so FFmpeg never outlives it (ADR 0018); each tool also
 joins a job nested inside it that holds the tools alone to their memory limit (ADR 0063).
 
-**Finding FFmpeg.** At startup, in the background: the `ffmpeg` folder beside `gracil.exe`, or,
-while developing, an FFmpeg on `PATH`; either needs `ffprobe.exe` beside it and the `libx265`
-encoder. Nothing is ever downloaded (ADR 0050, ADR 0053).
+**Finding FFmpeg.** At startup, in the background (`gracil_core::toolchain`): the `ffmpeg` folder
+beside `gracil.exe`, else an FFmpeg on `PATH`, which is what a development build uses; either
+needs `ffprobe.exe` beside it and the `libx265` encoder. `cjpegli.exe` is found beside
+`gracil.exe`, or, in a development build, where `scripts/build-jpegli.ps1` builds it in `target`.
+Nothing is ever downloaded (ADR 0050, ADR 0053).
 
 **Choosing how to encode.** Capabilities are detected once per process: `ffmpeg -encoders` must list
 a card encoder (`hevc_nvenc`, then `hevc_qsv`, then `hevc_amf`), then a sub-second test encode must
@@ -90,8 +95,9 @@ controls, how much smaller a file came out, and the finished list's check, ADR 0
 surface the focus lies on), `work` runs the engine and each compression on their own threads and
 reports back as messages, `style` holds every design token, and `text` every word shown, in
 English and Spanish (ADR 0011). `motion` moves everything that moves, easing or on a spring, and
-stills it all when Windows' **Animation effects** are off; `style` follows Windows' accent and
-contrast themes (ADR 0031, ADR 0061). `data` writes Gracil's small text files whole or
+stills it all when Windows' **Animation effects** are off; `appear` brings a new view in,
+`reveal` unfolds the list, and `focus` moves the keyboard's ring through the controls (ADR 0059);
+`style` follows Windows' accent and contrast themes (ADR 0031, ADR 0061). `data` writes Gracil's small text files whole or
 not at all. Paths given on the command line or forwarded by a later launch are queued like dropped
 files. A finished result waits in its temporary file until the user chooses Replace or Save copy;
 `work::place` then calls `gracil_core::output` on its own thread, with
@@ -143,7 +149,10 @@ invocation (a new launch, "Open with", Explorer) sends its command line over the
 messages alike, and `outside` turns them, from any thread, into messages for the app. Gracil
 starts with no window; a request without a choice opens it, while `--replace` and `--save-copy`
 work in the background, and so does `--explorer` when **Always** is set. A Gracil whose window
-never opened ends itself when that work is done (ADR 0019).
+never opened ends itself when that work is done (ADR 0019). A development build (any build with
+debug assertions: `cargo run -p gracil-ui`, or the `timing` profile) goes by `Gracil.Dev` instead
+of `Gracil` in both names, so it runs beside the Gracil in daily use and never hands it a request
+(ADR 0075).
 
 **File Explorer** (ADR 0058). Both of Gracil's places in File Explorer start
 `gracil.exe --explorer` with what was picked, which forwards it over the pipe like any later

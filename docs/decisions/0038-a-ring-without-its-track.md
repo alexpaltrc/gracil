@@ -1,7 +1,8 @@
 # 0038 — A ring without its track
 
-**Status:** Accepted, built (2026-10-04). Asked for by the product owner. Amends the look of ADR
-0014, items 1 and 2; how the dial works does not change.
+**Status:** Accepted, built (2026-10-04); its look changed again by
+[ADR 0076](0076-the-ring-stays.md) (2026-11-16). Asked for by the product owner. Amends the look
+of ADR 0014, items 1 and 2; how the dial works does not change.
 
 **Context.** The dial drew a pipe: a faint channel between two thin walls, which the marble rolled
 along. A thin line separated pause from stop in the middle. The product owner finds the ring more

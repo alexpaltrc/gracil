@@ -1,7 +1,8 @@
 # 0028 — Gracil's quality standard: each video finds its own level
 
-**Status:** Accepted, amended by ADR 0029 (no adaptive quantization; size check) and ADR 0033
-(item 5, size: every video keeps its resolution). Decided by the product owner (2026-10-03).
+**Status:** Accepted, built (2026-10-03); amended by ADR 0029 (no adaptive quantization; size
+check) and ADR 0033 (item 5, size: every video keeps its resolution). Decided by the product owner
+(2026-10-03).
 
 *Changed by [ADR 0052](0052-intel-and-amd-encoders.md):* Intel and AMD graphics encode too, and
 `NvencLevel` became `HardwareLevel`.

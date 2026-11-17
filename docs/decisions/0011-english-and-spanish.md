@@ -1,6 +1,7 @@
 # 0011 — Gracil speaks English and Spanish, following Windows
 
-**Status:** Accepted.
+**Status:** Accepted, built (2026-10-02). Superseded in part by
+[ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07), below.
 
 **Superseded in part** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07):
 `gracil-shell` is gone. File Explorer's main menu takes its words from Gracil's own tables, in the

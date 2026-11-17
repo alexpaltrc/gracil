@@ -1,7 +1,7 @@
 # 0008 — FFmpeg comes with Gracil
 
-**Status:** Accepted. Sets where Gracil finds the FFmpeg of
-[0002](0002-ffmpeg-as-external-process.md).
+**Status:** Accepted, built (2026-10-02); changed by ADR 0050 and ADR 0053 (2026-10-05), below.
+Sets where Gracil finds the FFmpeg of [0002](0002-ffmpeg-as-external-process.md).
 
 **Changed** by [ADR 0050](0050-portable-and-open-source.md) and
 [ADR 0053](0053-ready-for-github.md): Gracil first looked for an FFmpeg on `PATH` and otherwise

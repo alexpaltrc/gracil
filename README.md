@@ -63,7 +63,8 @@ you don't have to think about.
   check mark draws itself under what you saved: **2.4 GB smaller**.
 - Next to the clock, a small ring fills as the list moves along. Close the window and the work
   continues there.
-- The time left is a calm *about 20 min*. It only goes down, never creeping up minute by minute.
+- The time left is a calm *about 20 min*. It comes down as the work goes on, and never creeps up
+  minute by minute.
 - **Clear** has an **Undo**. **Stop** keeps every unfinished file, ready to carry on, even after
   restarting the computer.
 - Videos keep their recording date, orientation, chapters, subtitles and the extra details
@@ -84,9 +85,11 @@ compressed without a single click more.
 
 ## Download
 
-Get `Gracil-1.0.0-x64.zip` from [Releases](https://github.com/alexpaltrc/gracil/releases/latest),
-unpack it anywhere and open `gracil.exe`. Gracil isn't signed, so the first time Windows may warn
-about it: choose **More info**, then **Run anyway**. It needs Windows 11, 64-bit.
+Get the newest `Gracil-<version>-x64.zip` from
+[Releases](https://github.com/alexpaltrc/gracil/releases/latest), unpack it anywhere and open
+`gracil.exe`. Each zip is built by GitHub from the tagged code, not on anyone's own computer.
+Gracil isn't signed, so the first time Windows may warn about it: choose **More info**, then
+**Run anyway**. It needs Windows 11, 64-bit.
 
 ## Building
 
@@ -95,9 +98,12 @@ windows, the app (Iced, drawn with Direct3D 12), and everything Gracil asks of W
 
 ```powershell
 .\scripts\check.ps1       # formatting, Clippy and every test
-.\scripts\portable.ps1    # the zip, in target\portable
+cargo run -p gracil-ui    # Gracil Dev, which runs beside the Gracil you use
+.\scripts\portable.ps1    # the zip, in target\portable, with the pinned FFmpeg
 ```
 
+Releases are built by GitHub from a pushed tag and left as a draft to publish
+([docs/development/versioning.md](docs/development/versioning.md)).
 Setup: [docs/development/setup.md](docs/development/setup.md). How it fits together:
 [docs/architecture/overview.md](docs/architecture/overview.md). The product in full, with every
 decision and why: [docs/specification.md](docs/specification.md) and

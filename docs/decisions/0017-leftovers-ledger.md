@@ -1,6 +1,6 @@
 # 0017 — Leftover temporary files are tracked in a ledger, not recognized by name
 
-**Status:** Accepted.
+**Status:** Accepted, built (2026-10-03).
 
 **Context.** Gracil writes each compression to a temporary sibling (`<name>.gracil-<id>.part`)
 and, when replacing in place, parks the original as `<name>.gracil-<id>.bak` for a moment. A

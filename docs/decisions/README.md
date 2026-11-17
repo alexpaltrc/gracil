@@ -8,42 +8,42 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0001](0001-core-independent-from-ui.md) | The compression core does not depend on the UI |
 | [0002](0002-ffmpeg-as-external-process.md) | FFmpeg runs as a bundled external process |
 | [0003](0003-iced-with-wgpu.md) | Iced with the WGPU renderer |
-| [0004](0004-one-encode-at-a-time.md) | One compression at a time |
+| [0004](0004-one-encode-at-a-time.md) | One compression at a time (superseded by 0040) |
 | 0005 | MSIX packaging (removed by 0053; Gracil is a portable zip, 0050) |
-| [0006](0006-explorer-extension-forwards-only.md) | The Explorer extension only forwards requests |
+| [0006](0006-explorer-extension-forwards-only.md) | The Explorer extension only forwards requests (superseded in part by 0058: there is no extension any more) |
 | [0007](0007-close-to-tray.md) | Closing the window always minimizes to the tray |
 | [0008](0008-ffmpeg-detected-or-provisioned.md) | FFmpeg is found, never downloaded: the copy in the zip, or PATH while developing (changed by 0050, 0053) |
 | [0009](0009-choose-after-compressing.md) | The main window asks replace or copy after compressing |
 | [0010](0010-replacing-updates-modified-date.md) | Replacing keeps the creation date and updates the modified date |
-| [0011](0011-english-and-spanish.md) | Gracil speaks English and Spanish, following Windows |
+| [0011](0011-english-and-spanish.md) | Gracil speaks English and Spanish, following Windows (File Explorer's part changed by 0058) |
 | [0012](0012-every-result-is-mp4.md) | Every compressed video is an MP4 |
 | [0013](0013-pause-suspends-ffmpeg.md) | Pause suspends FFmpeg's threads |
-| [0014](0014-progress-dial.md) | Progress is a dial that holds the controls |
-| [0015](0015-piedra-identity.md) | The marble identity: icon, Piedra palette and following Windows' theme |
+| [0014](0014-progress-dial.md) | Progress is a dial that holds the controls (look changed by 0038 and 0076) |
+| [0015](0015-piedra-identity.md) | The marble identity: icon, Piedra palette and following Windows' theme (palette superseded by 0031) |
 | [0016](0016-app-icon.md) | The app icon lives in gracil.exe |
 | [0017](0017-leftovers-ledger.md) | Leftover temporary files are tracked in a ledger, not recognized by name |
 | [0018](0018-ffmpeg-ends-with-gracil.md) | FFmpeg ends with Gracil, through a job object |
 | [0019](0019-single-instance.md) | One Gracil per session: a named mutex and a named pipe |
 | [0020](0020-tray.md) | The tray icon is drawn by Gracil, on a thread of its own |
 | [0021](0021-mini-window.md) | The mini-window opens from the tray icon, and its one setting lives in the tray menu |
-| [0022](0022-explorer-command.md) | File Explorer's menu is one Rust `IExplorerCommand` with two subcommands |
+| [0022](0022-explorer-command.md) | File Explorer's menu is one Rust `IExplorerCommand` with two subcommands (superseded by 0058) |
 | 0023 | Building the MSIX package (removed by 0053) |
-| [0024](0024-start-with-windows.md) | Gracil starts with Windows, always |
+| [0024](0024-start-with-windows.md) | Gracil starts with Windows, always (changed by 0050 and 0054: a setting in the tray menu) |
 | [0025](0025-always-replace-or-copy.md) | "Always": replace or save a copy without being asked |
 | 0026 | Piedra tiles for the package icons (removed by 0053) |
 | [0027](0027-version-scheme.md) | Versions stay small: 1.0 at the first public release, then slowly |
-| [0028](0028-quality-standard.md) | Gracil's quality standard: each video finds its own level |
-| [0029](0029-lighter-never-heavier.md) | Lighter, never heavier: predicted sizes and lighter choices for already-compressed videos |
+| [0028](0028-quality-standard.md) | Gracil's quality standard: each video finds its own level (amended by 0029 and 0033) |
+| [0029](0029-lighter-never-heavier.md) | Lighter, never heavier: predicted sizes and lighter choices for already-compressed videos (lighter choices superseded by 0033) |
 | [0030](0030-faster-quality-measurement.md) | Faster quality measurement: every other frame, and on the GPU when FFmpeg can |
 | [0031](0031-windows-11-colors.md) | Windows 11's own colors and the user's accent |
 | [0032](0032-resolution-pill.md) | "Always": keep the resolution, ask, or reduce (withdrawn) |
 | [0033](0033-keep-the-resolution.md) | Every video keeps its resolution; compressing again loses a little, without asking |
-| [0034](0034-image-standard.md) | Gracil's image standard: PNG stays PNG, the rest becomes jpegli JPEG; images first, the dial counts the list |
-| [0035](0035-explorer-folders-and-always.md) | File Explorer: folders, one kind at a time, words that follow the Always setting |
+| [0034](0034-image-standard.md) | Gracil's image standard: PNG stays PNG, the rest becomes jpegli JPEG; images first, the dial counts the list ("images first" superseded by 0040) |
+| [0035](0035-explorer-folders-and-always.md) | File Explorer: folders, one kind at a time, words that follow the Always setting (words superseded by 0058) |
 | [0036](0036-sizes-and-the-way-back.md) | Sizes before and after, the list added up, and the way back to the work |
 | [0037](0037-looking-through-folders-in-the-background.md) | Folders from File Explorer are looked through in the background, folder by folder |
-| [0038](0038-a-ring-without-its-track.md) | The ring has no visible track and no line between pause and stop |
-| [0039](0039-a-clear-done.md) | A clear "done": a green check in the ring, the room saved, and how the list went |
+| [0038](0038-a-ring-without-its-track.md) | The ring has no visible track and no line between pause and stop (look changed again by 0076) |
+| [0039](0039-a-clear-done.md) | A clear "done": a green check in the ring, the room saved, and how the list went (changed by 0055 and 0076) |
 | [0040](0040-several-files-at-once-without-getting-in-the-way.md) | Several files at once: one video, images beside it, the next file got ready, never in the way |
 | [0041](0041-the-window-keeps-up-with-long-work.md) | The window keeps up with long work: Direct3D 12, library errors logged, list counted once per change |
 | [0042](0042-carrying-on-after-closing.md) | Unfinished files are kept, and offered with **Continue** the next time Gracil opens |
@@ -54,14 +54,14 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0047](0047-sound-ffmpeg-cannot-read.md) | Sound FFmpeg can't read, such as iPhones' spatial audio, is left out while other sound remains |
 | [0048](0048-see-through-heif-and-avif.md) | See-through HEIF and AVIF keep their transparency; depth and mattes aren't transparency |
 | [0049](0049-limits-windows-enforces.md) | Limits Windows enforces: part of the processor (less while in use and on battery), memory per process, room on the drive |
-| [0050](0050-portable-and-open-source.md) | Portable, free and open source on GitHub, without the Store: a zip with FFmpeg, data beside the program, the classic File Explorer menu |
+| [0050](0050-portable-and-open-source.md) | Portable, free and open source on GitHub, without the Store: a zip with FFmpeg, data beside the program, the classic File Explorer menu (the menu superseded by 0058) |
 | [0051](0051-efficiency-mode-and-any-card-temperature.md) | Windows' efficiency mode for the tools while the computer is in use or on battery; the temperature of Intel and AMD graphics cards from their driver |
 | [0052](0052-intel-and-amd-encoders.md) | Compressing on Intel (Quick Sync) and AMD graphics, after NVIDIA and before the processor, with tiers and test encodes as for NVENC |
-| [0053](0053-ready-for-github.md) | Ready for GitHub: no FFmpeg download, nothing left from the Store, `-Copy` keeps the daily Gracil in one place |
-| [0054](0054-wholly-portable.md) | Wholly portable: data only in Gracil's folder, a start with Windows that forgets itself, **Prepare to delete Gracil**, GPL-3.0-or-later with every library's license |
+| [0053](0053-ready-for-github.md) | Ready for GitHub: no FFmpeg download, nothing left from the Store, `-Copy` keeps the daily Gracil in one place (changed by 0054 and 0071) |
+| [0054](0054-wholly-portable.md) | Wholly portable: data only in Gracil's folder, a start with Windows that forgets itself, **Prepare to delete Gracil**, GPL-3.0-or-later with every library's license (superseded in part by 0058; changed by 0071) |
 | [0055](0055-natural-first-use.md) | Natural from the first use: folders can be dropped, an empty window with only where to drop, an honest done screen, a breathing "getting ready", Exit that counts every loss, a few keys |
-| [0056](0056-the-list-unfolds.md) | The list unfolds and folds away instead of appearing at once |
-| [0057](0057-always-in-sight.md) | **Always** stays in sight, the empty window included |
+| [0056](0056-the-list-unfolds.md) | The list unfolds and folds away instead of appearing at once (look changed by 0076) |
+| [0057](0057-always-in-sight.md) | **Always** stays in sight, the empty window included (superseded in part by 0058) |
 | [0058](0058-explorer-send-to-and-main-menu.md) | File Explorer: **Send to** for everyone, and a main menu for the whole computer turned on from the tray; the menu DLL is gone |
 | [0059](0059-keyboard-reaches-everything.md) | The keyboard reaches every control: Tab moves a ring, Enter or Space presses, arrows move **Always** |
 | [0060](0060-reasons-in-sight.md) | Reasons are written out under the file shown large; the middle of **Always** says **Ask** |
@@ -84,3 +84,4 @@ One file per decision, numbered. To change a decision, add a new record that sup
 | [0077](0077-where-things-live.md) | Where things live: icons with the crate that links them, the FFmpeg pin beside its script, one way to lay out a module, one zip, and a root with only what must be there |
 | [0078](0078-png-less-work-same-result.md) | A PNG takes half the work for the same result: the plain palette first, dithering only when it could make a difference, a palette too big to keep still measured, the lossless version made alongside; the rules that hold Gracil back measured and kept; a `timing` build to time the real app |
 | [0079](0079-releases-built-on-github.md) | Releases are built on GitHub, from the tagged code on a clean machine: a tag ends in a draft with the zip and its changelog notes, which the owner publishes; run by hand it is a trial that publishes nothing |
+| [0080](0080-documentation-always-true.md) | The documentation always says what is true today: every document updated in the same commit as the change, history only in decision records, nothing that ages by itself, a pass over the documentation before every release |

@@ -1,6 +1,6 @@
 # 0018 — FFmpeg ends with Gracil, through a job object
 
-**Status:** Accepted.
+**Status:** Accepted, built (2026-10-03).
 
 **Context.** Gracil runs FFmpeg as a separate process (ADR 0002). When Gracil exits normally it
 cancels the running compression first, but if Gracil is killed, crashes or is ended from Task

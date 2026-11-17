@@ -1,7 +1,8 @@
 # 0039 — A clear "done"
 
-**Status:** Accepted, built (2026-10-04). Asked for by the product owner after compressing a
-folder of more than 15,000 files (spec §77.3).
+**Status:** Accepted, built (2026-10-04); changed by ADR 0055 (2026-10-05), below, and by
+[ADR 0076](0076-the-ring-stays.md) (2026-11-16): the finished view is one of the ring's faces.
+Asked for by the product owner after compressing a folder of more than 15,000 files (spec §77.3).
 
 **Changed** by [ADR 0055](0055-natural-first-use.md) (2026-10-05): the green middle and check mark
 appear only when something became smaller; otherwise the big line says why nothing was, and

@@ -13,8 +13,9 @@ Gracil is free and private. You don't need an account, and Gracil doesn't need t
 work. Your videos never leave your computer: Gracil sends no videos, file names or usage data
 anywhere.
 
-Gracil is also open source: its code is public on GitHub for anyone to read. There is nothing to
-install. Gracil comes as a zip; unpack it wherever you like, even on a USB drive, and open
+Gracil is also open source: its code is public on GitHub for anyone to read, and each version's
+zip is made by GitHub itself from that public code, not on anyone's own computer. There is nothing
+to install. Gracil comes as a zip; unpack it wherever you like, even on a USB drive, and open
 `gracil.exe`. Everything it needs comes inside, and it keeps its settings and its diary in a `data`
 folder next to itself, and nowhere else, so they go wherever the folder goes. It also keeps there
 how the last videos of each kind went, so they get ready quicker after it starts again; nothing in
@@ -86,10 +87,12 @@ pictures) below.
   graphics card. How many depends on your computer and on what you are doing (see "Working
   without getting in the way" below).
 - The file shown large is the video being compressed, or, with only images, the first image being
-  compressed. It sits inside a ring: a marble rolls clockwise from the top as the work advances,
-  filling an invisible circle with color behind it, and when it gets back to the top the file is
-  done. The percentage is written just below. While Gracil gets a list ready, before the marble
-  starts moving, the middle of the marble slowly fades and returns, so you know it is working.
+  compressed; with more than one file, the ring stands for the whole list instead (see "The circle
+  for the whole list" below). It sits inside a ring: a marble rolls clockwise from the top as
+  the work advances, filling an invisible circle with color behind it, and when it gets back to
+  the top the file is done. The percentage is written just below. While Gracil gets a list
+  ready, before the marble starts moving, the middle of the marble slowly fades and returns, so
+  you know it is working.
 - The ring stays through everything that happens to a file. When the file is done, the ring
   closes and its middle says how much smaller the file came out, for example **−35%**; when the
   whole list is done, its middle turns green with a check mark (below). What it stands for is
@@ -127,16 +130,17 @@ pictures) below.
   With two or more done, a line at its top adds them all up, for example **In all: 3.4 GB →
   2.2 GB, 35% smaller**. Only what is still on the list counts: taking files off it, or
   **Clear**, takes them out of the total. Point at a file's name, in the list or beside the
-  ring, to see where it is: its whole path. While the list is open it takes most of the window,
+  ring, to see where it is: its whole path. While the list is open, its button reads **Hide
+  files**, and the list takes most of the window,
   growing with it, and the file above it is shown small: its ring beside its name, with the same
   buttons. The list unfolds gently and folds away when closed, quickly even with tens of
   thousands of files: Gracil only draws the rows you can see. A window too short for the ring in
   its middle shows the file small in the same way.
 - Click a file in **View files** to show it above the list; it stays lit in the list while it
-  shows. To go back to the work, click it again, close **View files**, or click the quiet line
-  under it that names the file being compressed and how far along it is (‹ name · 42%). That
-  line appears whenever you are looking at another file while Gracil is working or a result
-  waits for you.
+  shows. To go back to the work, click it again, close the list with **Hide files**, or click
+  the quiet line under it that names the file being compressed and how far along it is
+  (‹ name · 42%). That line appears whenever you are looking at another file while Gracil is
+  working or a result waits for you.
 - When the whole list is done (nothing left waiting, being compressed or waiting for your choice),
   the window says so clearly: the ring stays full, its middle fills with green and a check mark
   draws itself, and above it, in large letters, is how much room the list saved, for example **130 MB
@@ -194,7 +198,8 @@ buttons:
   below).
 
 You decide after seeing the result, so you never trade your original for a file that didn't
-shrink. With several files done, **View files** offers **Replace all** and **Save all as copies**.
+shrink. With two or more files waiting for your choice, the top of the list in **View files**
+offers **Replace all** and **Save all as copies**.
 
 If you always answer the same way, use the line at the foot of the window, always there, even before
 you add files: **Always**, followed by **Replace**, **Ask** and **Save copy** (point at **Always**

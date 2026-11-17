@@ -1,6 +1,6 @@
 # 0002 — FFmpeg runs as a bundled external process
 
-**Status:** Accepted. Where Gracil finds FFmpeg is set by
+**Status:** Accepted, built (2026-10-02). Where Gracil finds FFmpeg is set by
 [0008](0008-ffmpeg-detected-or-provisioned.md); running FFmpeg as an external process still stands.
 
 **Context.** Linking FFmpeg libraries would put codec crashes inside Gracil's process, tie Gracil

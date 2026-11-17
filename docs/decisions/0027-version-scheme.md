@@ -1,7 +1,7 @@
 # 0027 — Versions stay small: 1.0 at the first public release, then slowly
 
-**Status:** Accepted. Decided by the product owner (2026-10-03). Settles the "pending" note in
-`docs/development/versioning.md`.
+**Status:** Accepted, followed since Gracil 1.0.0 (2026-11-16). Decided by the product owner
+(2026-10-03). Settles the "pending" note in `docs/development/versioning.md`.
 
 **Changed** by [ADR 0050](0050-portable-and-open-source.md) (2026-10-05): 1.0 is the first public
 release on GitHub.

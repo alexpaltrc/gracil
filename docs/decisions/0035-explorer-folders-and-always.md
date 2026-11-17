@@ -1,7 +1,7 @@
 # 0035 — File Explorer: folders, one kind at a time, and the Always setting
 
-**Status:** Accepted, built (2026-10-04). Decided by the product owner. Amends spec §58 and the
-two fixed commands of ADR 0022.
+**Status:** Accepted, built (2026-10-04); superseded in part by ADR 0058 (2026-10-07), below.
+Decided by the product owner. Amends spec §58 and the two fixed commands of ADR 0022.
 
 **Superseded in part** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07): the
 words no longer follow **Always** (item 2). The commands read *Compress with Gracil*, *Compress

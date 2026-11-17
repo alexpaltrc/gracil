@@ -1,6 +1,7 @@
 # 0025 — "Always": replace or save a copy without being asked
 
-**Status:** Accepted. Requested by the product owner (2026-10-03). Adds a second setting to
+**Status:** Accepted, built (2026-10-03); changed by ADR 0055, 0057, 0058 and 0060, below.
+Requested by the product owner (2026-10-03). Adds a second setting to
 spec §66 and lets [0009](0009-choose-after-compressing.md)'s question be answered once, ahead of
 time.
 

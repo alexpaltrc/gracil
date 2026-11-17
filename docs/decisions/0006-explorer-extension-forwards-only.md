@@ -1,6 +1,7 @@
 # 0006 — The Explorer extension only forwards requests
 
-**Status:** Accepted
+**Status:** Accepted, built (2026-10-03). Superseded in part by
+[ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07), below.
 
 **Superseded in part** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07):
 there is no Explorer extension any more. File Explorer reaches Gracil through **Send to** and,

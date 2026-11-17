@@ -1,6 +1,6 @@
 # 0074 — Gracil and its owner's personal standard
 
-**Status:** Accepted (2026-11-15). Decided by the product owner.
+**Status:** Accepted, built (2026-11-15). Decided by the product owner.
 
 **Context.** The product owner keeps a personal standard for every app they make (the
 `alex-vibecode` skill): priorities, technology, repository, and how the app in daily use is

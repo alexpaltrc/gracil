@@ -1,6 +1,6 @@
 # 0007 — Closing the window always minimizes to the tray
 
-**Status:** Accepted (product requirement, spec §54.1)
+**Status:** Accepted, built (2026-10-03). A product requirement (spec §54.1).
 
 **Context.** Compressions can take a long time. Users close windows expecting the work to
 continue, and Explorer-started work already lives in the tray.

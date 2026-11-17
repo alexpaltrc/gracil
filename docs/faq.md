@@ -1,21 +1,23 @@
 # Questions and answers
 
-*Questions people have asked about Gracil, with plain answers. Collected here for a future help
-page; [How Gracil works](how-gracil-works.md) explains everything in more depth.*
+*Questions people have asked about Gracil, with plain answers. [How Gracil
+works](how-gracil-works.md) explains everything in more depth.*
 
 ---
 
 ## How do I get Gracil?
 
-Download Gracil's zip from its page on GitHub, unpack it wherever you like (your Programs folder,
-your Documents, even a USB drive) and open `gracil.exe`. There is nothing to install. Gracil is
-free, and its code is public for anyone to read.
+Download the newest zip from **Releases** on Gracil's page on GitHub, unpack it wherever you like
+(your Programs folder, your Documents, even a USB drive) and open `gracil.exe`. There is nothing
+to install. Gracil needs Windows 11, 64-bit. It is free, and its code is public for anyone to
+read.
 
 ## Windows warned me before opening Gracil. Is it safe?
 
 Windows warns about programs it hasn't seen many people use, and Gracil is new and doesn't pay for
 a signing certificate. Choose **More info** and then **Run anyway**. Gracil's code is public on
-GitHub, so anyone can check what it does.
+GitHub, so anyone can check what it does, and each version's zip is made by GitHub itself from
+that code, not on anyone's own computer.
 
 ## After unpacking, is Gracil next to the clock right away?
 

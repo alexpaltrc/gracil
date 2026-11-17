@@ -1,6 +1,6 @@
 # 0001 — The compression core does not depend on the UI
 
-**Status:** Accepted
+**Status:** Accepted, built (2026-10-02).
 
 **Context.** Compression can start from File Explorer with no window at all. Creating an Iced
 window or a WGPU device costs memory, GPU work and startup time that a background job doesn't

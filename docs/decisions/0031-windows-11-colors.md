@@ -1,8 +1,8 @@
 # 0031 — Windows 11's own colors and the user's accent
 
-**Status:** Accepted. Requested by the product owner (2026-10-03). Replaces the Piedra palette of
-[0015](0015-piedra-identity.md) (items 1 and 2) and the Piedra icon tiles that followed it;
-0015's item 3, following Windows' light and dark theme, still holds.
+**Status:** Accepted, built (2026-10-03). Requested by the product owner (2026-10-03). Replaces the
+Piedra palette of [0015](0015-piedra-identity.md) (items 1 and 2) and the Piedra icon tiles that
+followed it; 0015's item 3, following Windows' light and dark theme, still holds.
 
 **Context.** Gracil should look as native as possible on Windows 11. The Piedra palette (ivory,
 mineral greys, a stone-grey marble) was Gracil's own, so it never quite matched the windows

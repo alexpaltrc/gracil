@@ -1,6 +1,6 @@
 # 0019 — One Gracil per session: a named mutex and a named pipe
 
-**Status:** Accepted.
+**Status:** Accepted, built (2026-10-03).
 
 **Context.** Spec §52 asks for one logical Gracil: a second launch, "Open with" from File Explorer
 and the Explorer commands (M7) must all reach the Gracil already running, which owns the list and

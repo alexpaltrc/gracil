@@ -3,7 +3,8 @@
 This is the authoritative product and engineering specification for Gracil, condensed from the
 original brief (wording tightened, requirements unchanged; section 83, the instructions for the
 first planning response, is omitted). Section numbers are stable references; do not renumber them.
-Additions after the original specification use sub-numbers (for example `54.1`).
+Additions after the original specification use sub-numbers (for example `54.1`). Where a
+decision record changed a requirement, the section says how Gracil is now and names the ADR.
 
 ---
 
@@ -23,7 +24,8 @@ implementation that becomes difficult to maintain without measurable benefit sho
 
 # 2. Product philosophy
 
-Gracil does one thing: **Compress video.** *(Update, §77.1: videos and images.)*
+Gracil does one thing: **Compress videos and images** (§77.1, §77.2). Documents are a proposal,
+not built (ADR 0062).
 
 It should feel like a small, focused consumer application. The interaction philosophy should be
 closer to Squoosh than to HandBrake.
@@ -57,15 +59,17 @@ connection to work. FFmpeg, which Gracil cannot compress without, comes inside G
 *Added after the original specification.*
 
 When something does not go as expected, Gracil does not open a dialog to explain it. It tells the
-user inside the interface, in a way that feels natural: a control turns off, a small mark
-appears, and a short, plain explanation is there to read (*update, ADR 0060:* written out under
-the file shown large, rather than only on hover). The user stays in their flow, and the
-interface keeps its calm, minimal look. Dialogs are only for decisions with real consequences,
-such as exiting while a compression is running (§54.1).
+user inside the interface, in a way that feels natural: a small "!" appears beside the file's
+status, and a short, plain explanation is written out under the file shown large (ADR 0060);
+in the list it is behind the "!" on hover, and in the mini-window the "!" opens the main window
+on that file. The user stays in their flow, and the interface keeps its calm, minimal look.
+Dialogs are only for decisions with real consequences, such as exiting while a compression is
+running (§54.1).
 
-Example: when the compressed video is not smaller than the original, the save buttons are turned
-off and a small "!" appears next to them. Hovering it says that Gracil does not save the result
-because it could not make the file smaller than the original (§40.1).
+Example: when the compressed video is not smaller than the original, it is labelled **Already
+compressed**, a "!" sits beside that, and the line under it says Gracil could not make the file
+smaller than the original, so nothing is saved. Replace and Save copy are not shown, since there
+is nothing to choose (§40.1).
 
 # 3. Product identity
 
@@ -76,30 +80,26 @@ Do not rename it to: Grácil, Gracile, Graysil, Graceful, Gracil Video Compresso
 The intended English pronunciation is approximately **GRAY-sil**. The pronunciation does not
 affect the spelling.
 
-The final application icon has not been designed yet. Use a clearly temporary development icon.
-Do not invent or finalize the permanent icon. The final icon will later be designed according to
-current Windows 11 iconography and visual guidelines.
-
-*Update (ADR 0015):* the icon has been designed: the marble ("la canica"), with the Piedra palette,
-in `crates/gracil-ui/icons/`.
-
-*Update (ADR 0031):* the Piedra palette is replaced by Windows 11's own colors and the user's
-accent color, followed live.
+The icon is the marble ("la canica", ADR 0015) on a small tile in Windows 11's own neutral
+greys, always the opposite of Windows' theme, linked into `gracil.exe` from
+`crates/gracil-ui/icons/` (ADR 0016, ADR 0031, ADR 0077). Gracil wears Windows 11's own colors
+and the user's accent color, followed live (ADR 0031; the earlier Piedra palette is gone).
 
 # 4. Supported platform
 
-Target: Windows 11, x86-64 / 64-bit Windows initially. Do not build a 32-bit application.
+Target: Windows 11, x86-64 / 64-bit Windows (the zip is `Gracil-X.Y.Z-x64.zip`). Do not build a
+32-bit application.
 
 References to Win32 APIs do NOT mean the application is 32-bit. Win32 is the historical name for
 many native Windows desktop APIs that are also used by 64-bit applications.
 
-Future ARM64 support may be evaluated later but is not required now.
+ARM64 is not built; it may be evaluated later but is not required.
 
 # 5. Primary technology stack
 
 Use: Rust, Iced, WGPU as the Iced renderer, FFmpeg, FFprobe, windows-rs for Windows-specific APIs,
-a lightweight native tray implementation where required. Gracil ships as a portable zip
-published on GitHub (ADR 0050).
+a lightweight native tray implementation where required, and jpegli for JPEG (§77.1). Gracil
+ships as a portable zip published on GitHub (ADR 0050).
 
 Do not use: Electron, Chromium, WebView, Tauri, Node.js, a local HTTP server, a browser-based
 frontend.
@@ -118,26 +118,30 @@ independent from WGPU. Gracil choosing WGPU does not mean WGPU should implement 
 # 7. Repository and directory organization
 
 Project organization must be treated as important from the first commit. Keep the repository
-predictable and clean. A reasonable starting structure is:
+predictable and clean. The structure now (ADR 0077):
 
 ```
 gracil/
+├── .cargo/              how Gracil is built
+├── .claude/             cloud sessions (ADR 0072)
+├── .github/workflows/   checks on every push, releases from a tag (ADR 0072, ADR 0079)
 ├── crates/
 │   ├── gracil-core/
-│   ├── gracil-ui/
+│   ├── gracil-ui/       with icons/ and gracil.rc
 │   └── gracil-windows/
 ├── docs/
 │   ├── architecture/
 │   ├── decisions/
-│   └── development/
-├── scripts/
-├── Cargo.toml
-├── Cargo.lock
-├── CHANGELOG.md
-├── README.md
-└── .gitignore
+│   ├── development/
+│   └── images/          pictures the README and guides show
+├── scripts/             with ffmpeg.psd1, the pinned FFmpeg
+├── Cargo.toml, Cargo.lock, rust-toolchain.toml, clippy.toml
+├── README.md, LICENSE, CHANGELOG.md, CONTRIBUTING.md, CLAUDE.md
+├── .gitignore, .gitattributes
 ```
 
+A crate holds what only it uses, a script's data sits beside the script, and the root holds only
+what must be there (ADR 0077). Material that isn't code lives outside the repository (ADR 0074).
 This structure may evolve when there is a real reason. Do not create directories merely to appear
 organized. Do not create empty architectural layers that provide no value. Every directory and
 abstraction should have a clear responsibility.
@@ -150,10 +154,12 @@ abstraction should have a clear responsibility.
 - **gracil-ui**: Iced, WGPU, main window, Focus + Drawer interface, drag and drop, user-facing
   state, settings, tray mini-window UI.
 - **gracil-windows**: Windows APIs, single-instance behavior, IPC, process management, system tray
-  integration, window positioning, filesystem replacement, Explorer integration support.
-- **gracil-shell**: modern Windows 11 File Explorer context-menu extension. *Removed by
-  [ADR 0058](decisions/0058-explorer-send-to-and-main-menu.md):* File Explorer reaches Gracil
-  through **Send to** and plain commands that start `gracil.exe`, written by gracil-windows.
+  integration, window positioning, filesystem replacement, Explorer integration support. It is
+  the only crate allowed `unsafe`.
+
+There is no shell-extension crate ([ADR 0058](decisions/0058-explorer-send-to-and-main-menu.md)):
+File Explorer reaches Gracil through **Send to** and plain commands that start `gracil.exe`,
+written by gracil-windows.
 
 Most importantly: **gracil-core must not depend on Iced.** The compression engine must be usable
 without initializing Iced, WGPU or a visible window. This is required for background compression
@@ -166,18 +172,19 @@ understandable. Prefer small, logically complete commits. Do not create giant co
 unrelated changes. Do not introduce an unnecessarily complicated Git workflow.
 
 `main` may contain the normal development history. Use temporary branches when they provide a real
-benefit. Released versions must be represented by Git tags (`v1.0.0`, `v1.0.1`). Do not rewrite
-published release history.
+benefit; work from the cloud goes to a branch and a pull request, and reaches `main` once
+GitHub's checks pass on Windows and Linux (ADR 0072). Released versions must be represented by
+Git tags (`v1.0.0`). Do not rewrite published release history.
 
 # 10. Versioning
 
-The first public release is `1.0.0` (ADR 0027, ADR 0050). The active development version always
-carries the `-dev` suffix (`1.0.1-dev`). When that version is released it becomes `1.0.1` with
-the Git tag `v1.0.1`, and the development version moves on to the next one.
+The first public release was `1.0.0` (2026-11-16; ADR 0027, ADR 0050); every release since is
+in `CHANGELOG.md`. The development version always carries the `-dev` suffix (for example
+`1.0.1-dev`). When it is released it becomes `1.0.1` with the Git tag `v1.0.1`, and the
+development version moves on to the next one. The rules are in `docs/development/versioning.md`.
 
-Keep the version synchronized wherever practical: Cargo workspace/package metadata, application
-metadata, the name of the portable zip, About information when eventually implemented, release
-scripts.
+The version lives in one place, the workspace's `Cargo.toml`; the portable zip's name follows
+it, and a release tag that doesn't match it stops the release (ADR 0079).
 
 # 11. CHANGELOG philosophy
 
@@ -245,8 +252,9 @@ Avoid `unwrap()` and `expect()` in production code unless the condition is a gen
 and the reason is obvious or documented. Use structured error types. Do not swallow errors
 silently.
 
-Avoid `unsafe`. If `unsafe` is genuinely required for Windows integration: isolate it, minimize
-its scope, document the safety assumptions, test surrounding behavior.
+Avoid `unsafe`. It is denied workspace-wide; only gracil-windows, where Windows integration
+genuinely requires it, opts in: isolate it, minimize its scope, document the safety assumptions,
+test surrounding behavior.
 
 Comments should explain WHY something exists when the reason is non-obvious. Delete dead code
 instead of leaving abandoned implementations commented out.
@@ -336,8 +344,9 @@ Users should not choose CPU vs GPU. Gracil chooses automatically:
 5. Prefer NVENC when it is genuinely available and suitable.
 6. Otherwise use CPU-based HEVC encoding with libx265.
 
-The architecture should make it possible to add additional hardware backends later (Intel Quick
-Sync, AMD) without rewriting the application. Do not expose backend names in the normal UI.
+Intel (Quick Sync) and AMD graphics are backends too, tried after NVIDIA and before the processor,
+each checked with a tiny test compression like NVENC (ADR 0052). Do not expose backend names in
+the normal UI.
 
 # 23. CPU fallback
 
@@ -366,8 +375,9 @@ expensive probes every time a file is dropped. Do not assume support from GPU mo
 # 26. Video queue responsibility
 
 Gracil maintains a lightweight scheduler that decides which file is processed next; FFmpeg
-processes each file. Initially run one heavy compression at a time unless measured testing
-establishes a compelling reason to change that. Keep scheduler policy simple.
+processes each file. One video is compressed at a time; images compress beside it on the
+processor, and the next file gets ready while the current one compresses (ADR 0040, §33). Keep
+scheduler policy simple.
 
 # 27. Adding files
 
@@ -381,13 +391,10 @@ drag operation is not a new session. The same applies to the file picker.
 
 # 29. Duplicate paths
 
-Exact duplicate-path behavior is not yet a product requirement. Choose the simplest safe interim
-behavior, keep it easy to change, and document it.
-
-*Current behavior (2026-10-03, at the product owner's request):* the list never stops a file from
-being compressed again. Adding a path whose entry is finished (put in place, failed or cancelled)
-removes that entry and adds the file again as new. Adding a path that is still waiting, running,
-or waiting for the replace-or-copy choice does nothing.
+*Decided by the product owner (2026-10-03):* the list never stops a file from being compressed
+again. Adding a path whose entry is finished (put in place, failed or cancelled) removes that
+entry and adds the file again as new. Adding a path that is still waiting, running, or waiting
+for the replace-or-copy choice does nothing.
 
 # 30. Multiple files and UI philosophy
 
@@ -408,11 +415,11 @@ The currently active video gets visual priority. The remaining queue stays visua
 └─────────────────────────────────────────┘
 ```
 
-The exact typography, spacing, animation and visual appearance are not final. The interaction
-model IS final.
+The sketch is the original idea; the interaction model it shows IS final (§79). How it looks is
+decided by the ADRs below, and may still be refined.
 
-*Current look (ADR 0014):* progress is a ring the marble fills clockwise, with pause/play and
-stop as symbols in its middle instead of the words in the sketch.
+Progress is a ring the marble fills clockwise, with pause/play and stop as symbols in its middle
+instead of the words in the sketch (ADR 0014, ADR 0038).
 
 *Update (ADR 0069):* the footer's count of files left is followed, once it is known well enough,
 by a coarse estimate of the time left ("12 files left, about 20 min · View files"), also in the
@@ -426,11 +433,13 @@ compresses, then holds how much smaller the file came out, then the finished lis
 stands for is on a line above it, and how it goes or what to do next below it. The focus has two
 sizes, the ring in its middle or beside the words, and the window shows the one that fits. The line
 under the focus is always one line, with **View files** and **+** as buttons of their own on its
-right.
+right. The focus and the list are cards, as Windows 11 draws the surfaces content lies on; the
+focus lights up softly in the accent while files are dragged over the window. What answers a
+choice moves on springs (`motion.rs`).
 
 # 32. Drawer behavior
 
-Selecting the subtle file-count control opens the file drawer, which lets the user inspect the
+**View files**, on the line under the focus, opens the file drawer (the list), which lets the user inspect the
 current set of files, remove individual removable items, and quickly clear removable files. The
 drawer is not visually dominant. When closed, the user should mostly forget a queue exists.
 
@@ -438,7 +447,8 @@ The drawer opens and closes at once however long the list is: every row has the 
 only the rows in sight (and a few beyond) are built; the rest of the list is empty space of the
 right height, so the scroll bar stays true.
 
-*Update (ADR 0076):* an open list takes all of the window but the small focus, and grows with it.
+The list unfolds and folds away rather than appearing at once (ADR 0056). An open list takes all
+of the window but the small focus, and grows with it (ADR 0076).
 
 # 32.1 Picking a file, and the way back (ADR 0036)
 
@@ -485,26 +495,24 @@ Removing the active file is cancellation and is treated separately.
 # 36. Job states
 
 At minimum: Pending, Preparing, Compressing, Paused, Finalizing, Completed, Failed, Cancelled.
-Transitions are deterministic. The UI derives from state. Avoid scattered boolean flags.
+Gracil also has Prepared: got ready, waiting its turn to compress (ADR 0040). Transitions are
+deterministic. The UI derives from state. Avoid scattered boolean flags.
 
 # 37. Starting compression
 
-Two output intentions: **Compress and replace** and **Compress and save a copy**. Do not expose
-codec choices. Do not require technical setup before starting.
-
-*Update (2026-10-03):* the second intention was first named "Compress and save as new"; at the
-product owner's request it now uses the more familiar wording "Compress and save a copy" (Spanish
-"Comprimir y guardar como copia") everywhere, matching the **Save copy** button.
+Two output intentions: **Compress and replace** and **Compress and save a copy** (Spanish
+"Comprimir y guardar como copia"), matching the **Replace** and **Save copy** buttons. Do not
+expose codec choices. Do not require technical setup before starting.
 
 # 37.1 Choosing after compressing
 
 *Added after the original specification (ADR 0009).*
 
-In the main window, videos are compressed as soon as they are added. When a result is ready, the
+In the main window, files are compressed as soon as they are added. When a result is ready, the
 window shows how much smaller it is and offers **Replace** and **Save copy** for it; with several
 results waiting, both are offered for all of them at once. A result the user never chooses for is
-discarded, and the original stays as it was. From File Explorer, the **Always** setting decides
-the same way (ADR 0058).
+discarded, and the original stays as it was. The **Always** setting can answer ahead of time
+(§66); from File Explorer it decides the same way (ADR 0058).
 
 # 38. Compress and replace
 
@@ -539,10 +547,9 @@ stopped and the next way of compressing tried.
 
 Create a new file in the same directory with the `Gracil-` prefix (`Vacation.mp4` →
 `Gracil-Vacation.mp4`). Do not silently overwrite an existing file; if the name exists, create a
-non-conflicting name using a simple predictable strategy (`Gracil-Vacation (2).mp4`).
-
-*Amended after the original specification: the prefix is `Gracil-`, with a hyphen, not
-`Gracil_`.*
+non-conflicting name using a simple predictable strategy (`Gracil-Vacation (2).mp4`). The prefix
+is `Gracil-`, with a hyphen. A video from another format keeps its stem and becomes `.mp4`
+(`Gracil-IMG_0042.mp4`, §45).
 
 *Update (ADR 0064):* a name that would pass Windows' 255-character limit loses the end of its
 stem, never half a character. On a drive without hard links, the copy is moved only to a name
@@ -552,14 +559,11 @@ Gracil has just claimed, so it never replaces a file that appeared meanwhile.
 
 *Added after the original specification.*
 
-If the compressed file is not smaller than the original, Gracil neither replaces the original nor
-saves a copy. Following §2.3, there is no error dialog. The save actions are turned off for that
-video and a small "!" sits beside them; hovering it explains that the file could not be made
-smaller than the original, so it is not saved. The original is never touched.
-
-*Update (ADR 0055):* such a file is labelled **Already compressed**, like a file that was already
-about as small as it gets; the "!" says which. Replace and Save copy are not shown for it, since
-there is nothing to choose.
+If the compressed file is not clearly smaller than the original (at most 80% of it, ADR 0029),
+Gracil neither replaces the original nor saves a copy. Following §2.3, there is no error dialog.
+The file is labelled **Already compressed**, like a file that was already about as small as it
+gets (ADR 0055), with a "!" and the reason written out (ADR 0060). Replace and Save copy are not
+shown for it, since there is nothing to choose. The original is never touched.
 
 # 41. Metadata preservation
 
@@ -597,12 +601,10 @@ human-readable explanation without muxer terminology.
 
 # 45. Containers
 
-~~Do not pretend to support every format. Use a deliberately safe supported set.~~
-*Clarified after the original specification:* aim for wide compatibility. Any video FFmpeg can
-read is accepted. ~~The output keeps the source's container when that container can hold HEVC
-properly; otherwise Gracil produces an MP4.~~ *Changed after the original specification
-(ADR 0012):* every output is an MP4, whatever the source format, carrying HEVC video and audio
-plus whatever metadata and additional streams MP4 can hold.
+Aim for wide compatibility: any video FFmpeg can read is accepted (§77.2). Every output is an MP4,
+whatever the source format, carrying HEVC video and audio plus whatever metadata and additional
+streams MP4 can hold (ADR 0012). Replacing a video from another format puts the `.mp4` in its
+place, with the same stem.
 
 # 46. Progress
 
@@ -625,21 +627,26 @@ part of cancellation.
 
 # 49. Main UI
 
-The empty state is immediately understandable: **Drop videos here**. Avoid technical codec terms,
-terminal-like presentation, giant settings pages, dense tables, excessive borders, unnecessary
-navigation, advanced encoder controls and permanent diagnostic information.
+The empty state is immediately understandable: **Drop videos or images here**, with a way to
+choose files, and the **Always** pill at its foot (ADR 0055, ADR 0057); the list's line comes up
+with the first file. Folders can be dropped too. Avoid technical codec terms, terminal-like
+presentation, giant settings pages, dense tables, excessive borders, unnecessary navigation,
+advanced encoder controls and permanent diagnostic information.
 
-*Update (ADR 0055):* the empty window says **Drop videos or images here** with a way to choose
-files, and the **Always** pill at its foot (ADR 0057); the list's line comes up with the first file.
-Folders can be dropped too. **Esc** steps back, **Space** pauses and resumes, **Ctrl+O** chooses
-files. *Update (ADR 0059):* **Tab** and **Shift+Tab** move a focus ring through the window's
-controls, **Enter** or **Space** presses the ringed one, and the arrow keys move **Always**.
+The window opens 440 by 480 (ADR 0076). **Esc** steps back, **Space** pauses and resumes,
+**Ctrl+O** chooses files (ADR 0055). **Tab** and **Shift+Tab** move a focus ring through the
+window's controls, **Enter** or **Space** presses the ringed one, and the arrow keys move
+**Always** (ADR 0059). Gracil follows Windows' **Animation effects** and contrast themes
+(ADR 0061).
 
 # 50. Design system
 
 Build reusable visual primitives and design tokens (spacing, corner radius, typography hierarchy,
-surface behavior, progress treatment, focus states, animation timing). Do not prematurely lock the
-visual identity. The interaction architecture stays independent from visual choices.
+surface behavior, progress treatment, focus states, animation timing); they live in
+`crates/gracil-ui/src/style.rs` and `motion.rs`. The visual identity is Windows 11's own: Segoe UI
+Variable, Windows' colors and the user's accent, light or dark with Windows (ADR 0031), its
+contrast themes and **Animation effects** (ADR 0061), cards and movement on springs (ADR 0076).
+The interaction architecture stays independent from visual choices.
 
 # 50.1 Languages
 
@@ -660,30 +667,33 @@ pointer draws every frame. Drawings that stopped moving are drawn once and kept.
 # 52. Single-instance behavior
 
 Gracil behaves as one logical instance. Further invocations (launching again, Explorer commands,
-future external actions) are forwarded to the existing instance, which owns the scheduler. Use a
-robust Windows mechanism such as a named mutex plus named pipes.
+future external actions) are forwarded to the existing instance, which owns the scheduler;
+launching Gracil again from Start or the taskbar opens its window. It uses a named mutex and a
+named pipe, one Gracil per session (ADR 0019).
 
-*Update (ADR 0075):* a development build is a Gracil of its own, **Gracil Dev**, and runs beside the
-one in daily use.
+A development build is a Gracil of its own, **Gracil Dev**, and runs beside the one in daily use
+(ADR 0075).
 
 # 53. No permanent service
 
 Do not install a permanent Windows service. Do not keep a background process alive forever merely
 to make Explorer integration possible. Start Gracil when needed. If Gracil was launched only for
 background work and all jobs are finished, no window must remain visible and no other reason
-exists to stay alive, allow it to exit cleanly. Do not add "Launch at startup" unless requested
-later.
+exists to stay alive, allow it to exit cleanly.
 
-*Update (ADR 0024, ADR 0054):* requested. Gracil starts with Windows and stays in the tray for
-the session; **Start with Windows** in the tray menu turns it off. Still no Windows service, and a
-Gracil started only for File Explorer's work still exits when done.
+Gracil starts with Windows, at the product owner's request, and stays in the tray for the
+session; **Start with Windows** in the tray menu turns it off (ADR 0024, ADR 0054). It uses
+`RunOnce`, written again on every start, so Windows forgets it once Gracil's folder is gone
+(§64). A Gracil started only for File Explorer's work still exits when done.
 
 # 54. System tray
 
-Gracil uses a system tray icon when background work is active. Logical tray states: Idle,
-Processing, Paused, Error. Final artwork is not defined; use temporary development assets. When at
-least one compression job is active, the tray icon must visibly communicate Processing. Tray state
-is driven by scheduler state, not timers.
+Gracil has a system tray icon while it runs (§54.1). Logical tray states: Idle, Processing,
+Paused, Error. The icon is the marble, drawn by Gracil on a thread of its own (ADR 0020): while
+compressing it fills with the work done, and it turns to the warning color for an error the user
+hasn't seen yet. When at least one compression job is active, the tray icon must visibly
+communicate Processing. Tray state is driven by scheduler state, not timers. Its tip says the
+state in words (ADR 0066).
 
 # 54.1 Closing the window minimizes to the tray
 
@@ -714,15 +724,15 @@ for next time with the other unfinished files.
 
 # 55. Tray mini-window
 
-A compact tray-associated mini-window. Eventually: see the current operation, basic progress,
-pause/resume, drag additional videos into Gracil. It stays open when the user clicks elsewhere;
-the user intentionally closes/toggles it. Position it relative to the taskbar/tray without
-assuming the taskbar is bottom-right. Support multiple monitors correctly.
+A compact tray-associated mini-window (ADR 0021), opened and closed by a click on the tray icon:
+the current operation, basic progress, pause/resume, and files dropped on it are added like any
+others. It stays open when the user clicks elsewhere; the user intentionally closes/toggles it.
+It is placed against the taskbar's edge, centred on the icon, without assuming the taskbar is
+bottom-right, on whichever monitor holds it.
 
-*Update (2026-10-03, product owner):* a finished result can be decided in the mini-window itself,
-with the same **Replace** and **Save copy** choices (§37.1), so opening the main window is never
-required. It shows the running video first; results that wait meanwhile are counted, then offered
-one at a time.
+A finished result can be decided in the mini-window itself, with the same **Replace** and **Save
+copy** choices (§37.1), so opening the main window is never required. It shows the running file
+first; results that wait meanwhile are counted, then offered one at a time.
 
 *Update (ADR 0055):* the mini-window's dial pauses and resumes but has no stop; stopping is in the
 main window. When the tray icon turned to the warning color while no window was open, the
@@ -738,12 +748,12 @@ above an open list, with nothing drawn around it; its ring carries the finished 
 
 # 56. Explorer-triggered mini-window
 
-By default, when compression starts from the File Explorer context menu: Gracil receives the
-jobs, the tray icon switches to Processing and the mini-window appears.
+By default, when compression starts from File Explorer (§57): Gracil receives the jobs, the tray
+icon switches to Processing and the mini-window appears.
 
-Setting: **Show mini-window when compressing from File Explorer** — default ON. When OFF, no window
-appears and compression proceeds entirely in the background. The setting never changes
-compression behavior.
+Setting, in the tray menu (ADR 0021): **Show mini-window when compressing from File Explorer** —
+default ON. When OFF, no window appears and compression proceeds entirely in the background. The
+setting never changes compression behavior.
 
 # 57. Windows 11 File Explorer integration
 
@@ -758,74 +768,49 @@ ignores commands written for the current user only, so Gracil is in File Explore
   administrator's permission once.
 
 Both start `gracil.exe --explorer` with what was picked, and the running Gracil applies the
-**Always** setting to it.
-
-*Before ADR 0058,* a per-user `IExplorerCommand` DLL (ADR 0022, ADR 0050) filled this role; File
-Explorer never showed it.
+**Always** setting to it. There is no `IExplorerCommand` DLL (ADR 0022 is superseded): File
+Explorer never showed one written for the current user.
 
 # 58. Explorer multi-selection
 
-Selecting several videos and right-clicking shows approximately **Gracil (8)** with the
-subcommands **Compress and replace** and **Compress and save a copy**. Support one and several
-selected videos. Whether a single file shows "Gracil" or "Gracil (1)" is a small copy decision;
-keep it easy to change.
+One or several picked videos and images show **Compress with Gracil**, which sends every picked
+file; a folder shows **Gracil** with **Compress videos and images**, **Compress videos only** and
+**Compress images only** ([ADR 0035](decisions/0035-explorer-folders-and-always.md),
+[ADR 0058](decisions/0058-explorer-send-to-and-main-menu.md)). **Send to → Gracil** sends files
+and folders the same way, both kinds. The words are fixed; the running Gracil applies
+**Always**: set, the files are compressed in the background as it says; at **Ask**, the window
+opens and asks.
 
-*Amended by [ADR 0035](decisions/0035-explorer-folders-and-always.md) (2026-10-04):* folders are
-accepted too, there are three commands (videos and images, videos, images), and their words follow
-the **Always** setting: "Compress and replace", "Compress and save copies of", or just "Compress",
-which opens the window and asks.
-
-*Amended by [ADR 0037](decisions/0037-looking-through-folders-in-the-background.md) (2026-10-04):*
-folders are looked through away from the window, folder by folder, and work starts with the
-first files found.
-
-*Amended by [ADR 0058](decisions/0058-explorer-send-to-and-main-menu.md) (2026-10-07):* the words
-no longer follow **Always** and there is no count. Picked videos and images show **Compress with
-Gracil**, which sends every picked file; a folder shows **Gracil** with **Compress videos and
-images**, **Compress videos only** and **Compress images only**. The running Gracil applies
-**Always**: set, the files are compressed in the background as it says; in the middle, the window
-opens and asks. **Send to → Gracil** sends files and folders the same way, both kinds.
+Folders are looked through away from the window, folder by folder, and work starts with the
+first files found ([ADR 0037](decisions/0037-looking-through-folders-in-the-background.md)).
 
 # 59. Dynamic Explorer count
 
-Use the selected item collection to count supported videos for the title. Do not perform
-expensive work to calculate the title. Explorer callbacks must remain extremely fast.
-
-*Update (ADR 0058):* plain commands can't count, so the title is fixed. No Gracil code runs
-inside File Explorer any more.
+There is no count: File Explorer's plain commands can't count, so the title is fixed, and no
+Gracil code runs inside File Explorer (ADR 0058).
 
 # 60. Explorer shell extension safety
 
-The shell extension must be tiny. It must NOT load Iced, initialize WGPU or FFmpeg, detect GPU
-capabilities, run FFprobe, process video, wait for compression, or scan the filesystem
-expensively. It only inspects the selection cheaply, displays the commands, forwards paths and
-action to Gracil and returns promptly.
-
-*Update (ADR 0058):* there is no shell extension. File Explorer starts `gracil.exe`, which hands
-the request to the running Gracil and leaves, so nothing slow can ever run inside File Explorer.
+There is no shell extension (ADR 0058). File Explorer starts `gracil.exe`, which hands the
+request to the running Gracil and leaves, so nothing slow can ever run inside File Explorer.
 
 # 61. Shell extension language
 
-Prefer Rust + windows-rs. If a robust `IExplorerCommand` in Rust becomes unusually fragile, a very
-small isolated C++ shim is acceptable — explain why first, put no product logic in it, and only
-forward paths/actions to Rust. Do not migrate the application to C++.
-
-*Update (ADR 0058):* no longer applies; there is no shell extension.
+No longer applies: there is no shell extension (ADR 0058). File Explorer integration is Rust +
+windows-rs in gracil-windows. Do not migrate the application to C++.
 
 # 62. Background Explorer workflow
 
-1. Explorer extension forwards selected paths/action.
-2. If Gracil is not running, start it in background mode.
-3. If Gracil is running, send the request through IPC.
-4. Add the videos to the existing scheduler.
+1. File Explorer starts `gracil.exe --explorer` with the picked paths (ADR 0058).
+2. If Gracil is not running, it starts in background mode.
+3. If Gracil is running, the request is sent through IPC and the new process leaves.
+4. Add the files to the existing scheduler.
 5. Change tray state immediately.
 6. Optionally open the mini-window according to the setting.
-7. Process the videos.
+7. Process the files.
 
-No console window. Do not initialize the main window unless needed.
-
-*Update (ADR 0058):* step 1 is File Explorer starting `gracil.exe --explorer` with the picked
-paths. With **Always** in the middle there is no action, so the main window opens and asks.
+No console window. Do not initialize the main window unless needed. With **Always** at **Ask**
+there is no action, so the main window opens and asks.
 
 # 63. Additive Explorer requests
 
@@ -842,19 +827,26 @@ forgets by itself once the folder is gone, and **Prepare to delete Gracil** in t
 takes it out of File Explorer first (ADR 0058). It is free and open source
 (GPL-3.0-or-later), published on GitHub, outside the Microsoft Store.
 
+Releases are built on GitHub, on a clean Windows machine, from the tagged code alone, with the
+pinned FFmpeg (`scripts/ffmpeg.psd1`): a pushed tag ends in a draft release with the zip and that
+version's changelog notes, which the owner publishes (ADR 0079). No release is built or kept on
+the owner's computer; there `scripts/portable.ps1` only refreshes the Gracil in daily use in
+`Documents\Gracil` (ADR 0071, ADR 0073). A development build (`cargo run -p gracil-ui`) is
+**Gracil Dev**, which runs beside it (ADR 0075).
+
 # 66. Settings philosophy
 
-Settings stay intentionally small. Currently required: **Show mini-window when compressing from
-File Explorer** (default ON). In the tray menu too: **Show Gracil in Send to** (ADR 0050,
-ADR 0058) and **Start with Windows** (ADR 0054), both default ON, and **Show Gracil in File
-Explorer's menu…** (ADR 0058), off until the user turns it on and Windows' permission is given.
-Do not add GPU/CPU/codec selection, bitrate, FFmpeg arguments, thread count or advanced encoder
-configuration.
+Settings stay intentionally small. In the tray menu: **Show mini-window when compressing from
+File Explorer** (default ON), **Show Gracil in Send to** (ADR 0050, ADR 0058) and **Start with
+Windows** (ADR 0054), both default ON, and **Show Gracil in File Explorer's menu…** (ADR 0058),
+off until the user turns it on and Windows' permission is given. Do not add GPU/CPU/codec
+selection, bitrate, FFmpeg arguments, thread count or advanced encoder configuration.
 
-*Update (ADR 0025):* a second setting, requested by the product owner: **Always (Replace / ○ /
-Save a copy)** in the main window. The middle, the default, asks after each video as in §37.1; an
-end answers that question ahead of time for every video that finishes afterwards. *Update (ADR
-0060):* the middle is labeled **Ask**: **Replace · Ask · Save copy**.
+In the main window, requested by the product owner: **Always**, a pill reading **Replace · Ask ·
+Save copy** (ADR 0025, ADR 0060). **Ask**, the default, asks after each file as in §37.1; an end
+answers that question ahead of time for every file that finishes afterwards.
+
+Settings are kept in `data\settings.txt` beside `gracil.exe` (ADR 0054).
 
 # 67. Error handling
 
@@ -873,7 +865,8 @@ unsafe.
 Structured logging that can diagnose hardware detection, selected backend, FFmpeg invocation and
 exit code, GPU decode fallback, CPU fallback, file replacement, metadata preservation, queue state
 changes, IPC and Explorer requests, packaging/runtime issues. Do not log media contents. Avoid
-preserving private path history forever. Use reasonable log rotation.
+preserving private path history forever. Logs are plain text in `data\logs`, one file a day, the
+last week kept, with a cap on what a day's log takes (ADR 0064); they never leave the computer.
 
 # 70. Security
 
@@ -926,12 +919,15 @@ maintainability for tiny theoretical gains.
 # 76. Documentation quality
 
 Keep README.md, CHANGELOG.md, docs/architecture/, docs/decisions/,
-docs/development/. README explains what Gracil is, how to build/run it, the project layout,
-relevant dependencies and where deeper documentation lives.
+docs/development/, and the user-facing docs/how-gracil-works.md and docs/faq.md. README explains
+what Gracil is, how to build/run it, the project layout, relevant dependencies and where deeper
+documentation lives. Documentation is in English (ADR 0074).
 
 # 77. Development milestones
 
-Every milestone compiles and is testable.
+Every milestone compiles and is testable. All of them are built; Gracil 1.0 was released on
+2026-11-16. Where a milestone's original wording was later changed, the
+section it points to says how it is now.
 
 - **M0 — Repository foundation**: Git, Cargo workspace, directory structure, version 0.0.1-dev,
   README, CHANGELOG, fmt/clippy/test baseline, initial architecture documentation.
@@ -948,19 +944,22 @@ Every milestone compiles and is testable.
   icon and states, clean process lifetime.
 - **M6 — Tray mini-window**: mini-window, progress, pause/resume, drag and drop, persistent on
   focus loss, multi-monitor positioning, Explorer mini-window preference.
-- **M7 — File Explorer integration**: modern context menu, supported-file filtering,
-  multi-selection, dynamic Gracil (N), both commands, IPC forwarding, shell stability testing.
+- **M7 — File Explorer integration**: **Send to** and File Explorer's main menu, multi-selection,
+  folders, IPC forwarding (§57–§62; the context-menu extension and its count were replaced by
+  ADR 0058).
 - **M8 — Packaging**: a portable zip with FFmpeg and jpegli inside, built by
-  `scripts/portable.ps1` (ADR 0050).
-- **M9 — Image compression** *(planned, not started; added 2026-10-03 at the product owner's
-  request)*: compress photos and other images the way Gracil compresses video. See §77.1.
+  `scripts/portable.ps1` (ADR 0050), on GitHub for releases (ADR 0079).
+- **M9 — Image compression** *(added 2026-10-03 at the product owner's request, built
+  2026-10-04)*: compress photos and other images the way Gracil compresses video. See §77.1.
 
-Do not attempt to build every milestone in one giant pass.
+Do not attempt to build every milestone in one giant pass. Compressing documents is a proposal,
+not a milestone, and is not built (ADR 0062).
 
 # 77.1 Image compression
 
-*Added 2026-10-03 as a plan; built 2026-10-04. All open decisions below are settled by
-[ADR 0034](decisions/0034-image-standard.md), Gracil's image standard.*
+*Added after the original specification; built 2026-10-04. Gracil's image standard is
+[ADR 0034](decisions/0034-image-standard.md), made faster without changing its results by
+ADR 0068 and ADR 0078.*
 
 What Gracil reads, and what it writes (videos: §77.2):
 
@@ -976,69 +975,56 @@ read inside Gracil and by a hidden FFmpeg; no window ever opens.
 
 Gracil compresses images with the same philosophy as video:
 
-- **Two output formats, chosen by Gracil, never by the user** *(decided 2026-10-03 by the product
-  owner)*. A PNG stays a PNG, made smaller without losing anything (a lossless optimizer such as
-  oxipng), so screenshots, graphics and transparency stay exactly as they were. Every other image
-  (JPEG, WebP, HEIC, TIFF, BMP and the rest) becomes a JPEG, made with Google's jpegli encoder at
-  a quality where the difference can't be seen. JPEG opens everywhere, the way MP4 does for video
-  (ADR 0012), and a JPEG keeps its name. An image that would come out bigger, as an iPhone's HEIC
-  often would, is not kept (§40.1).
-- **One exact compression, always.** A fixed, tested quality setting, like the fixed H.265
-  settings for video. No sliders, presets or advanced options (§66).
-- **The same flows.** Drop images on the main window or the mini-window, or use File Explorer's
-  menu (which would then count images as well as videos, **Gracil (N)**). The same choices after
-  compressing: **Replace** or **Save copy**, and the **Always** setting (ADR 0025). The same safe
-  replacement (§39) and collision-safe names (§40).
+- **Two output formats, chosen by Gracil, never by the user.** A PNG stays a PNG, made smaller
+  losslessly (oxipng) or with a palette that looks the same, so screenshots, graphics and
+  transparency stay as they were. Every other image (JPEG, WebP, HEIC, TIFF, BMP and the rest)
+  becomes a JPEG, made with Google's jpegli encoder at a quality where the difference can't be
+  seen, or a PNG when it has transparency, which JPEG can't hold. JPEG opens everywhere, the way
+  MP4 does for video (ADR 0012), and a JPEG keeps its name. An image that would come out bigger,
+  as an iPhone's HEIC often would, is not kept (§40.1).
+- **One standard, always.** Fixed, tested settings, like the H.265 standard for video. No
+  sliders, presets or advanced options (§66).
+- **The same flows.** Drop images on the main window or the mini-window, or send them from File
+  Explorer (§58). The same choices after compressing: **Replace** or **Save copy**, and the
+  **Always** setting (ADR 0025). The same safe replacement (§39) and collision-safe names (§40).
 - **Never reject an image** because it is unusual; fall back to simpler ways first. A result that
   is not smaller is not kept (§40.1).
 - **Keep what matters**: date taken, orientation, color profile and the other metadata people
   expect a photo to keep, as for video (§41).
 - Everything stays local and private (§82).
 
-Open decisions, to settle before any work starts:
+The decisions (ADR 0034 unless named):
 
-1. ~~The final format~~: decided above (PNG stays PNG; everything else becomes JPEG).
-2. **The exact compression**: jpegli's fixed quality and the PNG optimizer's settings, verified on a
-   representative set of photos, screenshots and graphics, following in spirit the quality
-   standard Gracil first settles on for video. *Agreed direction (2026-10-03):* the same
-   rules as video. Every image keeps its resolution (ADR 0033); a JPEG is made at jpegli's
-   "looks the same" distance and kept only when clearly smaller; an image already compressed is
-   compressed again at a looser distance, without asking, or keeps the quiet "!"; never heavier.
-   *Decided in ADR 0034:* JPEG at jpegli distance 1.0, fixed; compressing again searches distances
-   1.5–3.0 for SSIMULACRA2 80 or more; PNG lossless plus a palette at SSIMULACRA2 90 or more, and
-   80 or more when compressing again; at most 80% of the original, as for video.
-   *Update (ADR 0078):* a PNG's dithered palettes are tried only when the plain one with the most
-   colors scores within 5 points of what is needed, and a palette too big to keep is still
-   measured, so the ones with fewer colors are not made for nothing. The files kept are the same.
-3. **Which images are accepted** *(partly decided 2026-10-03 by the product owner)*:
-   - An image with transparency that is not a PNG (a WebP or TIFF, for example) becomes a PNG,
-     so its transparency is kept; JPEG has none.
-   - **Animated images** (GIF, animated PNG, animated WebP) are not supported for now: they are
-     neither photo nor video. They are left exactly as they are, and are a plan for the future.
+1. **The format**: PNG stays PNG; everything else becomes JPEG, or PNG with transparency.
+2. **The compression**: the same rules as video. Every image keeps its resolution (ADR 0033).
+   A JPEG is made at jpegli distance 1.0, fixed; compressing an image already compressed searches
+   distances 1.5–3.0 for SSIMULACRA2 80 or more, without asking. A PNG is made lossless plus a
+   palette at SSIMULACRA2 90 or more, and 80 or more when compressing again. Kept only at most
+   80% of the original, as for video. A PNG's dithered palettes are tried only when the plain one
+   with the most colors scores within 5 points of what is needed, and a palette too big to keep
+   is still measured, so the ones with fewer colors are not made for nothing (ADR 0078).
+3. **What is accepted**:
+   - An image with transparency that is not a PNG (a WebP, TIFF, HEIC or AVIF, for example)
+     becomes a PNG, so its transparency is kept (ADR 0048 for HEIF and AVIF).
+   - **Animated images** (GIF, animated PNG, animated WebP) are not supported: they are neither
+     photo nor video, and are left exactly as they are.
    - **Camera RAW** files are not accepted: they are a photographer's negative, and turning one
      into a JPEG is developing it, not compressing it.
    - **JPEG XL** files are not accepted either: the format never became common, and whoever made
      one already has a well-compressed image.
-   - HDR and very large images: decided in ADR 0034 (a gain-map photo becomes its normal picture;
-     true HDR is left as it is for now; no size limit).
-4. **The engine**: FFmpeg, which Gracil already relies on, or a dedicated image library.
-   *Proposed (2026-10-03):* Windows itself (WIC) reads images, with FFmpeg as a fallback; jpegli
-   makes the JPEGs (FFmpeg has no jpegli and a weak JPEG encoder); oxipng optimizes PNGs.
-   *Decided:* the JPEG encoder is jpegli only (Google's, the newest and the best at high
-   quality), built by Gracil from Google's official repository (github.com/google/jpegli) at a
-   pinned commit and shipped inside the zip; nothing from libjxl or JPEG XL is used (ADR
-   0034). It reads JPEG directly (through the libjpeg-turbo copy in jpegli's repository).
-   *Built (2026-10-04):* other formats are read inside Gracil (the `image` crate for WebP, TIFF
-   and BMP) or by the hidden FFmpeg (HEIC, HEIF, AVIF); WIC was set aside (ADR 0034, item 9).
-5. **How images and videos share the list**, the dial and the tray without adding complexity.
-   *Decided 2026-10-03 by the product owner (ADR 0034, item 13):* one list for every file;
-   images are compressed before waiting videos, since they take seconds; with more than one file
-   the dial's whole circle is the whole list, and the marble leaves a hollow marble at the end of
-   each file's part. A design pass to make the dial more refined comes later. *Built
-   (2026-10-04):* the one list and images first (since superseded by ADR 0040), and the dial and
-   the tray for the whole list. *Changed 2026-10-04 by the product owner:* no hollow marbles; the
-   ring is titled with how many files it holds (**Compressing 24 files**), shows the whole list's
-   percentage, and never closes before the real end of the list.
+   - A gain-map photo becomes its normal picture; true HDR (PQ, HLG) is left as it is; there is
+     no size limit.
+4. **The engine**: the JPEG encoder is jpegli only, built by Gracil from Google's official
+   repository (github.com/google/jpegli) at a pinned commit and shipped inside the zip; nothing
+   from libjxl or JPEG XL is used. jpegli reads JPEG directly (through the libjpeg-turbo copy in
+   its repository). Other formats are read inside Gracil (the `image` crate for WebP, TIFF and
+   BMP) or by the hidden FFmpeg (HEIC, HEIF, AVIF); Windows' own WIC is not used. oxipng and a
+   palette quantizer make PNGs; SSIMULACRA2 is measured inside Gracil (ADR 0068).
+5. **One list for every file**, the ring and the tray for the whole list. Files are worked on
+   side by side: one video, images beside it, the next file getting ready (ADR 0040). With more
+   than one file the ring is titled with how many it holds (**Compressing 24 files**), shows the
+   whole list's percentage, and never closes before the real end of the list; how it looks is
+   ADR 0076.
 
 # 77.2 Video formats
 
@@ -1053,148 +1039,68 @@ These are the extensions offered by the file picker and File Explorer's menu
 (`media::VIDEO_EXTENSIONS`). Any other file dropped on the window that is not a known image is
 handed to FFmpeg as a video and tried, never rejected up front (§2).
 
-# 77.3 Planned
+# 77.3 Asked for after the plan
 
-*Recorded 2026-10-04 by the product owner. Both built the same day (ADR 0036, §32.1, §32.2).*
+*What the product owner asked for once Gracil was working, each now built; the ADR holds the
+reasons, and the section named holds the rule.*
 
-- **How much was saved.** After compressing many videos or images there is no way to see how much
-  smaller each file became, nor how much the whole batch saved. Show both, quietly.
-- **Getting the dial back.** In a long list, selecting a file that failed (for example "Already
-  compressed") replaces the ring in the main window, and the only way back to the ring is to take
-  that file off the list. Going back to the work in progress must be easy and natural.
+- **How much was saved, and the way back to the work**: sizes before and after, the list added
+  up, and a quiet line back from a picked file (ADR 0036, §32.1, §32.2).
+- **A list that opens at once**, however long (§32), and **numbers in the system's format**
+  (§32.2).
+- **A clear "done"**: the ring's middle turns green with a check mark, with the room saved and
+  how the list went (ADR 0039, now one of the ring's faces, ADR 0076), and **Clear the list**
+  offered under it.
+- **A ring without its track** and no line between pause and stop (ADR 0038).
+- **Several files at once, never in the way**: one video at a time, since one already fills the
+  encoder; images several at a time on the processor beside it, fewer when they are very large;
+  the next file got ready while the current one compresses, for every kind of file; more while
+  the computer is idle, less as soon as the person works in other applications (ADR 0040, §26,
+  §33).
+- **Carry on after closing**: files left unfinished are offered with **Continue** the next time
+  (ADR 0042). **Stop means stop**: the whole list at once, offered with **Continue**; Exit never
+  waits on a slow drive (ADR 0044).
+- **Never too hot**: Gracil holds the card it uses at about 70 °C with short unseen rests, never a
+  stop to cool down (ADR 0043, ADR 0045, ADR 0046), and Intel and AMD cards are read too
+  (ADR 0051).
+- **Never harm the computer**: Windows itself holds Gracil to part of the processor, memory and
+  drive (ADR 0049); efficiency mode while the person works or on battery (ADR 0051); idle only
+  when nobody needs the computer, laptops capped at half, on battery below 30 % nothing new
+  starts and below 15 % everything waits (**Low battery · waiting**), Gracil's tools together
+  hold at most about 65 % of memory, and above 4K the quality is measured at 4K (ADR 0063).
+- **Videos from recent iPhones**, whose spatial sound FFmpeg can't read (ADR 0047), and
+  **see-through HEIC and AVIF** (ADR 0048).
+- **Free and open source, outside the Store**, wholly portable (ADR 0050, ADR 0053, ADR 0054,
+  §64). **Intel and AMD graphics compress too** (ADR 0052, §22).
+- **Natural from the first use** (ADR 0055), **the list unfolds** (ADR 0056), **Always stays in
+  sight** (ADR 0057), **Gracil really in File Explorer** (ADR 0058, §57), **the keyboard reaches
+  everything** (ADR 0059), **reasons in sight** (ADR 0060), **Windows' accessibility settings**
+  (ADR 0061).
+- **Robust with real files** (ADR 0064, §39, §40, §72), **speed** (ADR 0065, ADR 0067,
+  ADR 0068, ADR 0070, ADR 0078), **quiet states in words and a lighter start** (ADR 0066),
+  **a quiet time left** (ADR 0069, §31).
+- **The ring stays, and the window lays itself out around it** (ADR 0076, §31, §32, §55).
 
-*Recorded 2026-10-04 by the product owner, after compressing a cloud-drive folder of more than
-15,000 files. Not built; to be evaluated before building.*
+Not built: **compressing documents** (Word, Excel, PowerPoint, OpenDocument, PDF) by making the
+pictures inside them smaller is a proposal only, waiting for the product owner's decision
+([ADR 0062](decisions/0062-compressing-documents.md)).
 
-- **A list that opens instantly.** With a very long list (15,031 files and growing while Gracil
-  still looks through the folder), opening and closing **View files** in the main window takes a
-  few seconds. It must respond at once, however long the list is. *Built 2026-10-04 (§32).*
-- **Numbers in the system's format.** Large counts must use the separators Windows is set to,
-  for example *15,031 files* rather than *15031 files*. The same goes for every number Gracil
-  shows. *Built 2026-10-04 (§32.2).*
-- **A clear "done".** When the work is finished, the main window shows it instead of leaving the
-  last state of the ring: for example the middle of the ring filled with a green check mark, and
-  the amount saved ("130 MB smaller") brought to the center, larger, with a subtle animation, just
-  below the ring. It could add a short summary of the whole batch, such as *22 files compressed*
-  and *4 files were already compressed*. The aim is quick feedback that Gracil has finished,
-  above all after a long list. The exact form is still open. *Built 2026-10-04 (ADR 0039).*
-- **A ring without its track.** The track the marble rolls along in the main window (the "pipe"
-  of the ring) is no longer drawn: only the marble and the part it has filled are seen, so the
-  marble fills an invisible circle. The thin line between pause and stop in the middle of the
-  ring goes too. Meant to look more elegant and give Gracil personality. Changes the look recorded
-  in ADR 0014, so an ADR amends it when it is built. *Built 2026-10-04 (ADR 0038).*
-- **Several images at once.** Gracil compresses one file at a time, so a long list of images
-  (14,916 still waiting in the owner's folder) takes far longer than it needs to. Images should
-  be compressed several at a time, and fewer when the images are very large, so memory never runs
-  short. On a network or cloud drive this also overlaps the waiting for downloads and uploads.
-  Pause and stop act on all of them together, and the ring shows the progress of the whole list
-  (ADR 0034). *Built 2026-10-04 (ADR 0040), the ring for the whole list included.*
-- **Fast, but never alarming.** *Decided by the product owner.* Gracil must never make the
-  computer feel slow, and never run it flat out: the fans would roar, and that would not inspire
-  trust. How much Gracil uses adapts to what the user is doing: more while the computer is
-  otherwise idle, less as soon as the user is working in other applications. This holds even for
-  a list of 15,000 files. High performance, yes; scaring the user, never. It applies to all the
-  work, not just images. *Built 2026-10-04 (ADR 0040).*
-- **One video at a time.** *Decided by the product owner.* Two videos are never compressed at
-  once: one video already uses all of the graphics card's encoder (or the processor), so two
-  would each go at half speed and gain nothing. *Built 2026-10-04 (ADR 0040).*
-- **Get the next file ready during the current one.** *Decided by the product owner, as the base
-  of how Gracil works.* Every file's work has two stages: getting ready (for a video, the short
-  test samples that choose its compression, mostly on the processor) and compressing (for a
-  video, mostly on the graphics card). While one file compresses, the next one gets ready, instead
-  of the two stages always following each other. This is built once, for every kind of file:
-  videos, images, and any kind added later. *Built 2026-10-04 (ADR 0040).*
-- **Images on the processor while a video is on the graphics card.** *Decided by the product
-  owner.* While a video compresses on the graphics card, images compress on the processor, so
-  neither sits idle. Still within "fast, but never alarming". *Built 2026-10-04 (ADR 0040).*
-- Together these change the rule that only one file is worked on at a time (§33, the queue) and
-  the order of ADR 0034 (images before waiting videos), so an ADR records them when they are
-  built. *Built 2026-10-04 (ADR 0040).*
-- **Carry on after closing.** *Decided by the product owner.* If Gracil closes before its list is
-  done (Exit, a sudden stop, the computer turned off), the next time it opens it offers to carry
-  on with the files left, with a button. *Built 2026-10-04 (ADR 0042).*
-- **Never too hot.** *Decided by the product owner.* When the graphics card or the processor
-  Gracil uses gets too hot, Gracil does less by itself: fewer images at once when warm, and
-  everything waits when too hot, until the computer has cooled down. *Built 2026-10-04 (ADR
-  0043).* *Changed by the product owner:* Gracil never stops to cool down; it keeps a margin
-  instead, with short unnoticed rests that grow as the card warms. *Built 2026-10-04 (ADR 0045).*
-- **Stop means stop.** *Decided by the product owner.* Stop stops the whole list at once, and
-  the files not done are offered with **Continue**; Exit never waits on a slow drive. *Built
-  2026-10-04 (ADR 0044).*
+# 78. UI decisions, no longer temporary
 
-*Recorded 2026-10-05 by the product owner.*
+The original specification left these unfinished; all are now decided, and none is coupled to
+core logic:
 
-- **A steady temperature.** *Decided by the product owner.* Instead of resting harder the warmer
-  the card gets and then speeding back up, Gracil holds a safe temperature, about 70 °C, and
-  works as much as that temperature allows. Rests and work alternate fast enough that the parts
-  stay at an even temperature. *Built 2026-10-05 (ADR 0046).*
-- **Back to the start when done.** *Decided by the product owner.* When the whole list is done,
-  **Clear the list** is offered right under the summary, so starting again feels natural. *Built
-  2026-10-05.*
-- **Videos from recent iPhones.** Their spatial sound can't be read by FFmpeg, which made every
-  one of them fail. It is left out while the usual sound is kept. *Built 2026-10-05 (ADR 0047).*
-- **See-through HEIC and AVIF.** These were refused. Their transparency is now kept. *Built
-  2026-10-05 (ADR 0048).*
-- **Opening Gracil again shows it.** Opening Gracil from Start or the taskbar while it runs next
-  to the clock must open its window. *Fixed 2026-10-05.*
-- **Never harm the computer.** *Asked by the product owner,* with simple laptops in mind: no
-  overheating, no roaring fans, no memory or disk filled. Windows itself holds Gracil to part of
-  the processor (less while the person works and on battery), to part of the memory, and to a
-  drive with room to spare. *Built 2026-10-05 (ADR 0049).*
-- **Free and open source, outside the Store.** *Decided by the product owner.* Gracil can't stay
-  in the Microsoft Store, even for free, so it is published on GitHub as a portable zip with
-  FFmpeg inside, keeping its data beside itself, with Gracil in File Explorer's classic menu.
-  *Built 2026-10-05 (ADR 0050).*
-- **Cooler while in use, and any graphics card.** The tools run in Windows' efficiency mode
-  while the person works or the computer is on battery, and the temperature of Intel and AMD
-  cards is read from their driver and held like an NVIDIA card's. *Built 2026-10-05 (ADR 0051).*
-- **Intel and AMD graphics compress too.** *Asked by the product owner.* After NVIDIA and before
-  the processor, each checked with a tiny test compression. *Built 2026-10-05 (ADR 0052).*
-- **Ready for GitHub.** *Asked by the product owner.* Everything left from the Store and anything
-  no longer needed is removed, FFmpeg is never downloaded, and one Gracil in daily use is kept
-  in one place. *Built 2026-10-05 (ADR 0053).*
-- **Wholly portable.** *Asked by the product owner.* Everything in Gracil's own folder and
-  nowhere else; its start with Windows forgets itself once the folder is gone; **Start with
-  Windows** and **Prepare to delete Gracil** in the tray menu; GPL-3.0-or-later, with the
-  licenses of every Rust library in the zip. *Built 2026-10-05 (ADR 0054).*
-- **Natural from the first use.** *Asked by the product owner* before the first release: someone
-  opening Gracil for the first time knows what to do without thinking, nothing is out of place
-  or extra, nothing looks stuck or says something untrue. Folders can be dropped, the empty
-  window shows only where to drop, the done screen is honest when nothing was compressed,
-  getting ready breathes, Exit counts every loss, and a few keys work. *Built 2026-10-05 (ADR
-  0055).*
-- **The list unfolds.** *Asked by the product owner.* **View files** unfolds and folds away
-  instead of appearing at once, as gently as the rest of Gracil moves. *Built 2026-10-06 (ADR
-  0056).*
-- **Always stays in sight.** *Asked by the product owner.* The **Always** pill is at the foot of
-  the main window even before there are files, since File Explorer's menu follows it and it is
-  best set before a large folder starts. *Built 2026-10-06 (ADR 0057).*
-- **Gracil really in File Explorer.** On Windows 11, File Explorer never showed the menu Gracil
-  wrote for the current user. Gracil is now in **Send to** for everyone, and its own commands in
-  File Explorer's menu can be turned on from the tray, with Windows' permission. Their words no
-  longer change with **Always**, which Gracil applies itself. *Send to built 2026-10-07; the
-  main menu 2026-10-14 (ADR 0058).*
-- **Safe on any computer.** *Asked by the product owner* after a review of what could still
-  strain a simple laptop. The computer counts as idle only when nobody needs it (no film, game,
-  presentation or call) and its warmth can be read; a laptop never gets more than half of the
-  processor and its tools always run in efficiency mode; on battery below 30 % nothing new starts
-  and below 15 % everything waits, saying **Low battery · waiting**, until it is plugged in; the
-  computer is read only while there is work; only the card doing the work is watched; Gracil's
-  tools together hold at most about 65 % of memory; above 4K the quality is measured at 4K;
-  work rests while the computer sleeps and a step sleep cut short is tried again; room on a drive
-  counts the other files compressing onto it; and the window is drawn by the processor when the
-  graphics card can't. *Built 2026-10-14 (ADR 0063).*
+- **Icon**: the marble on a neutral tile (§3; ADR 0015, ADR 0016, ADR 0031).
+- **Colors**: Windows 11's own and the user's accent, following Windows' light or dark theme with
+  a soft fade, and its contrast themes (ADR 0031, ADR 0061).
+- **Typography**: Segoe UI Variable, as Windows 11 uses it.
+- **Layout and styling**: the ring, the large and small focus, cards (ADR 0076).
+- **Animation**: easing for what follows the work or the pointer, springs for what answers a
+  choice, nothing moving when Windows' **Animation effects** are off (ADR 0061, ADR 0076).
+- **Wording**: English and Spanish, kept together in `crates/gracil-ui/src/text.rs`
+  (ADR 0011).
 
-# 78. Temporary UI decisions
-
-Intentionally unfinished: final icon, colors, typography, animation language, detailed styling,
-marketing copy, final localized wording. Use clean temporary solutions; do not couple core logic
-to them.
-
-*Update (ADR 0015):* the icon (the marble) and the colors (the Piedra palette) are now decided,
-and Gracil follows Windows' light or dark theme with a soft fade.
-
-*Update (ADR 0031):* the colors are now Windows 11's own, with the user's accent color.
+They can still be refined, through an ADR like any other decision.
 
 # 79. Focus + Drawer is not temporary
 
@@ -1228,14 +1134,12 @@ If a requirement becomes technically problematic, explain the conflict before ch
 
 All video processing is local. Do not upload videos, metadata, filenames or paths. No telemetry,
 no analytics, no crash reporting that sends user data without explicit future approval. Gracil
-works offline after installation, apart from the one-time FFmpeg download described in §2.2.
-
-*Update (ADR 0053):* there is no FFmpeg download: FFmpeg comes inside Gracil's zip, so Gracil never
-connects to the internet at all (§2.2).
+never connects to the internet: FFmpeg comes inside its zip, and there is no download (§2.2,
+ADR 0053).
 
 # 84. Definition of success
 
-A normal Windows 11 user can install Gracil, drag videos into it, understand it immediately, add
+A normal Windows 11 user can unpack Gracil, drag videos into it, understand it immediately, add
 more files without losing existing ones, compress them without understanding codecs, pause and
 resume, safely replace originals, save compressed copies, preserve important metadata, use the
 best hardware path automatically with CPU fallback, select several videos in Explorer, right-click,

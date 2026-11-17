@@ -1,6 +1,8 @@
 # 0009 — In the main window, the user chooses what to do with a result after compressing
 
-**Status:** Accepted.
+**Status:** Accepted, built (2026-10-02). Amended by
+[0010](0010-replacing-updates-modified-date.md); [0025](0025-always-replace-or-copy.md) lets its
+question be answered ahead of time.
 
 **Context.** The specification defines two output intentions, replace and save a copy (§37), but
 not when the main window asks for one. File Explorer chooses up front, with two commands (§57–§58).

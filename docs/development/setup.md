@@ -19,6 +19,9 @@
 cargo test -p gracil-core
 ```
 
+The tests that run a real FFmpeg (`crates/gracil-core/tests/compress.rs`) use the one on `PATH`
+and skip themselves, with a note, when there is none, as on GitHub's machines.
+
 Every commit must pass `scripts/check.ps1`. On Linux, such as in a cloud session,
 `scripts/check.sh` runs what can run there ([Developing from the cloud](cloud.md)).
 
@@ -31,9 +34,10 @@ engine alone, without the interface: proof that the engine stands on its own (AD
 
 `cargo run -p gracil-ui` opens a development build, **Gracil Dev**. It is a Gracil of its own:
 it runs beside the Gracil in daily use and never hands it its files
-([ADR 0075](../decisions/0075-a-development-build-of-its-own.md)). To compress, it needs the
-pinned FFmpeg build on `PATH` ([FFmpeg](ffmpeg.md)); images also need `cjpegli.exe`, built once
-with `scripts/build-jpegli.ps1`. It never opens a console window, even in development builds, so
+([ADR 0075](../decisions/0075-a-development-build-of-its-own.md)); its window and tray say
+**Gracil Dev**. To compress videos, it uses the FFmpeg on `PATH`, which should be the pinned
+build ([FFmpeg](ffmpeg.md)); images need `cjpegli.exe`, built once with
+`scripts/build-jpegli.ps1`, which the build finds in `target\jpegli`. It never opens a console window, even in development builds, so
 what you test is what users see. Logs and crashes go to the `data\logs` folder beside the build,
 such as `target\debug\data\logs` (ADR 0050). A build in `target` keeps its own settings there
 and never puts itself in File Explorer or in the start with Windows.

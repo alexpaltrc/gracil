@@ -46,6 +46,13 @@ portable zip only, with no installer and no separate Dev copy; data beside `grac
 - Versioning, changelog style and commit rules: `docs/development/versioning.md`.
   The changelog is user-facing, plain language, no technical terms.
 - Tests that touch the filesystem use fresh temporary directories only.
+- **The documentation always says what is true today** (ADR 0080). Every commit that builds,
+  changes or drops something searches `docs/`, `README.md` and `CLAUDE.md` for it and updates
+  every place that mentions it, including the decision record's **Status** line, its index row,
+  and the status of any earlier record it changes. Only decision records keep history; the
+  rest describe the present. *Planned*, *proposed*, *later*, *for now* or "(in progress)" only
+  for what is truly not built. Nothing that ages by itself (current version, list of releases).
+  Before every release, those words are searched for and each one confirmed or fixed.
 - `docs/how-gracil-works.md` is the user-facing explanation of how Gracil works. Update it in the
   same commit as any change to behavior a user could notice or ask about. Plain language, no
   jargon; mark decided-but-unbuilt behavior "(in progress)" and remove the mark once it ships.
@@ -61,7 +68,8 @@ portable zip only, with no installer and no separate Dev copy; data beside `grac
 | `crates/gracil-core` | The compression engine: pure Rust, also built and tested on Linux |
 | `crates/gracil-ui` | The app: windows, tray, mini-window (Iced + WGPU, DX12) |
 | `crates/gracil-windows` | Windows integration; the only crate allowed `unsafe` |
-| `scripts/` | `check.ps1` / `check.sh` (checks), `portable.ps1` (the zip, with the FFmpeg pinned in `ffmpeg.psd1`), `update.ps1` (daily copy), `build-jpegli.ps1`, `licenses.ps1`, `icons.ps1` |
+| `scripts/` | `check.ps1` / `check.sh` (checks), `portable.ps1` (the zip, with the FFmpeg pinned in `ffmpeg.psd1`), `update.ps1` (daily copy), `build-jpegli.ps1`, `licenses.ps1`, `icons.ps1`, `release-notes.ps1` (a release's notes from the changelog), `cloud-setup.sh` (prepares a cloud session) |
+| `.github/workflows/` | `check.yml` (checks on Windows and Linux), `release.yml` (a release's zip, from a pushed tag) |
 | `docs/` | Specification, architecture, decisions, development guides, user explanations |
 
 - **Check:** `scripts/check.ps1` before every commit; Clippy warnings are errors.

@@ -10,8 +10,8 @@ How Gracil finds and drives FFmpeg. Decision records:
 `toolchain::find` runs at startup, off the UI thread:
 
 1. The copy in Gracil's zip, the `ffmpeg` folder beside `gracil.exe` (`Origin::Bundled`).
-2. While developing, every folder on `PATH` holding both `ffmpeg.exe` and `ffprobe.exe`
-   (`Origin::System`).
+2. Every folder on `PATH` holding both `ffmpeg.exe` and `ffprobe.exe` (`Origin::System`):
+   what a development build uses, since it has no `ffmpeg` folder beside it.
 
 The first one whose `-encoders` listing includes `libx265` wins. Gracil never downloads FFmpeg;
 without a usable copy it shows a quiet line asking to download Gracil again.
@@ -97,7 +97,10 @@ source within 1% or one second.
 - x265: `-preset medium -x265-params log-level=error -crf <level>`, 10-bit when supported.
   `pools` follows the share of the processor the tools have at that moment (ADR 0049), and x265's
   output depends on it, not only through the frames it encodes at once it picks from it: the
-  search and the encode can encode one level a little differently (ADR 0067, item 9).
+  search and the encode can encode one level a little differently (ADR 0067, item 9). For a
+  picture larger than 4K, when the memory free is less than x265 would usually take (about
+  250 bytes a pixel) or unknown, `frame-threads=1` keeps its memory down (`standard::x265_lean`,
+  ADR 0063).
 - HEVC is tagged `hvc1` so Apple devices and Windows players accept it.
 - **Size and frame rate** (`standard::output_rate`): the picture size is never changed (ADR 0033). An
   average above 30.5 fps becomes 30, or 30000/1001 for the NTSC family; slower videos are left as
@@ -112,8 +115,8 @@ it, the next guess is on a straight line through their scores; with only levels 
 the search steps past the highest by the score it has to spare, at the points per level it lost
 since the nearest measured level at most three below that also reaches it, or about a point per
 level without one (ADR 0067); otherwise it halves what is left. The first level measured is the
-one the last video with the same encoder, size step and source codec needed (`search::Hints`, in
-memory only, ADR 0065), or, for the first video of its kind, a guess from the source's bits per
+one the last video with the same encoder, size step and source codec needed (`search::Hints`,
+ADR 0065, kept from one start to the next in `hints.txt` in the data folder, ADR 0070), or, for the first video of its kind, a guess from the source's bits per
 pixel of each frame: two below the top of the range at 0.03 or less, one lower per doubling
 (ADR 0067). The search for compressing again starts at the level the first search chose, or the
 one the last such video needed. When the highest level reaching the target is predicted too big,
@@ -132,7 +135,10 @@ whole search. One FFmpeg process per sample does both jobs, writing nothing to d
 ```
 
 The loopback decoder (`-dec 0:0`) decodes what the encoder just produced. The last `VMAF score:`
-line in the error output is the score; standard output lists every encoded frame's size.
+line in the error output is the score; standard output lists every encoded frame's size. Above
+4K, both pictures are measured scaled down to fit 3840 by 2160 (`standard::measured_size`, a
+`scale` before the reference's `format`, or `scale_cuda` with its size on the GPU, ADR 0063):
+the encoder still encodes the full picture.
 
 **CUDA decoding (ADR 0065).** For an 8-bit or 10-bit 4:2:0 source (`pix_fmt` `yuv420p` or
 `yuv420p10le`, the 10-bit kind only for a 10-bit tier), the sample is decoded with `-hwaccel cuda
@@ -189,7 +195,8 @@ under 0.02 bits per pixel of each frame, otherwise when a measured level is too 
 estimated from it on a log scale, is at least 85% of the limit. If an encode fails, the size is
 taken as unknown and the search goes on.
 
-The search is skipped (fixed level: CQ 27, CRF 26) for videos under 6 s, of unknown length, under
+The search is skipped (fixed level, `standard::fallback_level`: NVENC CQ and AMF QP 27, Quick
+Sync ICQ 24, x265 CRF 26) for videos under 6 s, of unknown length, under
 60 s with x265, or without `libvmaf`, and whenever a measurement fails. If no level reaches 95, the
 best quality in the range is used. Attempts with a different encoder than the first use their
 fixed level. Cancelling stops the search. Every measured level, its score and predicted video size

@@ -1,8 +1,9 @@
 # 0065 — Speed: getting ready sooner, and a window that keeps up with any list
 
-**Status:** Accepted, built (2026-10-14); item 7 not tried on Intel or AMD hardware. Decided by
-the product owner after a measured review of where time goes on a strong graphics card with an
-older processor (RTX 5060 with a Ryzen 5 5600G, 6 cores / 12 threads).
+**Status:** Accepted, built (2026-10-14); item 7 not tried on Intel or AMD hardware; item 3 changed
+by [ADR 0070](0070-hints-kept-between-starts.md) (2026-10-15). Decided by the product owner after a
+measured review of where time goes on a strong graphics card with an older processor (RTX 5060
+with a Ryzen 5 5600G, 6 cores / 12 threads).
 
 *Update (2026-10-14), items 4 and 7:* a graphics card's test encode or decode that takes longer
 than 20 seconds, as with a driver that hangs, is stopped and counts as the card not being able

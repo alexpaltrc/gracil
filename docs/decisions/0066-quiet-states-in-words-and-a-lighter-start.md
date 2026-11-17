@@ -95,6 +95,7 @@ sooner or more often than it needed:
     those files are simply compressed again.
 
 **Considered and not done:** an estimate of the time left, waiting for a product decision.
+*Done in [ADR 0069](0069-a-quiet-time-left.md) (2026-10-14).*
 
 **Consequences.**
 
@@ -108,4 +109,5 @@ sooner or more often than it needed:
   computer): the words, the mini-window's fit in Spanish, the reveal without a white flash and
   the steadier frame rate should be looked at once it runs. `Report::Downloading(false)` is not
   sent yet: the download's end is known to the chunked read of online-only files being built
-  alongside, which should send it.
+  alongside, which should send it. *Done when the two were merged (2026-10-14): getting a file
+  ready sends it once the download is over.*

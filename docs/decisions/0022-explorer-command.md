@@ -1,6 +1,8 @@
 # 0022 — File Explorer's menu is one Rust `IExplorerCommand` with two subcommands
 
-**Status:** Accepted. Carries out [0006](0006-explorer-extension-forwards-only.md).
+**Status:** Accepted, built (2026-10-03). Superseded by
+[ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07), below. Carries out
+[0006](0006-explorer-extension-forwards-only.md).
 
 **Changed** by [ADR 0050](0050-portable-and-open-source.md) (2026-10-05): Gracil registers the
 command itself, for the current user, in File Explorer's classic menu (**Show more options** on

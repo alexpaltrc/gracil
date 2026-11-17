@@ -1,7 +1,7 @@
 # 0012 — Every compressed video is an MP4
 
-**Status:** Accepted. Supersedes the container rule of spec §45 ("keep the source's container when
-it can hold HEVC").
+**Status:** Accepted, built (2026-10-02). Supersedes the container rule of spec §45 ("keep the
+source's container when it can hold HEVC").
 
 **Context.** Gracil kept MOV and MKV videos in their own format and turned everything else into
 MP4. The product owner wants a single result format, to stay with Gracil's philosophy: one rule

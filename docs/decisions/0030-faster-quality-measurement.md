@@ -1,6 +1,7 @@
 # 0030 — Faster quality measurement: every other frame, and on the GPU when FFmpeg can
 
-**Status:** Accepted. Decided by the product owner (2026-10-03). Amends ADR 0028's search.
+**Status:** Accepted, built (2026-10-03). Decided by the product owner (2026-10-03). Amends
+ADR 0028's search.
 
 **Context.** On the product owner's machine (RTX 5060, Ryzen 5 5600G, 6 cores / 12 threads),
 each 4 s Full HD sample took about 2.2 s, and used about 15 s of processor time: about 1.2 s and

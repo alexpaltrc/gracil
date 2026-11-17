@@ -1,7 +1,7 @@
 # 0021 — The mini-window opens from the tray icon, and its one setting lives in the tray menu
 
-**Status:** Accepted. Changes point 2 of [0020](0020-tray.md): a click on the tray icon now
-shows the mini-window instead of the main window.
+**Status:** Accepted, built (2026-10-03). Changes point 2 of [0020](0020-tray.md): a click on the
+tray icon now shows the mini-window instead of the main window.
 
 **Context.** Spec §55 asks for a small window tied to the tray: the current video, its progress,
 pause, and room to drop more videos. It stays open when the user clicks elsewhere, and goes where
@@ -26,7 +26,10 @@ setting does not justify one.
    making the window took 400–500 ms at every click, nearly all of the wait. It is now made once,
    hidden, two seconds after Gracil starts (or at the first click, if sooner), and closing it only
    hides it; while hidden it draws nothing. A click shows it in 15–50 ms (115 ms the first time),
-   still out of sight until it has drawn itself and then placed by the icon.
+   still out of sight until it has drawn itself and then placed by the icon. *Changed by
+   [ADR 0066](0066-quiet-states-in-words-and-a-lighter-start.md), item 9 (2026-10-14): it is no
+   longer made two seconds after start, but when the pointer first comes to the tray icon or files
+   come.*
 4. The setting **Show mini-window when compressing from File Explorer** is a checkable item in the
    tray menu, saved as one line in `<data folder>\settings.txt`. A missing or damaged
    file means the default (on).

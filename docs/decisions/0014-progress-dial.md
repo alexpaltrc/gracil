@@ -1,7 +1,9 @@
 # 0014 — Progress is a dial that holds the controls
 
-**Status:** Accepted. Refines the look of spec §31; the interaction model is unchanged. The track
-and the line between the buttons are no longer drawn (ADR 0038).
+**Status:** Accepted, built (2026-10-03). Refines the look of spec §31; the interaction model is
+unchanged. The track and the line between the buttons are no longer drawn (ADR 0038), and
+[ADR 0076](0076-the-ring-stays.md) (2026-11-16) makes the ring one drawing through everything that
+happens to a file.
 
 **Context.** The video in focus showed a thin progress bar with **Pause** and **Cancel** written
 under it. The product owner wants a cleaner window with more personality and even fewer words,
@@ -27,4 +29,6 @@ It is drawn with Iced's canvas (`gracil-ui/src/dial.rs`), so the `canvas` featur
 - The words Pause, Resume and Cancel are gone from the window; the symbols are the universal
   ones from media players.
 - The symbols have no hover text yet, so a screen reader cannot name them. To revisit with the
-  accessibility work.
+  accessibility work. *Partly done by [ADR 0066](0066-quiet-states-in-words-and-a-lighter-start.md)
+  (2026-10-14): screen readers hear how the work goes through the window's title and the tray's
+  tip; the window itself still isn't readable by them.*

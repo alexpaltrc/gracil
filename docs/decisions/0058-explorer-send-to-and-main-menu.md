@@ -1,6 +1,6 @@
 # 0058 — File Explorer: Send to for everyone, and a main menu turned on from the tray
 
-**Status:** Accepted (2026-10-07). Send to and the main menu built and confirmed (2026-10-14).
+**Status:** Accepted, built (2026-10-07). Send to and the main menu confirmed working (2026-10-14).
 Supersedes the per-user COM menu of [0022](0022-explorer-command.md) and items 4 to 6 of
 [0050](0050-portable-and-open-source.md), the menu's words that followed **Always** in item 2 of
 [0035](0035-explorer-folders-and-always.md) (and the reason item 1 of

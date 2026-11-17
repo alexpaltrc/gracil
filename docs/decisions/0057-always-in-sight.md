@@ -1,8 +1,8 @@
 # 0057 — Always stays in sight, the empty window included
 
-**Status:** Accepted, built (2026-10-06). Asked for by the product owner. Reverses item 2 of
-[0055](0055-natural-first-use.md) as far as the **Always** pill goes; back to what
-[0025](0025-always-replace-or-copy.md) first decided.
+**Status:** Accepted, built (2026-10-06); superseded in part by ADR 0058 (2026-10-07), below.
+Asked for by the product owner. Reverses item 2 of [0055](0055-natural-first-use.md) as far as
+the **Always** pill goes; back to what [0025](0025-always-replace-or-copy.md) first decided.
 
 **Superseded in part** by [ADR 0058](0058-explorer-send-to-and-main-menu.md) (2026-10-07): File
 Explorer's words no longer follow **Always**; the running Gracil applies it to what File Explorer
