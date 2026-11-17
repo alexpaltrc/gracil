@@ -27,9 +27,9 @@ setting does not justify one.
    hidden, two seconds after Gracil starts (or at the first click, if sooner), and closing it only
    hides it; while hidden it draws nothing. A click shows it in 15–50 ms (115 ms the first time),
    still out of sight until it has drawn itself and then placed by the icon. *Changed by
-   [ADR 0066](0066-quiet-states-in-words-and-a-lighter-start.md), item 9 (2026-10-14): it is no
-   longer made two seconds after start, but when the pointer first comes to the tray icon or files
-   come.*
+   [ADR 0066](0066-quiet-states-in-words-and-a-lighter-start.md), item 9 (2026-10-14): a Gracil started with
+   Windows, resting in the tray, makes it only when the pointer first comes to the tray icon or
+   files come; one opened by hand still makes it two seconds after start.*
 4. The setting **Show mini-window when compressing from File Explorer** is a checkable item in the
    tray menu, saved as one line in `<data folder>\settings.txt`. A missing or damaged
    file means the default (on).

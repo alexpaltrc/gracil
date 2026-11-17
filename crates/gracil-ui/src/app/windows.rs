@@ -92,7 +92,8 @@ impl Gracil {
 
     /// Makes the mini-window, hidden. Making a window takes about half a second, and showing one
     /// a few hundredths, so it is made once and kept, hidden, between openings: a moment after
-    /// Gracil starts (`MINI_MADE_AFTER`), or at the first click if that comes sooner.
+    /// Gracil starts (`MINI_MADE_AFTER`), or at the first click if that comes sooner. A Gracil
+    /// resting in the tray since Windows started waits for the pointer or for files (ADR 0066).
     pub(super) fn make_mini(&mut self) -> Task<Message> {
         if self.mini.is_some() {
             return Task::none();
