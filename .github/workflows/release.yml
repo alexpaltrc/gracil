@@ -40,9 +40,13 @@ jobs:
           Expand-Archive ffmpeg.zip -DestinationPath ffmpeg
           $bin = Join-Path (Get-ChildItem ffmpeg -Directory | Select-Object -First 1).FullName 'bin'
           "FFMPEG=$bin" >> $env:GITHUB_ENV
+      # The Rust cache can bring back part of an earlier jpegli folder, which the build script
+      # can neither clone into nor build from; jpegli is always built afresh from its pinned commit.
       - name: Build the zip
         shell: pwsh
-        run: ./scripts/portable.ps1 -FFmpeg $env:FFMPEG
+        run: |
+          Remove-Item target/jpegli -Recurse -Force -ErrorAction SilentlyContinue
+          ./scripts/portable.ps1 -FFmpeg $env:FFMPEG
       - uses: actions/upload-artifact@v4
         with:
           name: Gracil
