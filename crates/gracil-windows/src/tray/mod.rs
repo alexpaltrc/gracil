@@ -339,7 +339,7 @@ fn create_window() -> io::Result<HWND> {
         CreateWindowExW(
             0,
             class.as_ptr(),
-            wide("Gracil").as_ptr(),
+            wide(crate::NAME).as_ptr(),
             WS_OVERLAPPED,
             0,
             0,
@@ -572,7 +572,7 @@ fn make_icon(state: TrayState, light_taskbar: bool) -> Option<HICON> {
     #[allow(unsafe_code)]
     let size = unsafe { GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForSystem()) };
     let size = u32::try_from(size).ok().filter(|&size| size > 0)?;
-    let pixels = picture::draw(state, light_taskbar, size);
+    let pixels = picture::draw(state, light_taskbar, crate::DEV, size);
     let colour: Vec<u8> = pixels
         .iter()
         .flat_map(|pixel| pixel.to_le_bytes())

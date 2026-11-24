@@ -20,8 +20,10 @@ pub fn menu(program: PathBuf, text: &Text) -> ExplorerMenu {
     ExplorerMenu {
         program,
         extensions: extensions(),
-        files: command(files, None),
-        folders: "Gracil".to_owned(),
+        // Gracil Dev's commands carry its name, so they are never mistaken for the daily Gracil's
+        // (ADR 0082).
+        files: command(&files.replacen("Gracil", gracil_windows::NAME, 1), None),
+        folders: gracil_windows::NAME.to_owned(),
         folder_commands: vec![
             command(all, None),
             command(videos, Some(VIDEOS)),
@@ -48,7 +50,11 @@ mod tests {
     fn every_command_lets_gracil_apply_always() {
         let text = Text::get(Language::Spanish);
         let menu = menu(PathBuf::from(r"C:\Gracil\gracil.exe"), text);
-        assert_eq!(menu.files.text, "Comprimir con Gracil");
+        assert_eq!(
+            menu.files.text,
+            format!("Comprimir con {}", gracil_windows::NAME)
+        );
+        assert_eq!(menu.folders, gracil_windows::NAME);
         assert_eq!(menu.files.flags, ["--explorer"]);
         assert_eq!(menu.folder_commands[1].text, "Comprimir solo los videos");
         assert_eq!(menu.folder_commands[1].flags, ["--explorer", "--videos"]);

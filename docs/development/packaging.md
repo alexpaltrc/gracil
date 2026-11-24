@@ -49,13 +49,24 @@ Run over the installed Gracil, it closes it and replaces the program, keeping it
 Uninstalling it from Windows' Settings takes out its Start menu shortcut, **Send to** and its
 start with Windows. The installer is not published: releases stay a zip.
 
-`scripts/update.ps1` (and the **Actualizar Gracil** shortcut on the desktop, which runs it)
-built `main` into `Documents\Gracil` for daily use with `scripts/portable.ps1 -Copy`. It is not
-run until Gracil Dev, an installed copy of its own, exists (planned): that Gracil, on starting,
-would take **Send to** and the start with Windows from the installed one.
+## Gracil Dev
+
+Gracil Dev, where every change is tried, is installed beside it in
+`%LOCALAPPDATA%\Programs\Gracil Dev` ([ADR 0082](../decisions/0082-gracil-dev-installed.md)):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update.ps1
+```
+
+gets `main` from GitHub (`-NoPull` builds this folder as it is), builds Gracil Dev with
+`scripts/installer.ps1 -Dev` (which lays it out with `scripts/portable.ps1 -Dev`, a release build
+with the `dev` feature) and runs its installer quietly over the installed one, which keeps its
+`data` and opens again if it was open. Its version is the one in development followed by the
+number of commits (`1.1.1-dev.412`). It has its own name, Start menu shortcut, icons with an
+amber "Dev" band, data and place in Windows, so it never touches the owner's Gracil.
 
 A development build run from `target` keeps its own `data` folder there and never touches the
-installed one's. On every start, a whole Gracil folder (with
+installed ones'. On every start, a whole Gracil folder (with
 FFmpeg beside the program) puts itself in File Explorer's **Send to** and its start at the next
 sign-in (`RunOnce`), and removes what the former per-user menu left; a development build in
 `target` leaves Windows as it is. File Explorer's main menu is written for the whole computer
@@ -88,8 +99,10 @@ The zip's name carries the version from `Cargo.toml` ([versioning](versioning.md
 
 ## Icons
 
-`scripts/icons.ps1` draws the window's two icon files in `crates/gracil-ui/icons` from the marble's
+`scripts/icons.ps1` draws the window's icon files in `crates/gracil-ui/icons` from the marble's
 shapes, in Windows 11's neutrals: a dark tile for a light taskbar or theme, a light one for a dark
-taskbar or theme ([ADR 0031](../decisions/0031-windows-11-colors.md)). The files are committed; run
+taskbar or theme ([ADR 0031](../decisions/0031-windows-11-colors.md)), and the same two for
+Gracil Dev with an amber "Dev" band, which a development build or the `dev` feature links in
+instead ([ADR 0082](../decisions/0082-gracil-dev-installed.md)). The files are committed; run
 the script again only when the artwork or the colors change. Windows keeps icons in a cache, so a
 changed icon may only show after signing out.

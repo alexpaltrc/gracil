@@ -2,7 +2,8 @@
 
 **Status:** Accepted, built (2026-11-22). Decided by the product owner. Changes
 [ADR 0071](0071-daily-gracil-outside-the-project.md), [ADR 0073](0073-always-up-to-date.md) and
-item 1 of [ADR 0074](0074-gracil-and-the-personal-standard.md).
+item 1 of [ADR 0074](0074-gracil-and-the-personal-standard.md). Item 4 completed by
+[ADR 0082](0082-gracil-dev-installed.md): Gracil Dev is built and installed.
 
 **Context.** The owner's personal standard now separates two copies of every app: a stable one,
 used every day with the owner's real settings, which changes only with a release, and a Dev

@@ -32,10 +32,11 @@ engine alone, without the interface: proof that the engine stands on its own (AD
 
 ## Running the app
 
-`cargo run -p gracil-ui` opens a development build, **Gracil Dev**. It is a Gracil of its own:
-it runs beside the Gracil in daily use and never hands it its files
-([ADR 0075](../decisions/0075-a-development-build-of-its-own.md)); its window and tray say
-**Gracil Dev**. To compress videos, it uses the FFmpeg on `PATH`, which should be the pinned
+`cargo run -p gracil-ui` opens a development build. It is a Gracil of its own: it runs beside
+the Gracil in daily use and the installed Gracil Dev and never hands them its files
+([ADR 0075](../decisions/0075-a-development-build-of-its-own.md),
+[ADR 0082](../decisions/0082-gracil-dev-installed.md)); its window and tray say **Gracil Dev**,
+with the "Dev" band on its icons. To compress videos, it uses the FFmpeg on `PATH`, which should be the pinned
 build ([FFmpeg](ffmpeg.md)); images need `cjpegli.exe`, built once with
 `scripts/build-jpegli.ps1`, which the build finds in `target\jpegli`. It never opens a console window, even in development builds, so
 what you test is what users see. Logs and crashes go to the `data\logs` folder beside the build,

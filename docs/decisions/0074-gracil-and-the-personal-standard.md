@@ -2,7 +2,7 @@
 
 **Status:** Accepted, built (2026-11-15). Decided by the product owner. The first two points of
 item 2 changed by [ADR 0081](0081-the-owners-gracil-installed.md): the owner's Gracil is
-installed, and a Dev copy is planned. The point on libraries no longer differs: the standard
+installed, and Gracil Dev is installed beside it ([ADR 0082](0082-gracil-dev-installed.md)). The point on libraries no longer differs: the standard
 dropped its rule on them (2026-11-23).
 
 **Context.** The product owner keeps a personal standard for every app they make (the

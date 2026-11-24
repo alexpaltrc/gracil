@@ -41,10 +41,15 @@ use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNo
 
 use crate::wide;
 
-/// The verb's name in Explorer's keys.
-const VERB: &str = "Gracil";
+/// The verb's name in Explorer's keys. Gracil Dev's keys, value and shortcut all carry its own
+/// name, so it never writes over the daily Gracil's (ADR 0082).
+const VERB: &str = crate::NAME;
 /// The folders' command, with its own commands under it.
-const FOLDER_VERB_KEY: &str = r"Software\Classes\Directory\shell\Gracil";
+const FOLDER_VERB_KEY: &str = if crate::DEV {
+    r"Software\Classes\Directory\shell\Gracil Dev"
+} else {
+    r"Software\Classes\Directory\shell\Gracil"
+};
 /// Where each file type's command goes, by extension, whatever program opens the type.
 const FILE_TYPES_KEY: &str = r"Software\Classes\SystemFileAssociations";
 /// Keys of the menus Gracil wrote for the current user before ADR 0058, which File Explorer
@@ -59,11 +64,15 @@ const FORMER_KEYS: [&str; 6] = [
 ];
 /// Run once, at the next sign-in, and forgotten by Windows as it runs.
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\RunOnce";
-const RUN_VALUE: &str = "Gracil";
+const RUN_VALUE: &str = crate::NAME;
 /// Kept beside the folders' command, telling which Gracil wrote the main menu.
 const PROGRAM_VALUE: &str = "GracilProgram";
 /// The shortcut's name in Send to, which is also what the menu shows.
-const SEND_TO_NAME: &str = "Gracil.lnk";
+const SEND_TO_NAME: &str = if crate::DEV {
+    "Gracil Dev.lnk"
+} else {
+    "Gracil.lnk"
+};
 
 /// Gracil's main menu in File Explorer, in the words the user reads.
 #[derive(Debug, Clone, PartialEq, Eq)]

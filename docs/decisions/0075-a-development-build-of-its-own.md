@@ -3,6 +3,8 @@
 **Status:** Accepted, built (2026-11-16). Decided by the product owner, who asked for the way
 Gracil is developed to be reviewed. Builds on [ADR 0019](0019-single-instance.md),
 [ADR 0071](0071-daily-gracil-outside-the-project.md) and [ADR 0073](0073-always-up-to-date.md).
+Changed by [ADR 0082](0082-gracil-dev-installed.md): the name **Gracil Dev** and `Gracil.Dev`
+belong to the installed Gracil Dev; a development build goes by `Gracil.Build`.
 
 **Context.** There is one Gracil per session: a second one hands its request to the first and
 leaves. That is right for people who use Gracil, and it was in the way of making it: a build

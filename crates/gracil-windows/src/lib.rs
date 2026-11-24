@@ -3,6 +3,14 @@
 //! This is the only crate allowed to use `unsafe`, and only to call Windows functions.
 //! Every call explains why it is sound.
 
+/// Whether this is Gracil Dev: the installed copy for trying changes, made with the `dev`
+/// feature, or a development build. It has a name, a place in Windows and icons of its own, so it
+/// runs beside the Gracil in daily use and never takes what is theirs (ADR 0082).
+pub const DEV: bool = cfg!(any(debug_assertions, feature = "dev"));
+
+/// The name Windows shows: in File Explorer's menus, starting with Windows, the window and tray.
+pub const NAME: &str = if DEV { "Gracil Dev" } else { "Gracil" };
+
 mod appear;
 mod drawing;
 mod flyout;

@@ -36,10 +36,10 @@ it. The cloud can't see the skill, so its essentials are here:
 - **Every interface change** is checked on the real app before it's done: alignment to the pixel,
   no slower or heavier, and as beautiful as before or more. Animations follow springs and
   choreography, respect Windows' **Animation effects** and contrast themes, and are checked frame
-  by frame. The check is made in a development build (`cargo run -p gracil-ui`), **Gracil Dev**,
-  which runs beside the owner's Gracil: never close theirs to look at a change, never move their
-  pointer, and read the window's picture from the window itself, never off their screen
-  (ADR 0075).
+  by frame. The check is made in a development build (`cargo run -p gracil-ui`), which runs
+  beside the owner's Gracil and Gracil Dev: never close theirs to look at a change, never move
+  their pointer, and read the window's picture from the window itself, never off their screen
+  (ADR 0075). Then every change goes to **Gracil Dev** (below), where the owner tries it.
 - **Clean repository:** every file has a reason to exist; no leftover files, empty folders or dead
   code. Material that isn't code (screenshots, brand material, backups) lives outside the repo, in
   `Documents\Vibecode Archivos\Gracil Archivos`.
@@ -86,7 +86,7 @@ MSIX; data beside `gracil.exe`; GPL 3.0 or later and public; documentation in En
 | `crates/gracil-core` | The compression engine: pure Rust, also built and tested on Linux |
 | `crates/gracil-ui` | The app: windows, tray, mini-window (Iced + WGPU, DX12) |
 | `crates/gracil-windows` | Windows integration; the only crate allowed `unsafe` |
-| `scripts/` | `check.ps1` / `check.sh` (checks), `portable.ps1` (the zip, with the FFmpeg pinned in `ffmpeg.psd1`), `installer.ps1` / `installer.iss` (the owner's installer, from a release), `update.ps1` (the former daily copy, not run, ADR 0081), `build-jpegli.ps1`, `licenses.ps1`, `icons.ps1`, `release-notes.ps1` (a release's notes from the changelog), `cloud-setup.sh` (prepares a cloud session) |
+| `scripts/` | `check.ps1` / `check.sh` (checks), `portable.ps1` (the zip, with the FFmpeg pinned in `ffmpeg.psd1`), `installer.ps1` / `installer.iss` (the owner's installer from a release, or Gracil Dev's), `update.ps1` (installs Gracil Dev), `build-jpegli.ps1`, `licenses.ps1`, `icons.ps1`, `release-notes.ps1` (a release's notes from the changelog), `cloud-setup.sh` (prepares a cloud session) |
 | `.github/workflows/` | `check.yml` (checks on Windows and Linux), `release.yml` (a release's zip, from a pushed tag) |
 | `docs/` | Specification, architecture, decisions, development guides, user explanations |
 
@@ -95,10 +95,11 @@ MSIX; data beside `gracil.exe`; GPL 3.0 or later and public; documentation in En
   publishes them, and no release is built or kept on this computer (ADR 0079).
 - **The owner's Gracil** is installed in `%LOCALAPPDATA%\Programs\Gracil` and changes only with
   a release: once the owner publishes one, make its installer with
-  `scripts/installer.ps1 -Version X.Y.Z` and run it over the installed Gracil (ADR 0081). Gracil
-  Dev, an installed copy of its own, is planned and not built; until then changes are tried only
-  in the development build, and `scripts/update.ps1` is not run: the Gracil it makes in
-  `Documents\Gracil` would take Send to and the start with Windows from the installed one.
+  `scripts/installer.ps1 -Version X.Y.Z` and run it over the installed Gracil (ADR 0081).
+- **Gracil Dev** is installed beside it in `%LOCALAPPDATA%\Programs\Gracil Dev`, with its own
+  name, icons (an amber "Dev" band), test data and place in Windows (ADR 0082). After every
+  change on this computer, run `scripts/update.ps1 -NoPull -NoPause`, which installs it over the
+  last one and reopens it if it was open, and say so in one line.
 - **Cloud (Linux):** run `scripts/check.sh` instead. It checks formatting, Clippy and the tests
   of `gracil-core`, and Clippy of `gracil-windows`; `gracil-ui` can't be built there. Work on a
   branch, open a pull request and say in it that changes to `gracil-ui` or `gracil-windows` are

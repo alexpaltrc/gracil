@@ -33,10 +33,13 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWi
 
 use crate::wide;
 
-/// What this Gracil goes by among the running programs. A development build has a name of its
-/// own, so it runs beside the Gracil in daily use instead of handing it its request (ADR 0075).
-const NAME: &str = if cfg!(debug_assertions) {
+/// What this Gracil goes by among the running programs. Gracil Dev and a development build each
+/// have a name of their own, so each runs beside the others instead of handing them its request
+/// (ADR 0075, ADR 0082).
+const NAME: &str = if cfg!(feature = "dev") {
     "Gracil.Dev"
+} else if cfg!(debug_assertions) {
+    "Gracil.Build"
 } else {
     "Gracil"
 };

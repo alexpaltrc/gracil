@@ -98,7 +98,7 @@ windows, the app (Iced, drawn with Direct3D 12), and everything Gracil asks of W
 
 ```powershell
 .\scripts\check.ps1       # formatting, Clippy and every test
-cargo run -p gracil-ui    # Gracil Dev, which runs beside the Gracil you use
+cargo run -p gracil-ui    # a development build, which runs beside the Gracil you use
 .\scripts\portable.ps1    # the zip, in target\portable, with the pinned FFmpeg
 ```
 

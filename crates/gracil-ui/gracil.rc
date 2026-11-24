@@ -1,5 +1,11 @@
 // Resources linked into gracil.exe (ADR 0016, ADR 0031). The marble on a tile in Windows 11's own
 // neutral colors, always the opposite of Windows' theme. Icon 1, the dark tile, is the one File
 // Explorer shows and the window uses in light mode; icon 2, the light tile, is for dark mode.
+// Gracil Dev, and a development build, carry the same tiles with an amber "Dev" band (ADR 0082).
+#ifdef GRACIL_DEV
+1 ICON "icons/gracil-dev-dark.ico"
+2 ICON "icons/gracil-dev-light.ico"
+#else
 1 ICON "icons/gracil-app-dark.ico"
 2 ICON "icons/gracil-app-light.ico"
+#endif

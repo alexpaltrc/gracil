@@ -150,10 +150,12 @@ invocation (a new launch, "Open with", Explorer) sends its command line over the
 messages alike, and `outside` turns them, from any thread, into messages for the app. Gracil
 starts with no window; a request without a choice opens it, while `--replace` and `--save-copy`
 work in the background, and so does `--explorer` when **Always** is set. A Gracil whose window
-never opened ends itself when that work is done (ADR 0019). A development build (any build with
-debug assertions: `cargo run -p gracil-ui`, or the `timing` profile) goes by `Gracil.Dev` instead
-of `Gracil` in both names, so it runs beside the Gracil in daily use and never hands it a request
-(ADR 0075).
+never opened ends itself when that work is done (ADR 0019). Gracil Dev (the `dev` feature) goes
+by `Gracil.Dev` instead of `Gracil` in both names, and a development build (any build with debug
+assertions: `cargo run -p gracil-ui`, or the `timing` profile) by `Gracil.Build`, so each runs
+beside the others and never hands them a request (ADR 0075, ADR 0082). Both are Gracil Dev to
+Windows: `gracil_windows::DEV` gives them that name, their own keys and shortcut in File Explorer
+and at sign-in, and icons with an amber "Dev" band.
 
 **File Explorer** (ADR 0058). Both of Gracil's places in File Explorer start
 `gracil.exe --explorer` with what was picked, which forwards it over the pipe like any later

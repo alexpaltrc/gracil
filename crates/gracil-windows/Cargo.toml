@@ -16,5 +16,9 @@ windows-sys.workspace = true
 [dev-dependencies]
 gracil-core = { workspace = true, features = ["test-support"] }
 
+[features]
+# Gracil Dev: its own name, place in Windows and icons, beside the Gracil in daily use (ADR 0082).
+dev = []
+
 [lints]
 workspace = true

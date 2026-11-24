@@ -27,6 +27,7 @@ Gracil can be worked on from Claude Code in the cloud, with the computer off, al
 
 Get `main` and merge the cloud branches whose checks passed. Changes to the window or to Windows
 integration are tried in the development build before they count as done
-([ADR 0075](../decisions/0075-a-development-build-of-its-own.md)). The owner's installed Gracil
-changes only with a release ([ADR 0081](../decisions/0081-the-owners-gracil-installed.md),
+([ADR 0075](../decisions/0075-a-development-build-of-its-own.md)), and then reach Gracil Dev
+with `scripts/update.ps1` ([ADR 0082](../decisions/0082-gracil-dev-installed.md)). The owner's
+installed Gracil changes only with a release ([ADR 0081](../decisions/0081-the-owners-gracil-installed.md),
 [Packaging](packaging.md)).

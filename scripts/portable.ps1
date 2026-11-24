@@ -3,17 +3,16 @@
 #   scripts/portable.ps1                       release build + folder in target\portable\Gracil
 #                                               + target\portable\Gracil-<version>-x64.zip
 #   scripts/portable.ps1 -FFmpeg <folder>      take ffmpeg.exe and ffprobe.exe from <folder>
-#   scripts/portable.ps1 -Copy                 ...and copy it to Documents\Gracil, the
-#                                               Gracil in daily use, closing it first
-#   scripts/portable.ps1 -CopyTo <folder>      ...or to another folder
+#   scripts/portable.ps1 -Dev                  Gracil Dev's folder, target\portable\Gracil Dev,
+#                                               with no zip; scripts/installer.ps1 -Dev installs
+#                                               it (ADR 0082)
 #
 # FFmpeg is the pinned build in scripts\ffmpeg.psd1; without -FFmpeg, the first folder on PATH
 # holding executables with the pinned hashes is used. Exit codes are checked explicitly, as in
 # check.ps1.
 param(
     [string]$FFmpeg,
-    [switch]$Copy,
-    [string]$CopyTo
+    [switch]$Dev
 )
 
 $root = Split-Path $PSScriptRoot -Parent
@@ -45,15 +44,16 @@ if (-not $FFmpeg -or -not (Test-Pinned $FFmpeg)) {
     exit 1
 }
 
-cargo build --release -p gracil-ui
+if ($Dev) { cargo build --release -p gracil-ui --features dev } else { cargo build --release -p gracil-ui }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$name = if ($Dev) { 'Gracil Dev' } else { 'Gracil' }
 
 # A fresh folder every time, so nothing from an older build ends up in the zip, and no zip of an
 # older version stays beside the new one.
 $portable = Join-Path $root 'target\portable'
-$layout = Join-Path $portable 'Gracil'
+$layout = Join-Path $portable $name
 if (Test-Path -LiteralPath $layout) { Remove-Item -LiteralPath $layout -Recurse -Force }
-Remove-Item -Path (Join-Path $portable 'Gracil-*.zip') -Force -ErrorAction SilentlyContinue
+if (-not $Dev) { Remove-Item -Path (Join-Path $portable 'Gracil-*.zip') -Force -ErrorAction SilentlyContinue }
 $licenses = Join-Path $layout 'licenses'
 $tools = Join-Path $layout 'ffmpeg'
 New-Item -ItemType Directory -Path $layout, $licenses, $tools | Out-Null
@@ -109,27 +109,13 @@ Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $lice
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'licenses.ps1') -Out (Join-Path $licenses 'rust-libraries.txt')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+if ($Dev) {
+    Write-Host "Gracil Dev $version ready in $layout"
+    exit 0
+}
 $zip = Join-Path $portable "Gracil-$version-x64.zip"
 # Windows' own tar writes the zip, with the Gracil folder at its top; named in full, since Git's
 # tar may come first on the PATH and can't read Windows paths.
 & (Join-Path $env:SystemRoot 'System32\tar.exe') -a -c -f $zip -C $portable Gracil
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "Gracil $version ready in $layout and $zip"
-
-if ($Copy -and -not $CopyTo) {
-    # Outside the project, so the code holds no Gracil to open by mistake (ADR 0071).
-    $CopyTo = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Gracil'
-}
-if ($CopyTo) {
-    # The running Gracil and its helpers hold their files; they are closed before copying.
-    Get-Process gracil, ffmpeg, ffprobe, cjpegli -ErrorAction SilentlyContinue |
-        Where-Object { $_.Path -and $_.Path.StartsWith($CopyTo, [System.StringComparison]::OrdinalIgnoreCase) } |
-        Stop-Process -Force
-    Wait-Process -Name gracil -Timeout 15 -ErrorAction SilentlyContinue
-    New-Item -ItemType Directory -Force -Path $CopyTo | Out-Null
-    # Everything but the data folder, which keeps the settings and logs.
-    Get-ChildItem -LiteralPath $layout | ForEach-Object {
-        Copy-Item -LiteralPath $_.FullName -Destination $CopyTo -Recurse -Force
-    }
-    Write-Host "Gracil $version copied to $CopyTo"
-}

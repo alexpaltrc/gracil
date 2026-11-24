@@ -31,5 +31,9 @@ wgpu.workspace = true
 [dev-dependencies]
 gracil-core = { workspace = true, features = ["test-support"] }
 
+[features]
+# Gracil Dev (ADR 0082).
+dev = ["gracil-windows/dev"]
+
 [lints]
 workspace = true

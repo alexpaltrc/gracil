@@ -671,8 +671,8 @@ future external actions) are forwarded to the existing instance, which owns the 
 launching Gracil again from Start or the taskbar opens its window. It uses a named mutex and a
 named pipe, one Gracil per session (ADR 0019).
 
-A development build is a Gracil of its own, **Gracil Dev**, and runs beside the one in daily use
-(ADR 0075).
+**Gracil Dev**, where changes are tried, is a Gracil of its own and runs beside the one in daily
+use, and a development build runs beside both (ADR 0075, ADR 0082).
 
 # 53. No permanent service
 
@@ -832,8 +832,9 @@ pinned FFmpeg (`scripts/ffmpeg.psd1`): a pushed tag ends in a draft release with
 version's changelog notes, which the owner publishes (ADR 0079). No release is built or kept on
 the owner's computer. The owner's Gracil is installed there from each published release's zip
 (`scripts/installer.ps1`), per user in `%LOCALAPPDATA%\Programs\Gracil`; the installer is not
-published (ADR 0081). A development build (`cargo run -p gracil-ui`) is **Gracil Dev**, which
-runs beside it (ADR 0075).
+published (ADR 0081). **Gracil Dev**, built with the `dev` feature, is installed beside it in
+`%LOCALAPPDATA%\Programs\Gracil Dev` by `scripts/update.ps1` after every change, with its own
+name, icons with an amber "Dev" band, data and place in Windows (ADR 0082).
 
 # 66. Settings philosophy
 
