@@ -210,6 +210,11 @@ and if Gracil can't do what you picked for a file (for example replacing would o
 file), that file waits for you with a **!** that explains why. When you compress from File Explorer,
 the command you clicked decides instead.
 
+Once a file is replaced or saved, you can take it straight out of Gracil: press its ring, or its
+row in **View files**, and drag it, the way you drag a file out of File Explorer, into a folder,
+a chat or an email. It gets a copy, and the file stays where Gracil put it. When the whole list
+is done, dragging the ring with its check mark takes every file at once.
+
 A finished file waits until you choose. If you take it off the list, the smaller version is
 deleted and your original stays exactly as it was. If you exit Gracil first, Gracil asks before
 leaving, and the file is compressed again the next time you carry on.

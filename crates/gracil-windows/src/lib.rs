@@ -12,6 +12,7 @@ pub const DEV: bool = cfg!(any(debug_assertions, feature = "dev"));
 pub const NAME: &str = if DEV { "Gracil Dev" } else { "Gracil" };
 
 mod appear;
+mod carry;
 mod drawing;
 mod flyout;
 mod heat;
@@ -26,6 +27,7 @@ mod theme;
 mod tray;
 
 pub use appear::{park, unpark, wait_for_screen};
+pub use carry::{Carried, carry_out};
 pub use drawing::draw_with_direct3d;
 pub use flyout::place_near_tray;
 pub use heat::{Card, GraphicsHeat, Heat, Thermometer};

@@ -130,6 +130,11 @@ pub struct Gracil {
     pub gathering: usize,
     /// Files dropped on the window that are still arriving, one at a time.
     dropped: Vec<PathBuf>,
+    /// Results carried out of a window and let go back on it, which it hears of as dropped files
+    /// to leave alone (ADR 0083).
+    carried: Vec<PathBuf>,
+    /// The main window's handle, once Windows has made it.
+    main_handle: Option<u64>,
     /// How many times Stop was pressed. Files found by a look started before the last press go
     /// straight to the files offered to carry on with (ADR 0044).
     stops: u64,
@@ -215,6 +220,9 @@ pub enum Message {
     FileDropped(PathBuf),
     /// Every file dropped together has arrived.
     DropLanded,
+    /// A result was pressed and moved in a window: that file, or with no file every one put in
+    /// place, is carried out of it (ADR 0083).
+    Carry(Scope, Option<JobId>),
     ChooseFiles,
     FilesChosen(Vec<PathBuf>),
     Job(JobId, Report),
@@ -369,6 +377,8 @@ impl Gracil {
             intents: HashMap::new(),
             gathering: 0,
             dropped: Vec::new(),
+            carried: Vec::new(),
+            main_handle: None,
             stops: 0,
             abandoned: 0,
             exiting: false,
@@ -514,11 +524,15 @@ impl Gracil {
                 };
                 self.schedule()
             }
+            // A result carried back over its own window doesn't light it up to be added.
             Message::FilesHovered(window) => {
-                self.hovering = Some(window);
+                if self.carried.is_empty() {
+                    self.hovering = Some(window);
+                }
                 Task::none()
             }
             Message::FilesHoveredLeft(window) => {
+                self.carried.clear();
                 if self.hovering == Some(window) {
                     self.hovering = None;
                 }
@@ -528,6 +542,10 @@ impl Gracil {
             // together once all have arrived.
             Message::FileDropped(path) => {
                 self.hovering = None;
+                if let Some(at) = self.carried.iter().position(|carried| *carried == path) {
+                    self.carried.swap_remove(at);
+                    return Task::none();
+                }
                 self.dropped.push(path);
                 if self.dropped.len() == 1 {
                     Task::done(Message::DropLanded)
@@ -644,7 +662,12 @@ impl Gracil {
                 self.shift_theme(now);
                 Task::none()
             }
+            Message::Carry(scope, which) => {
+                self.carry(scope, which);
+                Task::none()
+            }
             Message::MainReady(id, handle) => {
+                self.main_handle = Some(handle);
                 give_icon(handle);
                 self.reveal(id, handle)
             }

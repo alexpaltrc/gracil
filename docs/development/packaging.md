@@ -62,7 +62,7 @@ gets `main` from GitHub (`-NoPull` builds this folder as it is), builds Gracil D
 `scripts/installer.ps1 -Dev` (which lays it out with `scripts/portable.ps1 -Dev`, a release build
 with the `dev` feature) and runs its installer quietly over the installed one, which keeps its
 `data` and opens again if it was open. Its version is the one in development followed by the
-number of commits (`1.1.1-dev.412`). It has its own name, Start menu shortcut, icons with an
+number of commits (`1.2.0-dev.412`). It has its own name, Start menu shortcut, icons with an
 amber "Dev" band, data and place in Windows, so it never touches the owner's Gracil.
 
 A development build run from `target` keeps its own `data` folder there and never touches the

@@ -1082,6 +1082,8 @@ reasons, and the section named holds the rule.*
   ADR 0068, ADR 0070, ADR 0078), **quiet states in words and a lighter start** (ADR 0066),
   **a quiet time left** (ADR 0069, §31).
 - **The ring stays, and the window lays itself out around it** (ADR 0076, §31, §32, §55).
+- **A result carried out of the window**: a file put in place is dragged from its ring or its row
+  like a file from File Explorer, and what it is let go on gets a copy (ADR 0083).
 
 Not built: **compressing documents** (Word, Excel, PowerPoint, OpenDocument, PDF) by making the
 pictures inside them smaller is a proposal only, waiting for the product owner's decision

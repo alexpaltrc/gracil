@@ -101,7 +101,9 @@ stills it all when Windows' **Animation effects** are off; `appear` brings a new
 not at all. Paths given on the command line or forwarded by a later launch are queued like dropped
 files. A finished result waits in its temporary file until the user chooses Replace or Save copy;
 `work::place` then calls `gracil_core::output` on its own thread, with
-`gracil_windows::replace_file` (`ReplaceFileW`) for the swap (ADR 0009).
+`gracil_windows::replace_file` (`ReplaceFileW`) for the swap (ADR 0009). A result put in place can
+be carried out of the window: `carry` turns a press and move on its ring or row into
+`gracil_windows::carry_out`, where Windows leads the drag with a copy (ADR 0083).
 
 **Closing and exiting.** Closing a window hides it; the process keeps running in the tray. Only
 the tray menu's Exit quits. A process started from Explorer that never showed a window exits by

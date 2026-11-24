@@ -7,6 +7,7 @@
 mod app;
 mod appear;
 mod card;
+mod carry;
 mod data;
 mod dial;
 mod estimate;

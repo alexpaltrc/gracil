@@ -18,6 +18,7 @@ use iced::{Center, Color, Element, Fill, Padding, Size, Task, Theme, window};
 use crate::app::{EngineState, Finished, Gracil, Message};
 use crate::appear::appear;
 use crate::card::card;
+use crate::carry::carry;
 use crate::dial::{self, Controls, Dial, Face, Shows};
 use crate::focus::{Scope, keyed, keyed_if};
 use crate::pill::pill;
@@ -481,6 +482,8 @@ fn heading<'a>(
 struct Scene<'a> {
     above: Element<'a, Message>,
     ring: Dial,
+    /// What pressing the ring and moving it carries out of the window, once it is done.
+    carries: Option<Message>,
     below: Element<'a, Message>,
     /// Numbers that change when what is above and below the ring does.
     keys: (u64, u64),
@@ -500,7 +503,7 @@ fn large<'a>(
             .center_x(Fill)
             .align_bottom(ABOVE_RING),
         Space::new().height(space::M),
-        scene.ring.keyed(Scope::Main, dial::SIZE),
+        carry(scene.ring.keyed(Scope::Main, dial::SIZE), scene.carries),
         Space::new().height(space::M),
         container(appear(scene.keys.1, surface, scene.below))
             .center_x(Fill)
@@ -548,6 +551,7 @@ fn file_scene<'a>(state: &'a Gracil, job: &'a Job, ring: Dial) -> Scene<'a> {
         below: below.into(),
         keys: (above_key, key((stage, ring.shows))),
         ring,
+        carries: carries(state, Scope::Main, job),
     }
 }
 
@@ -604,6 +608,7 @@ fn done_scene<'a>(state: &'a Gracil, finished: &Finished) -> Scene<'a> {
     Scene {
         above: above.into(),
         ring: done_ring(state, finished),
+        carries: carries_all(state, Scope::Main),
         below: below.into(),
         keys: (key((2, &headline)), key(2)),
     }
@@ -634,6 +639,23 @@ fn measure(words: &str, text_size: f32) -> f32 {
         wrapping: plain::Wrapping::None,
     })
     .min_width()
+}
+
+/// Carrying a file that is done out of the window, where it was put (ADR 0083).
+fn carries(state: &Gracil, scope: Scope, job: &Job) -> Option<Message> {
+    match state.outcomes.get(&job.id) {
+        Some(Outcome::Placed { .. }) => Some(Message::Carry(scope, Some(job.id))),
+        _ => None,
+    }
+}
+
+/// Carrying every file of the finished list that was put in place.
+fn carries_all(state: &Gracil, scope: Scope) -> Option<Message> {
+    let any = state
+        .outcomes
+        .values()
+        .any(|outcome| matches!(outcome, Outcome::Placed { .. }));
+    any.then_some(Message::Carry(scope, None))
 }
 
 /// A file without a ring, shown large: one that waits, was stopped or couldn't be compressed.
@@ -726,7 +748,15 @@ fn small_file<'a>(
         Some(Outcome::Placed { .. }) => 2,
         _ => 0,
     };
-    small(ring, scope, key((name_key, stage)), surface, details.into())
+    let carries = carries(state, scope, job);
+    small(
+        ring,
+        carries,
+        scope,
+        key((name_key, stage)),
+        surface,
+        details.into(),
+    )
 }
 
 /// The small focus once the whole list is done (ADR 0066): the ring with its check, how much room
@@ -767,6 +797,7 @@ fn small_done<'a>(
     }
     small(
         Some(done_ring(state, finished)),
+        carries_all(state, scope),
         scope,
         key(2),
         surface,
@@ -778,6 +809,7 @@ fn small_done<'a>(
 /// when `changes` does while the ring stays.
 fn small<'a>(
     ring: Option<Dial>,
+    carries: Option<Message>,
     scope: Scope,
     changes: u64,
     surface: impl Fn(&Theme) -> Color + 'a,
@@ -785,7 +817,7 @@ fn small<'a>(
 ) -> Element<'a, Message> {
     let mut line = row![].spacing(space::M).align_y(Center);
     if let Some(ring) = ring {
-        line = line.push(ring.keyed(scope, dial::SMALL));
+        line = line.push(carry(ring.keyed(scope, dial::SMALL), carries));
     }
     line.push(appear(changes, surface, details)).into()
 }
@@ -1314,17 +1346,20 @@ fn drawer(state: &Gracil, height: f32) -> Element<'_, Message> {
             state.can_remove(job).then_some(Message::Remove(job.id)),
         );
         row![
-            keyed(
-                Scope::Main,
-                button(line)
-                    .padding([space::XS, space::S])
-                    .width(Fill)
-                    .style(if state.selected == Some(job.id) {
-                        style::picked_row
-                    } else {
-                        style::quiet_button
-                    })
-                    .on_press(Message::Select(job.id))
+            carry(
+                keyed(
+                    Scope::Main,
+                    button(line)
+                        .padding([space::XS, space::S])
+                        .width(Fill)
+                        .style(if state.selected == Some(job.id) {
+                            style::picked_row
+                        } else {
+                            style::quiet_button
+                        })
+                        .on_press(Message::Select(job.id))
+                ),
+                carries(state, Scope::Main, job),
             ),
             remove,
         ]

@@ -292,3 +292,36 @@ impl Gracil {
         (state, tip)
     }
 }
+
+impl Gracil {
+    /// Carries a result out of the window it was pressed in, or every result put in place with
+    /// no file given, while the button stays held (ADR 0083). Windows leads the carrying, and
+    /// whatever it is let go on gets a copy; let go back on the window, it is left alone.
+    pub(super) fn carry(&mut self, scope: Scope, which: Option<JobId>) {
+        let handle = match scope {
+            Scope::Main => self.main_handle,
+            Scope::Mini => self.mini_handle,
+        };
+        let Some(handle) = handle else {
+            return;
+        };
+        let placed = |id: &JobId| match self.outcomes.get(id) {
+            Some(Outcome::Placed { path, .. }) => Some(path.clone()),
+            _ => None,
+        };
+        let paths: Vec<PathBuf> = match which {
+            Some(id) => placed(&id).into_iter().collect(),
+            None => self
+                .queue
+                .jobs()
+                .iter()
+                .filter_map(|job| placed(&job.id))
+                .collect(),
+        };
+        match gracil_windows::carry_out(handle, &paths) {
+            Ok(gracil_windows::Carried::Home) => self.carried = paths,
+            Ok(gracil_windows::Carried::Away) => {}
+            Err(error) => warn!(%error, "could not carry results out of the window"),
+        }
+    }
+}

@@ -2,6 +2,14 @@
 
 What's new in each version of Gracil.
 
+## 1.2 (in development)
+
+### New
+
+- A file that is done can be dragged straight out of Gracil, from its ring or from the list, into
+  a folder, a chat or an email, just like a file in File Explorer. It gets a copy, and your file
+  stays where it is. Once the whole list is done, dragging the ring takes every file at once.
+
 ## 1.1 (2026-11-17)
 
 ### Improved

@@ -61,6 +61,8 @@ you don't have to think about.
 - One ring follows a file from start to end. A marble rolls around it as the file compresses,
   then the ring closes and says how much smaller the file came out, and when the list is done a
   check mark draws itself under what you saved: **2.4 GB smaller**.
+- A finished file can be dragged straight out of the window, into a folder, a chat or an email,
+  like a file in File Explorer.
 - Next to the clock, a small ring fills as the list moves along. Close the window and the work
   continues there.
 - The time left is a calm *about 20 min*. It comes down as the work goes on, and never creeps up
