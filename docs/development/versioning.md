@@ -17,6 +17,8 @@ crate inherits it.
   ([ADR 0079](../decisions/0079-releases-built-on-github.md)). To try the build without
   releasing anything, run the **release** workflow by hand: the zip is kept with the run and no
   release is made.
+- Once the owner publishes it, install it on their computer with its installer
+  (`scripts/installer.ps1 -Version X.Y.Z`, [Packaging](packaging.md)).
 - Right after the release, change to the next `-dev` version (`1.0.1-dev`) in its own commit.
 
 Published tags are never moved or deleted.

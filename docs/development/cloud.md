@@ -25,7 +25,8 @@ Gracil can be worked on from Claude Code in the cloud, with the computer off, al
 
 ## Back at the computer
 
-Double-click **Actualizar Gracil** on the desktop. It runs `scripts/update.ps1`, which gets what
-was merged from the cloud, builds it and updates the Gracil in daily use in `Documents\Gracil`
-([ADR 0073](../decisions/0073-always-up-to-date.md), [Packaging](packaging.md)). Changes to the window or to Windows
-integration are tried there before they count as done.
+Get `main` and merge the cloud branches whose checks passed. Changes to the window or to Windows
+integration are tried in the development build before they count as done
+([ADR 0075](../decisions/0075-a-development-build-of-its-own.md)). The owner's installed Gracil
+changes only with a release ([ADR 0081](../decisions/0081-the-owners-gracil-installed.md),
+[Packaging](packaging.md)).

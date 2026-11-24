@@ -30,27 +30,32 @@ git and Visual Studio Build Tools with the C++ workload, CMake and Ninja.
 Nothing is signed, so Windows' SmartScreen may warn the first time the zip's Gracil is opened.
 
 The zip of a release is built by GitHub, with this same script, from the tagged code
-([ADR 0079](../decisions/0079-releases-built-on-github.md), [versioning](versioning.md)). Here
-the script builds the Gracil in daily use, below.
+([ADR 0079](../decisions/0079-releases-built-on-github.md), [versioning](versioning.md)).
 
-## Maintainer's daily copy
+## The owner's installed Gracil
 
-The Gracil used every day, also while developing, lives in `Documents\Gracil`, outside this
-project, so the project holds no Gracil to open by mistake ([ADR 0071](../decisions/0071-daily-gracil-outside-the-project.md)).
-Start it from its `gracil.exe` there (pinned to Start or the taskbar). It is always kept up to
-date ([ADR 0073](../decisions/0073-always-up-to-date.md)): after every change made on this
-computer, and with the **Actualizar Gracil** shortcut on the desktop, which first gets what was
-merged on GitHub. Both run:
+The Gracil the owner uses every day is installed from a release, for one user and without an
+administrator, in `%LOCALAPPDATA%\Programs\Gracil`, with a shortcut in the Start menu
+([ADR 0081](../decisions/0081-the-owners-gracil-installed.md)). It changes only with a release.
+The installer is made from the zip GitHub built for that version, with Inno Setup 6
+(`winget install JRSoftware.InnoSetup`) and the GitHub CLI:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update.ps1   # -NoPull: only this folder
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/installer.ps1 -Version 1.0.0
 ```
 
-which builds with `scripts/portable.ps1 -Copy`. That closes the Gracil running from that folder,
-with its helpers, and copies the new files over, keeping its `data` folder, so settings and
-unfinished lists stay; `update.ps1` then opens Gracil again if it was open.
-`-CopyTo <folder>` puts it somewhere else. A development build run from `target` keeps its own
-`data` folder there and never touches the daily one's. On every start, a whole Gracil folder (with
+which leaves `target\installer\Gracil-1.0.0-setup.exe` (`scripts/installer.iss` describes it).
+Run over the installed Gracil, it closes it and replaces the program, keeping its `data` folder.
+Uninstalling it from Windows' Settings takes out its Start menu shortcut, **Send to** and its
+start with Windows. The installer is not published: releases stay a zip.
+
+`scripts/update.ps1` (and the **Actualizar Gracil** shortcut on the desktop, which runs it)
+built `main` into `Documents\Gracil` for daily use with `scripts/portable.ps1 -Copy`. It is not
+run until Gracil Dev, an installed copy of its own, exists (planned): that Gracil, on starting,
+would take **Send to** and the start with Windows from the installed one.
+
+A development build run from `target` keeps its own `data` folder there and never touches the
+installed one's. On every start, a whole Gracil folder (with
 FFmpeg beside the program) puts itself in File Explorer's **Send to** and its start at the next
 sign-in (`RunOnce`), and removes what the former per-user menu left; a development build in
 `target` leaves Windows as it is. File Explorer's main menu is written for the whole computer

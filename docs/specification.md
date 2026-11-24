@@ -830,9 +830,10 @@ takes it out of File Explorer first (ADR 0058). It is free and open source
 Releases are built on GitHub, on a clean Windows machine, from the tagged code alone, with the
 pinned FFmpeg (`scripts/ffmpeg.psd1`): a pushed tag ends in a draft release with the zip and that
 version's changelog notes, which the owner publishes (ADR 0079). No release is built or kept on
-the owner's computer; there `scripts/portable.ps1` only refreshes the Gracil in daily use in
-`Documents\Gracil` (ADR 0071, ADR 0073). A development build (`cargo run -p gracil-ui`) is
-**Gracil Dev**, which runs beside it (ADR 0075).
+the owner's computer. The owner's Gracil is installed there from each published release's zip
+(`scripts/installer.ps1`), per user in `%LOCALAPPDATA%\Programs\Gracil`; the installer is not
+published (ADR 0081). A development build (`cargo run -p gracil-ui`) is **Gracil Dev**, which
+runs beside it (ADR 0075).
 
 # 66. Settings philosophy
 

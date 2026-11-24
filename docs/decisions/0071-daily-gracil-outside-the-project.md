@@ -1,7 +1,8 @@
 # 0071 — The Gracil in daily use lives outside the project
 
 **Status:** Accepted, built (2026-10-27). Decided by the product owner. Changes item 5 of
-[ADR 0054](0054-wholly-portable.md), which had moved it into `daily\` inside the project.
+[ADR 0054](0054-wholly-portable.md), which had moved it into `daily\` inside the project. Changed by
+[ADR 0081](0081-the-owners-gracil-installed.md): the owner's Gracil is installed.
 
 **Context.** With the Gracil in daily use in `daily\`, the project folder held four
 `gracil.exe`: that one, the release and debug builds in `target\`, and the portable layout in

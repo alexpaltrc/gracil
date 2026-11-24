@@ -2,7 +2,9 @@
 
 **Status:** Accepted, built (2026-10-27). Decided by the product owner, as part of their personal
 standard for every project. Builds on [ADR 0071](0071-daily-gracil-outside-the-project.md) and
-[ADR 0072](0072-developing-from-the-cloud.md).
+[ADR 0072](0072-developing-from-the-cloud.md). Changed by
+[ADR 0081](0081-the-owners-gracil-installed.md): the owner's Gracil is installed and changes only
+with a release; `scripts/update.ps1` is not run until Gracil Dev exists.
 
 **Context.** The product owner uses the newest Gracil every day, to find bugs and ideas and to
 check that everything works; they never use an older, stable one. Updating the Gracil in
