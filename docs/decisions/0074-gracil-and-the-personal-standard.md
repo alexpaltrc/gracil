@@ -2,7 +2,8 @@
 
 **Status:** Accepted, built (2026-11-15). Decided by the product owner. The first two points of
 item 2 changed by [ADR 0081](0081-the-owners-gracil-installed.md): the owner's Gracil is
-installed, and a Dev copy is planned.
+installed, and a Dev copy is planned. The point on libraries no longer differs: the standard
+dropped its rule on them (2026-11-23).
 
 **Context.** The product owner keeps a personal standard for every app they make (the
 `alex-vibecode` skill): priorities, technology, repository, and how the app in daily use is

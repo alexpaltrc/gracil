@@ -5,9 +5,10 @@ them in and it makes them smaller while they look the same. Rust workspace, port
 
 ## The owner's standard
 
-This project follows its owner's personal standard (the `alex-vibecode` skill), in every
-conversation, local or in the cloud, even when nobody mentions it. The cloud can't see the skill,
-so its essentials are here:
+This project follows its owner's personal standard, the **`alex-vibecode` skill**, in every
+conversation, local or in the cloud, even when nobody mentions it. Its newest version always
+rules: where it is available, load it at the start of a session and review the project against
+it. The cloud can't see the skill, so its essentials are here:
 
 - **Talking to the owner:** Spanish, short and concise, for someone who doesn't program. Propose
   and ask before any change that could break the project; wait for a clear yes.
@@ -15,6 +16,23 @@ so its essentials are here:
   the app does what it can by itself), modern, native to Windows 11 (Fluent, Mica, Segoe UI
   Variable, system theme and accent color), fast (measured, not assumed), elegant down to the
   code and the repository.
+- **The owner's seal: everything feels magical.** Every interaction is satisfying, almost
+  addictive, through care to the last detail; and the magic is as much in how Gracil behaves and
+  guesses as in how it looks. Start from what it should feel like, not from the function. Move
+  the real thing, not a symbol (the file itself travels). Nothing appears from nowhere or
+  vanishes: it comes from somewhere and goes somewhere, and goes back if cancelled. Reuse
+  Gracil's own language (its colors, its ring) instead of inventing new effects; subtle layers
+  that add up; no visible seams where Gracil hands something to Windows. Better than Windows'
+  default while staying native. Balance: often a good behavior, or nothing visible, beats another
+  effect. More magic, less interface: remove a step, button or decision rather than add one; use
+  gestures everyone already knows; guess the intent, remember the last choice. Work is never lost.
+  What changes as a consequence flows instead of jumping. Choices are made by seeing them: three
+  or four named paths with previews, one recommended. **At the close of every change, bring two
+  magical ideas for Gracil**, one or two lines each with a recommendation, proposed and not built
+  until the owner picks.
+- **Animations of the first rank:** choreography (container, then content, then action),
+  transform rather than replace, springs that overshoot slightly and settle, never linear; text
+  letter by letter; every frame intentional, nothing spilling out of its container.
 - **Every interface change** is checked on the real app before it's done: alignment to the pixel,
   no slower or heavier, and as beautiful as before or more. Animations follow springs and
   choreography, respect Windows' **Animation effects** and contrast themes, and are checked frame
@@ -31,9 +49,8 @@ so its essentials are here:
   line what arrived.
 
 Where Gracil deliberately differs from the standard ([ADR 0074](docs/decisions/0074-gracil-and-the-personal-standard.md)):
-releases are a portable zip only (the installer is for the owner's computer, ADR 0081); data
-beside `gracil.exe`; GPL 3.0 or later; documentation in English; Iced, FFmpeg, jpegli and other
-libraries are used.
+releases are a portable zip only (the installer is for the owner's computer, ADR 0081); no
+MSIX; data beside `gracil.exe`; GPL 3.0 or later and public; documentation in English.
 
 ## Project rules
 
